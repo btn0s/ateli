@@ -19,7 +19,7 @@ export function App() {
     <>
       <Titlebar />
       {folderPath ? (
-        <Canvas folderPath={folderPath} />
+        <Canvas />
       ) : (
         <FolderPicker onSelect={handleSelect} />
       )}

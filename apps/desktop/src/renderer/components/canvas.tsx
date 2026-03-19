@@ -4,7 +4,6 @@ import {
   track,
   useEditor,
   useValue,
-  useIsDarkMode,
 } from "tldraw"
 import type { TLComponents } from "tldraw"
 import "tldraw/tldraw.css"
@@ -24,6 +23,7 @@ const DOT_BASE_RADIUS = 1
 const DOT_MAX_RADIUS = 1.8
 const DOT_REPEL = 4
 const GLOW_COLOR = [210, 210, 220] as const
+const BASE_DOT_COLOR = [255, 255, 255] as const
 const SMOOTHING = 0.07
 const FADE_SPEED = 0.03
 
@@ -40,18 +40,26 @@ const components: TLComponents = {
       () => editor.getInstanceState().devicePixelRatio,
       [],
     )
-    const isDarkMode = useIsDarkMode()
     const canvasRef = useRef<HTMLCanvasElement>(null)
+    const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
     const mouseRef = useRef<{ x: number; y: number } | null>(null)
     const smoothMouseRef = useRef<{ x: number; y: number } | null>(null)
     const fadeRef = useRef(0)
     const pointerInsideRef = useRef(false)
     const rafRef = useRef<number>(0)
     const runningRef = useRef(true)
+    const drawRef = useRef<() => void>()
 
     const draw = useCallback(() => {
       const el = canvasRef.current
       if (!el) return
+
+      if (!ctxRef.current) {
+        ctxRef.current = el.getContext("2d")
+      }
+      const ctx = ctxRef.current
+      if (!ctx) return
+
       const dpr = devicePixelRatio
       const canvasW = screenBounds.w * dpr
       const canvasH = screenBounds.h * dpr
@@ -60,9 +68,6 @@ const components: TLComponents = {
         el.width = canvasW
         el.height = canvasH
       }
-
-      const ctx = el.getContext("2d")
-      if (!ctx) return
 
       ctx.clearRect(0, 0, canvasW, canvasH)
 
@@ -103,7 +108,17 @@ const components: TLComponents = {
       const baseR = DOT_BASE_RADIUS * dpr
       const maxR = DOT_MAX_RADIUS * dpr
       const [gr, gg, gb] = GLOW_COLOR
-      const baseDotColor = isDarkMode ? "255,255,255" : "0,0,0"
+      const [br, bg, bb] = BASE_DOT_COLOR
+      const baseFill = `rgba(${br},${bg},${bb},${DOT_BASE_ALPHA})`
+
+      // Collect glow dots to draw in a second pass
+      const glowDots: { x: number; y: number; r: number; alpha: number; glow: number }[] = []
+
+      // Pass 1: batch all non-glow dots into a single path
+      ctx.fillStyle = baseFill
+      ctx.shadowColor = "transparent"
+      ctx.shadowBlur = 0
+      ctx.beginPath()
 
       for (let row = 0; row <= numRows; row++) {
         for (let col = 0; col <= numCols; col++) {
@@ -112,53 +127,54 @@ const components: TLComponents = {
           const cx = (pageX + camera.x) * camera.z * dpr
           const cy = (pageY + camera.y) * camera.z * dpr
 
-          let dx = cx - mx
-          let dy = cy - my
+          const dx = cx - mx
+          const dy = cy - my
           const dist2 = dx * dx + dy * dy
           const t = hasPointer ? Math.max(0, 1 - dist2 / glowR2) : 0
-
-          // Cubic falloff, scaled by fade-in
           const glow = t * t * t * fade
 
-          // Repel dots away from cursor
-          let drawX = cx
-          let drawY = cy
-          if (glow > 0.001) {
+          if (glow > 0.01) {
+            // Compute repelled position
             const dist = Math.sqrt(dist2) || 1
             const push = DOT_REPEL * glow * dpr
-            drawX += (dx / dist) * push
-            drawY += (dy / dist) * push
-          }
-
-          const r = baseR + (maxR - baseR) * glow
-          const alpha = DOT_BASE_ALPHA + (1 - DOT_BASE_ALPHA) * glow * 0.35
-
-          if (glow > 0.01) {
-            ctx.fillStyle = `rgba(${gr},${gg},${gb},${alpha})`
-            ctx.shadowColor = `rgba(${gr},${gg},${gb},${glow * 0.07})`
-            ctx.shadowBlur = 2.5 * glow * dpr
+            glowDots.push({
+              x: cx + (dx / dist) * push,
+              y: cy + (dy / dist) * push,
+              r: baseR + (maxR - baseR) * glow,
+              alpha: DOT_BASE_ALPHA + (1 - DOT_BASE_ALPHA) * glow * 0.35,
+              glow,
+            })
           } else {
-            ctx.fillStyle = `rgba(${baseDotColor},${alpha})`
-            ctx.shadowColor = "transparent"
-            ctx.shadowBlur = 0
+            ctx.moveTo(cx + baseR, cy)
+            ctx.arc(cx, cy, baseR, 0, Math.PI * 2)
           }
-
-          ctx.beginPath()
-          ctx.arc(drawX, drawY, r, 0, Math.PI * 2)
-          ctx.fill()
         }
+      }
+
+      ctx.fill()
+
+      // Pass 2: draw glow dots individually (small set, needs per-dot shadow)
+      for (const dot of glowDots) {
+        ctx.fillStyle = `rgba(${gr},${gg},${gb},${dot.alpha})`
+        ctx.shadowColor = `rgba(${gr},${gg},${gb},${dot.glow * 0.07})`
+        ctx.shadowBlur = 2.5 * dot.glow * dpr
+        ctx.beginPath()
+        ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2)
+        ctx.fill()
       }
 
       ctx.shadowColor = "transparent"
       ctx.shadowBlur = 0
 
-      // Keep animating for smooth interpolation + fade-in
+      // Keep animating for smooth interpolation + fade-in/out
       const delta = sm && tm ? Math.abs(sm.x - tm.x) + Math.abs(sm.y - tm.y) : 0
       const fading = fadeRef.current > 0 && fadeRef.current < 1
       if ((delta > 0.5 || fading) && runningRef.current) {
         rafRef.current = requestAnimationFrame(draw)
       }
-    }, [screenBounds, camera, size, devicePixelRatio, editor, isDarkMode])
+    }, [screenBounds, camera, size, devicePixelRatio, editor])
+
+    drawRef.current = draw
 
     useLayoutEffect(() => {
       draw()
@@ -166,17 +182,28 @@ const components: TLComponents = {
 
     useEffect(() => {
       runningRef.current = true
+
+      function scheduleFrame() {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(() => drawRef.current?.())
+      }
+
       function onMouseMove(e: MouseEvent) {
         pointerInsideRef.current = true
-        mouseRef.current = { x: e.clientX, y: e.clientY }
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = requestAnimationFrame(draw)
+        if (!mouseRef.current) {
+          mouseRef.current = { x: e.clientX, y: e.clientY }
+        } else {
+          mouseRef.current.x = e.clientX
+          mouseRef.current.y = e.clientY
+        }
+        scheduleFrame()
       }
+
       function onMouseLeave() {
         pointerInsideRef.current = false
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = requestAnimationFrame(draw)
+        scheduleFrame()
       }
+
       window.addEventListener("mousemove", onMouseMove)
       document.addEventListener("mouseleave", onMouseLeave)
       return () => {
@@ -185,7 +212,7 @@ const components: TLComponents = {
         document.removeEventListener("mouseleave", onMouseLeave)
         cancelAnimationFrame(rafRef.current)
       }
-    }, [draw])
+    }, [])
 
     return <canvas className="tl-grid" ref={canvasRef} />
   },
@@ -224,7 +251,7 @@ const CustomUi = track(() => {
   )
 })
 
-export function Canvas({ folderPath: _ }: { folderPath: string }) {
+export function Canvas() {
   return (
     <div className="h-screen w-screen">
       <Tldraw
