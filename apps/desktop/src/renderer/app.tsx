@@ -1,22 +1,28 @@
-import { ThemeProvider } from "@/components/theme-provider"
-import { Button } from "@workspace/ui/components/button"
+import { useState } from "react"
+import { FolderPicker } from "@/components/folder-picker"
+import { Canvas } from "@/components/canvas"
+import { Titlebar } from "@/components/titlebar"
+
+const FOLDER_KEY = "ateli:folder-path"
 
 export function App() {
+  const [folderPath, setFolderPath] = useState<string | null>(
+    () => localStorage.getItem(FOLDER_KEY),
+  )
+
+  function handleSelect(path: string) {
+    localStorage.setItem(FOLDER_KEY, path)
+    setFolderPath(path)
+  }
+
   return (
-    <ThemeProvider>
-      <div className="flex min-h-svh p-6 antialiased font-sans">
-        <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-          <div>
-            <h1 className="font-medium">Project ready!</h1>
-            <p>You may now add components and start building.</p>
-            <p>We&apos;ve already added the button component for you.</p>
-            <Button className="mt-2">Button</Button>
-          </div>
-          <div className="text-muted-foreground font-mono text-xs">
-            (Press <kbd>d</kbd> to toggle dark mode)
-          </div>
-        </div>
-      </div>
-    </ThemeProvider>
+    <>
+      <Titlebar />
+      {folderPath ? (
+        <Canvas folderPath={folderPath} />
+      ) : (
+        <FolderPicker onSelect={handleSelect} />
+      )}
+    </>
   )
 }
