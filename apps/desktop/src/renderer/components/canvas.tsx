@@ -18,13 +18,13 @@ import {
 import { Toggle } from "@workspace/ui/components/toggle"
 
 // Spotlight config
-const GLOW_RADIUS = 180
+const GLOW_RADIUS = 80
 const DOT_BASE_ALPHA = 0.12
 const DOT_BASE_RADIUS = 1
-const DOT_MAX_RADIUS = 1.5
+const DOT_MAX_RADIUS = 1.8
 const GLOW_COLOR = [210, 210, 220] as const
-const SMOOTHING = 0.12
-const FADE_SPEED = 0.06
+const SMOOTHING = 0.07
+const FADE_SPEED = 0.03
 
 const components: TLComponents = {
   Grid: ({ size, ...camera }) => {
@@ -44,6 +44,7 @@ const components: TLComponents = {
     const mouseRef = useRef<{ x: number; y: number } | null>(null)
     const smoothMouseRef = useRef<{ x: number; y: number } | null>(null)
     const fadeRef = useRef(0)
+    const pointerInsideRef = useRef(false)
     const rafRef = useRef<number>(0)
     const runningRef = useRef(true)
 
@@ -75,7 +76,12 @@ const components: TLComponents = {
           smoothMouseRef.current.x += (tm.x - smoothMouseRef.current.x) * SMOOTHING
           smoothMouseRef.current.y += (tm.y - smoothMouseRef.current.y) * SMOOTHING
         }
+      }
+
+      if (pointerInsideRef.current) {
         fadeRef.current = Math.min(1, fadeRef.current + FADE_SPEED)
+      } else {
+        fadeRef.current = Math.max(0, fadeRef.current - FADE_SPEED)
       }
 
       const sm = smoothMouseRef.current
@@ -114,12 +120,12 @@ const components: TLComponents = {
           const glow = t * t * t * fade
 
           const r = baseR + (maxR - baseR) * glow
-          const alpha = DOT_BASE_ALPHA + (1 - DOT_BASE_ALPHA) * glow * 0.5
+          const alpha = DOT_BASE_ALPHA + (1 - DOT_BASE_ALPHA) * glow * 0.35
 
           if (glow > 0.01) {
             ctx.fillStyle = `rgba(${gr},${gg},${gb},${alpha})`
-            ctx.shadowColor = `rgba(${gr},${gg},${gb},${glow * 0.12})`
-            ctx.shadowBlur = 3 * glow * dpr
+            ctx.shadowColor = `rgba(${gr},${gg},${gb},${glow * 0.07})`
+            ctx.shadowBlur = 2.5 * glow * dpr
           } else {
             ctx.fillStyle = `rgba(${baseDotColor},${alpha})`
             ctx.shadowColor = "transparent"
@@ -137,7 +143,8 @@ const components: TLComponents = {
 
       // Keep animating for smooth interpolation + fade-in
       const delta = sm && tm ? Math.abs(sm.x - tm.x) + Math.abs(sm.y - tm.y) : 0
-      if ((delta > 0.5 || fadeRef.current < 1) && runningRef.current) {
+      const fading = fadeRef.current > 0 && fadeRef.current < 1
+      if ((delta > 0.5 || fading) && runningRef.current) {
         rafRef.current = requestAnimationFrame(draw)
       }
     }, [screenBounds, camera, size, devicePixelRatio, editor, isDarkMode])
@@ -149,14 +156,22 @@ const components: TLComponents = {
     useEffect(() => {
       runningRef.current = true
       function onMouseMove(e: MouseEvent) {
+        pointerInsideRef.current = true
         mouseRef.current = { x: e.clientX, y: e.clientY }
         cancelAnimationFrame(rafRef.current)
         rafRef.current = requestAnimationFrame(draw)
       }
+      function onMouseLeave() {
+        pointerInsideRef.current = false
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(draw)
+      }
       window.addEventListener("mousemove", onMouseMove)
+      document.addEventListener("mouseleave", onMouseLeave)
       return () => {
         runningRef.current = false
         window.removeEventListener("mousemove", onMouseMove)
+        document.removeEventListener("mouseleave", onMouseLeave)
         cancelAnimationFrame(rafRef.current)
       }
     }, [draw])
