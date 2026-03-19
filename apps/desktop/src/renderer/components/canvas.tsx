@@ -22,6 +22,7 @@ const GLOW_RADIUS = 80
 const DOT_BASE_ALPHA = 0.12
 const DOT_BASE_RADIUS = 1
 const DOT_MAX_RADIUS = 1.8
+const DOT_REPEL = 4
 const GLOW_COLOR = [210, 210, 220] as const
 const SMOOTHING = 0.07
 const FADE_SPEED = 0.03
@@ -111,13 +112,23 @@ const components: TLComponents = {
           const cx = (pageX + camera.x) * camera.z * dpr
           const cy = (pageY + camera.y) * camera.z * dpr
 
-          const dx = cx - mx
-          const dy = cy - my
+          let dx = cx - mx
+          let dy = cy - my
           const dist2 = dx * dx + dy * dy
           const t = hasPointer ? Math.max(0, 1 - dist2 / glowR2) : 0
 
           // Cubic falloff, scaled by fade-in
           const glow = t * t * t * fade
+
+          // Repel dots away from cursor
+          let drawX = cx
+          let drawY = cy
+          if (glow > 0.001) {
+            const dist = Math.sqrt(dist2) || 1
+            const push = DOT_REPEL * glow * dpr
+            drawX += (dx / dist) * push
+            drawY += (dy / dist) * push
+          }
 
           const r = baseR + (maxR - baseR) * glow
           const alpha = DOT_BASE_ALPHA + (1 - DOT_BASE_ALPHA) * glow * 0.35
@@ -133,7 +144,7 @@ const components: TLComponents = {
           }
 
           ctx.beginPath()
-          ctx.arc(cx, cy, r, 0, Math.PI * 2)
+          ctx.arc(drawX, drawY, r, 0, Math.PI * 2)
           ctx.fill()
         }
       }
