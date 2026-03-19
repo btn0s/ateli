@@ -1,5 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
+import crypto from "node:crypto"
 import path from "node:path"
+import os from "node:os"
+
+// node-pty is a native module — require it at runtime to avoid bundler issues
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pty = require("node-pty") as typeof import("node-pty")
+
+const ptys = new Map<string, import("node-pty").IPty>()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -37,6 +45,58 @@ ipcMain.handle("select-folder", async () => {
   })
   if (result.canceled) return null
   return result.filePaths[0] ?? null
+})
+
+ipcMain.handle(
+  "terminal:create",
+  (event, { cwd }: { shapeId: string; cwd: string }) => {
+    const sender = event.sender
+    const sessionKey = crypto.randomUUID()
+    const userShell =
+      os.platform() === "win32" ? "powershell.exe" : process.env["SHELL"] || "/bin/zsh"
+    const ptyProcess = pty.spawn(userShell, [], {
+      name: "xterm-256color",
+      cols: 80,
+      rows: 24,
+      cwd,
+      env: process.env as Record<string, string>,
+    })
+
+    ptys.set(sessionKey, ptyProcess)
+
+    ptyProcess.onData((data) => {
+      sender.send(`terminal:data:${sessionKey}`, data)
+    })
+
+    ptyProcess.onExit(() => {
+      ptys.delete(sessionKey)
+      sender.send(`terminal:exit:${sessionKey}`)
+    })
+
+    return { pid: ptyProcess.pid, sessionKey }
+  },
+)
+
+ipcMain.on(
+  "terminal:input",
+  (_event, { sessionKey, data }: { sessionKey: string; data: string }) => {
+    ptys.get(sessionKey)?.write(data)
+  },
+)
+
+ipcMain.on(
+  "terminal:resize",
+  (
+    _event,
+    { sessionKey, cols, rows }: { sessionKey: string; cols: number; rows: number },
+  ) => {
+    ptys.get(sessionKey)?.resize(cols, rows)
+  },
+)
+
+ipcMain.on("terminal:dispose", (_event, { sessionKey }: { sessionKey: string }) => {
+  ptys.get(sessionKey)?.kill()
+  ptys.delete(sessionKey)
 })
 
 app.whenReady().then(() => {

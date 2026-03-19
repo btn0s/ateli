@@ -13,8 +13,13 @@ import {
   Eraser,
   MoveRight,
   Type,
+  TerminalSquare,
 } from "lucide-react"
 import { Toggle } from "@workspace/ui/components/toggle"
+import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
+import { CommandMenu } from "./command-menu"
+
+const customShapeUtils = [TerminalShapeUtil]
 
 // Spotlight config
 const GLOW_RADIUS = 80
@@ -216,6 +221,7 @@ const components: TLComponents = {
 
     return <canvas className="tl-grid" ref={canvasRef} />
   },
+  InFrontOfTheCanvas: CommandMenu,
 }
 
 const tools = [
@@ -229,6 +235,15 @@ const tools = [
 const CustomUi = track(() => {
   const editor = useEditor()
   const currentTool = editor.getCurrentToolId()
+
+  function addTerminal() {
+    const center = editor.getViewportPageBounds().center
+    editor.createShape({
+      type: "terminal",
+      x: center.x - 300,
+      y: center.y - 200,
+    })
+  }
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
@@ -245,18 +260,30 @@ const CustomUi = track(() => {
               <tool.icon className="size-4" />
             </Toggle>
           ))}
+          <div className="bg-border mx-0.5 h-4 w-px" />
+          <Toggle
+            size="sm"
+            pressed={false}
+            onPressedChange={addTerminal}
+            aria-label="Add Terminal"
+          >
+            <TerminalSquare className="size-4" />
+          </Toggle>
         </div>
       </div>
     </div>
   )
 })
 
-export function Canvas() {
+export function Canvas({ folderPath }: { folderPath: string }) {
+  setTerminalCwd(folderPath)
+
   return (
     <div className="h-screen w-screen">
       <Tldraw
         hideUi
         components={components}
+        shapeUtils={customShapeUtils}
         options={{ gridSteps: [{ min: 1, step: 20 }] }}
         onMount={(editor) => {
           editor.user.updateUserPreferences({ colorScheme: "dark" })

@@ -10,16 +10,21 @@
     "preview": "electron-vite preview",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "electron-rebuild -f -w node-pty"
   },
   "dependencies": {
     "@workspace/ui": "workspace:*",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "lucide-react": "^0.577.0",
+    "node-pty": "^1.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tldraw": "^4.5.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
     "@tailwindcss/vite": "^4.1.18",
     "@types/node": "^25.1.0",
     "@types/react": "^19.2.10",
