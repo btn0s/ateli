@@ -3,7 +3,7 @@ import crypto from "node:crypto"
 import path from "node:path"
 import os from "node:os"
 import { startRpcServer, stopRpcServer } from "./rpc"
-import { ptys } from "./pty-store"
+import { ptys, appendOutput, clearOutputBuffer } from "./pty-store"
 
 // node-pty is a native module — require it at runtime to avoid bundler issues
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -65,11 +65,13 @@ ipcMain.handle(
     ptys.set(sessionKey, ptyProcess)
 
     ptyProcess.onData((data) => {
+      appendOutput(sessionKey, data)
       sender.send(`terminal:data:${sessionKey}`, data)
     })
 
     ptyProcess.onExit(() => {
       ptys.delete(sessionKey)
+      clearOutputBuffer(sessionKey)
       sender.send(`terminal:exit:${sessionKey}`)
     })
 

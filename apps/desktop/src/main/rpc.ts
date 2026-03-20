@@ -4,7 +4,7 @@ import path from "node:path"
 import os from "node:os"
 import crypto from "node:crypto"
 import { BrowserWindow, ipcMain } from "electron"
-import { ptys } from "./pty-store"
+import { ptys, readOutput } from "./pty-store"
 
 const SOCKET_DIR = path.join(os.homedir(), ".collaborator")
 const SOCKET_PATH_FILE = path.join(SOCKET_DIR, "socket-path")
@@ -174,6 +174,13 @@ export function startRpcServer() {
     if (typeof command !== "string") throw new Error("command is required")
     ptyProcess.write(command + "\r")
     return { ok: true }
+  })
+
+  registerMethod("terminal.read", async (params) => {
+    const sessionKey = params["sessionKey"]
+    if (typeof sessionKey !== "string") throw new Error("sessionKey is required")
+    if (!ptys.has(sessionKey)) throw new Error(`No terminal with sessionKey: ${sessionKey}`)
+    return { data: readOutput(sessionKey) }
   })
 
   registerMethod("terminal.list", async () => {
