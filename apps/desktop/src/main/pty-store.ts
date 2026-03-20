@@ -1,30 +1,70 @@
 import type { IPty } from "node-pty"
+import { execSync } from "node:child_process"
 
+// Maps sessionKey (tmux session name) -> node-pty process attached to it
 export const ptys = new Map<string, IPty>()
 
-const MAX_BUFFER = 64 * 1024 // 64KB per session
-const outputBuffers = new Map<string, string>()
-const readCursors = new Map<string, number>()
+const SESSION_PREFIX = "ateli-"
 
-export function appendOutput(sessionKey: string, data: string) {
-  const existing = outputBuffers.get(sessionKey) ?? ""
-  let updated = existing + data
-  // Trim from the front if too large
-  if (updated.length > MAX_BUFFER) {
-    updated = updated.slice(updated.length - MAX_BUFFER)
+export function tmuxSessionName(sessionKey: string): string {
+  return `${SESSION_PREFIX}${sessionKey}`
+}
+
+export function createTmuxSession(sessionKey: string, cwd: string): void {
+  const name = tmuxSessionName(sessionKey)
+  execSync(`tmux new-session -d -s ${name} -c ${JSON.stringify(cwd)}`, {
+    stdio: "ignore",
+  })
+}
+
+export function readTmuxPane(sessionKey: string): string {
+  const name = tmuxSessionName(sessionKey)
+  try {
+    return execSync(`tmux capture-pane -t ${name} -p -S -200`, {
+      encoding: "utf-8",
+      timeout: 3000,
+    })
+  } catch {
+    return ""
   }
-  outputBuffers.set(sessionKey, updated)
 }
 
-export function readOutput(sessionKey: string): string {
-  const buffer = outputBuffers.get(sessionKey) ?? ""
-  const cursor = readCursors.get(sessionKey) ?? 0
-  const newData = buffer.slice(cursor)
-  readCursors.set(sessionKey, buffer.length)
-  return newData
+export function killTmuxSession(sessionKey: string): void {
+  const name = tmuxSessionName(sessionKey)
+  try {
+    execSync(`tmux kill-session -t ${name}`, { stdio: "ignore" })
+  } catch {
+    // already dead
+  }
 }
 
-export function clearOutputBuffer(sessionKey: string) {
-  outputBuffers.delete(sessionKey)
-  readCursors.delete(sessionKey)
+export function listTmuxSessions(): string[] {
+  try {
+    const output = execSync(
+      `tmux list-sessions -F "#{session_name}" 2>/dev/null`,
+      { encoding: "utf-8" },
+    )
+    return output
+      .trim()
+      .split("\n")
+      .filter((s) => s.startsWith(SESSION_PREFIX))
+      .map((s) => s.slice(SESSION_PREFIX.length))
+  } catch {
+    return []
+  }
+}
+
+export function sendTmuxKeys(sessionKey: string, keys: string): void {
+  const name = tmuxSessionName(sessionKey)
+  execSync(`tmux send-keys -t ${name} ${JSON.stringify(keys)}`, {
+    stdio: "ignore",
+  })
+}
+
+export function sendTmuxCommand(sessionKey: string, command: string): void {
+  const name = tmuxSessionName(sessionKey)
+  execSync(
+    `tmux send-keys -t ${name} ${JSON.stringify(command)} Enter`,
+    { stdio: "ignore" },
+  )
 }

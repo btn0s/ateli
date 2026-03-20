@@ -4,7 +4,13 @@ import path from "node:path"
 import os from "node:os"
 import crypto from "node:crypto"
 import { BrowserWindow, ipcMain } from "electron"
-import { ptys, readOutput } from "./pty-store"
+import {
+  ptys,
+  readTmuxPane,
+  listTmuxSessions,
+  sendTmuxCommand,
+  sendTmuxKeys,
+} from "./pty-store"
 
 const SOCKET_DIR = path.join(os.homedir(), ".collaborator")
 const SOCKET_PATH_FILE = path.join(SOCKET_DIR, "socket-path")
@@ -62,11 +68,9 @@ function cleanupStaleSockets() {
       const fullPath = path.join(SOCKET_DIR, entry)
       const sock = net.createConnection(fullPath)
       sock.on("error", () => {
-        // Dead socket — remove it
         try { fs.unlinkSync(fullPath) } catch { /* ignore */ }
       })
       sock.on("connect", () => {
-        // Alive — leave it alone
         sock.destroy()
       })
     }
@@ -152,6 +156,7 @@ export function startRpcServer() {
     })
   })
 
+  // Write raw data to the PTY (low-level)
   registerMethod("terminal.write", async (params) => {
     const sessionKey = params["sessionKey"]
     if (typeof sessionKey !== "string") throw new Error("sessionKey is required")
@@ -164,27 +169,36 @@ export function startRpcServer() {
     return { ok: true }
   })
 
+  // Send a command via tmux send-keys (adds Enter automatically)
   registerMethod("terminal.exec", async (params) => {
     const sessionKey = params["sessionKey"]
     if (typeof sessionKey !== "string") throw new Error("sessionKey is required")
-    const ptyProcess = ptys.get(sessionKey)
-    if (!ptyProcess) throw new Error(`No terminal with sessionKey: ${sessionKey}`)
-
     const command = params["command"]
     if (typeof command !== "string") throw new Error("command is required")
-    ptyProcess.write(command + "\r")
+    sendTmuxCommand(sessionKey, command)
     return { ok: true }
   })
 
+  // Send raw keys via tmux send-keys (no Enter)
+  registerMethod("terminal.sendKeys", async (params) => {
+    const sessionKey = params["sessionKey"]
+    if (typeof sessionKey !== "string") throw new Error("sessionKey is required")
+    const keys = params["keys"]
+    if (typeof keys !== "string") throw new Error("keys is required")
+    sendTmuxKeys(sessionKey, keys)
+    return { ok: true }
+  })
+
+  // Read terminal output via tmux capture-pane (last 200 lines)
   registerMethod("terminal.read", async (params) => {
     const sessionKey = params["sessionKey"]
     if (typeof sessionKey !== "string") throw new Error("sessionKey is required")
-    if (!ptys.has(sessionKey)) throw new Error(`No terminal with sessionKey: ${sessionKey}`)
-    return { data: readOutput(sessionKey) }
+    return { data: readTmuxPane(sessionKey) }
   })
 
+  // List all ateli tmux sessions (persists across app restarts)
   registerMethod("terminal.list", async () => {
-    return { sessions: Array.from(ptys.keys()) }
+    return { sessions: listTmuxSessions() }
   })
 }
 
@@ -199,6 +213,5 @@ export function stopRpcServer() {
   try { fs.unlinkSync(SOCKET_PATH_FILE) } catch { /* ignore */ }
 }
 
-// Clean up on unexpected termination
 process.on("SIGTERM", () => stopRpcServer())
 process.on("SIGINT", () => stopRpcServer())

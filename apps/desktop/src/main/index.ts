@@ -1,9 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
 import crypto from "node:crypto"
 import path from "node:path"
-import os from "node:os"
 import { startRpcServer, stopRpcServer } from "./rpc"
-import { ptys, appendOutput, clearOutputBuffer } from "./pty-store"
+import { ptys, createTmuxSession, killTmuxSession, tmuxSessionName } from "./pty-store"
 
 // node-pty is a native module — require it at runtime to avoid bundler issues
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -51,27 +50,26 @@ ipcMain.handle(
   "terminal:create",
   (event, { cwd }: { shapeId: string; cwd: string }) => {
     const sender = event.sender
-    const sessionKey = crypto.randomUUID()
-    const userShell =
-      os.platform() === "win32" ? "powershell.exe" : process.env["SHELL"] || "/bin/zsh"
-    const ptyProcess = pty.spawn(userShell, [], {
+    const sessionKey = crypto.randomUUID().slice(0, 8)
+
+    // Create a tmux session, then attach node-pty to it
+    createTmuxSession(sessionKey, cwd)
+    const tmuxName = tmuxSessionName(sessionKey)
+    const ptyProcess = pty.spawn("tmux", ["attach-session", "-t", tmuxName], {
       name: "xterm-256color",
       cols: 80,
       rows: 24,
-      cwd,
       env: process.env as Record<string, string>,
     })
 
     ptys.set(sessionKey, ptyProcess)
 
     ptyProcess.onData((data) => {
-      appendOutput(sessionKey, data)
       sender.send(`terminal:data:${sessionKey}`, data)
     })
 
     ptyProcess.onExit(() => {
       ptys.delete(sessionKey)
-      clearOutputBuffer(sessionKey)
       sender.send(`terminal:exit:${sessionKey}`)
     })
 
@@ -99,6 +97,7 @@ ipcMain.on(
 ipcMain.on("terminal:dispose", (_event, { sessionKey }: { sessionKey: string }) => {
   ptys.get(sessionKey)?.kill()
   ptys.delete(sessionKey)
+  killTmuxSession(sessionKey)
 })
 
 app.whenReady().then(() => {
