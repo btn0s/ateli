@@ -113,9 +113,8 @@ export function startRpcServer() {
     })
   })
 
-  server.listen(socketPath, () => {
-    fs.writeFileSync(SOCKET_PATH_FILE, socketPath!)
-  })
+  server.listen(socketPath)
+  fs.writeFileSync(SOCKET_PATH_FILE, socketPath)
 
   // --- Register methods ---
 

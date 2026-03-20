@@ -318,6 +318,7 @@ export function Canvas({ folderPath }: { folderPath: string }) {
     <div className="h-screen w-screen">
       <Tldraw
         hideUi
+        persistenceKey={`ateli:canvas:${folderPath}`}
         components={components}
         shapeUtils={customShapeUtils}
         options={{ gridSteps: [{ min: 1, step: 20 }] }}
