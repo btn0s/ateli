@@ -13,5 +13,10 @@ interface Window {
       onData: (sessionKey: string, callback: (data: string) => void) => () => void
       onExit: (sessionKey: string, callback: () => void) => () => void
     }
+    rpc: {
+      onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) => () => void
+      onGetShapes: (callback: (data: { responseChannel: string }) => void) => () => void
+      respondShapes: (channel: string, shapes: unknown) => void
+    }
   }
 }

@@ -99,8 +99,11 @@ ipcMain.on("terminal:dispose", (_event, { sessionKey }: { sessionKey: string }) 
   ptys.delete(sessionKey)
 })
 
+import { startRpcServer, stopRpcServer } from "./rpc"
+
 app.whenReady().then(() => {
   createWindow()
+  startRpcServer()
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -113,4 +116,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit()
   }
+})
+
+app.on("before-quit", () => {
+  stopRpcServer()
 })

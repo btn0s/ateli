@@ -28,4 +28,19 @@ contextBridge.exposeInMainWorld("electron", {
       return () => ipcRenderer.removeListener(channel, handler)
     },
   },
+  rpc: {
+    onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { shapeId: string; x: number; y: number; w: number; h: number }) => callback(data)
+      ipcRenderer.on("rpc:create-terminal", handler)
+      return () => ipcRenderer.removeListener("rpc:create-terminal", handler)
+    },
+    onGetShapes: (callback: (data: { responseChannel: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { responseChannel: string }) => callback(data)
+      ipcRenderer.on("rpc:get-shapes", handler)
+      return () => ipcRenderer.removeListener("rpc:get-shapes", handler)
+    },
+    respondShapes: (channel: string, shapes: unknown) => {
+      ipcRenderer.send(channel, shapes)
+    },
+  },
 })

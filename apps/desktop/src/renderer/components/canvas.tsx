@@ -275,6 +275,40 @@ const CustomUi = track(() => {
   )
 })
 
+function RpcBridge() {
+  const editor = useEditor()
+
+  useEffect(() => {
+    const removeCreateTerminal = window.electron.rpc.onCreateTerminal(({ shapeId, x, y, w, h }) => {
+      editor.createShape({
+        id: shapeId as any,
+        type: "terminal",
+        x,
+        y,
+        props: { w, h },
+      })
+    })
+
+    const removeGetShapes = window.electron.rpc.onGetShapes(({ responseChannel }) => {
+      const shapes = editor.getCurrentPageShapes().map((s) => ({
+        id: s.id,
+        type: s.type,
+        x: s.x,
+        y: s.y,
+        props: s.props,
+      }))
+      window.electron.rpc.respondShapes(responseChannel, shapes)
+    })
+
+    return () => {
+      removeCreateTerminal()
+      removeGetShapes()
+    }
+  }, [editor])
+
+  return null
+}
+
 export function Canvas({ folderPath }: { folderPath: string }) {
   setTerminalCwd(folderPath)
 
@@ -291,6 +325,7 @@ export function Canvas({ folderPath }: { folderPath: string }) {
         }}
       >
         <CustomUi />
+        <RpcBridge />
       </Tldraw>
     </div>
   )
