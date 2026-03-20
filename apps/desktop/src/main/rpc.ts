@@ -164,6 +164,18 @@ export function startRpcServer() {
     return { ok: true }
   })
 
+  registerMethod("terminal.exec", async (params) => {
+    const sessionKey = params["sessionKey"]
+    if (typeof sessionKey !== "string") throw new Error("sessionKey is required")
+    const ptyProcess = ptys.get(sessionKey)
+    if (!ptyProcess) throw new Error(`No terminal with sessionKey: ${sessionKey}`)
+
+    const command = params["command"]
+    if (typeof command !== "string") throw new Error("command is required")
+    ptyProcess.write(command + "\r")
+    return { ok: true }
+  })
+
   registerMethod("terminal.list", async () => {
     return { sessions: Array.from(ptys.keys()) }
   })
