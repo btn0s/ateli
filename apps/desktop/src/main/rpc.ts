@@ -131,6 +131,26 @@ export function startRpcServer() {
     return { shapeId }
   })
 
+  registerMethod("terminal.write", async (params) => {
+    const { ptys } = await import("./index")
+    const sessionKey = params["sessionKey"]
+    if (typeof sessionKey !== "string") throw new Error("sessionKey is required")
+    const ptyProcess = ptys.get(sessionKey)
+    if (!ptyProcess) throw new Error(`No terminal with sessionKey: ${sessionKey}`)
+
+    const data = params["data"]
+    if (typeof data !== "string") throw new Error("data is required")
+    ptyProcess.write(data)
+    return { ok: true }
+  })
+
+  registerMethod("terminal.list", async () => {
+    const { ptys } = await import("./index")
+    return {
+      sessions: Array.from(ptys.keys()),
+    }
+  })
+
   registerMethod("canvas.getShapes", async () => {
     const win = getMainWindow()
     if (!win) throw new Error("No window available")

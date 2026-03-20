@@ -7,7 +7,7 @@ import os from "node:os"
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pty = require("node-pty") as typeof import("node-pty")
 
-const ptys = new Map<string, import("node-pty").IPty>()
+export const ptys = new Map<string, import("node-pty").IPty>()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({

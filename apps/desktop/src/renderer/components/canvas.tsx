@@ -279,6 +279,8 @@ function RpcBridge() {
   const editor = useEditor()
 
   useEffect(() => {
+    if (!window.electron?.rpc) return
+
     const removeCreateTerminal = window.electron.rpc.onCreateTerminal(({ shapeId, x, y, w, h }) => {
       editor.createShape({
         id: shapeId as any,
