@@ -1,42 +1,56 @@
 # Standup Log
 
+## 2026-03-19 — Check 2 (PM loop)
+
+### Agent 07e30e7e Status: ACTIVE
+- Completed all 3 research sub-agents (TH-467, TH-468, TH-469)
+- Posted findings to TH-469 (context radius) — recommends 1500px radius,
+  frame-bounded, 20 shape cap, 500 char truncation
+- Posting findings to TH-467 (drop/paste) — found tldraw's
+  registerExternalContentHandler, recommends 3-layer approach
+- TH-468 (card renderers) — posting next
+- At 92%+ session limit, may need fresh session soon
+
+### PM Actions (this check)
+- Created docs/VISION.md — full product vision captured
+- Created TH-470 (Agent SDK research), TH-471 (agent communication),
+  TH-472 (PM agent loop) in Linear
+- Total Linear tickets: TH-463 through TH-472 (10 issues)
+
+### Next for agent when idle
+- Assign TH-471 (agent communication primitives) — HIGH priority
+- Assign TH-472 (PM agent loop design) — HIGH priority
+- These two unlock the multi-agent orchestration vision
+
+### Linear Board Summary
+| Status | Tickets |
+|--------|---------|
+| Research (active) | TH-467, TH-468, TH-469 |
+| Research (queued) | TH-470, TH-471, TH-472 |
+| Feature (backlog) | TH-463, TH-464, TH-465, TH-466 |
+
+### Team
+- **PM (this instance)**: orchestrating, vision docs, Linear management
+- **Agent 07e30e7e (canvas)**: research spikes, posting to Linear
+
+---
+
 ## 2026-03-19 — Check 1 (PM loop)
 
 ### Agent 07e30e7e Status
 - Created 7 Linear tickets (TH-463 through TH-469)
-  - 4 features: card shape, agent context, drop target, frame RPC
-  - 3 research: content ingestion, card renderers, context radius
-- Now researching TH-469 (agent context radius/depth) and TH-467 (drop/paste)
-  - Spawned 2 sub-agents working in parallel
-  - Read spec + decisions docs for context
+- Started researching TH-469, TH-467, TH-468 in parallel
 
 ### PM Actions
-- Created docs/ROADMAP.md, docs/DECISIONS.md, docs/STANDUP.md
-- Created docs/BRAINSTORM.md with Agent SDK idea from user
-- Created docs/spatial-os-spec.md (spec for composable primitives)
-- Set up 5-minute monitoring loop (job f184f4d6)
-
-### Open Items
-- User idea: Anthropic Agent SDK for containerized agents with SOUL.md
-  - Captured in docs/BRAINSTORM.md, needs Linear ticket
-- Agent should update Linear issues with research findings (not just investigate)
-
-### Team
-- **PM (this instance)**: orchestrating, specs, monitoring, Linear management
-- **Agent 07e30e7e (canvas)**: research spikes TH-467, TH-468, TH-469
+- Created docs/ROADMAP.md, DECISIONS.md, STANDUP.md, BRAINSTORM.md
+- Created docs/spatial-os-spec.md
+- Set up 5-minute monitoring loop
 
 ---
 
-## 2026-03-19 — Session 1
+## 2026-03-19 — Session 1 (foundation)
 
 ### Done
-- Built Electron app from scratch (replaced Next.js web app)
-- tldraw canvas with custom dot grid + cursor glow effect
-- Terminal shape with xterm.js + node-pty
-- Refactored to tmux-backed sessions
-- JSON-RPC server over Unix socket
-- Agent-to-agent communication (two Claudes talking through canvas)
-- terminal.exec, terminal.read, terminal.list, terminal.sendKeys
+- Electron app, tldraw canvas, terminal shapes, tmux sessions
+- JSON-RPC server, agent-to-agent communication
 - Canvas + folder persistence
-- Spatial OS spec + architecture decisions
-- 7 Linear tickets created by canvas agent
