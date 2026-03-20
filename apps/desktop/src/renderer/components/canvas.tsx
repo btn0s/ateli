@@ -5,7 +5,7 @@ import {
   useEditor,
   useValue,
 } from "tldraw"
-import type { TLComponents } from "tldraw"
+import type { TLComponents, TLShapeId } from "tldraw"
 import "tldraw/tldraw.css"
 import {
   MousePointer2,
@@ -283,7 +283,7 @@ function RpcBridge() {
 
     const removeCreateTerminal = window.electron.rpc.onCreateTerminal(({ shapeId, x, y, w, h }) => {
       editor.createShape({
-        id: shapeId as any,
+        id: shapeId as TLShapeId,
         type: "terminal",
         x,
         y,

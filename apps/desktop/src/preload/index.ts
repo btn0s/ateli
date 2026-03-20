@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron"
 
+function onIpc<T>(channel: string, callback: (data: T) => void): () => void {
+  const handler = (_event: Electron.IpcRendererEvent, data: T) => callback(data)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
+}
+
 contextBridge.exposeInMainWorld("electron", {
   platform: process.platform,
   selectFolder: () => ipcRenderer.invoke("select-folder") as Promise<string | null>,
@@ -15,31 +21,20 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.send("terminal:resize", { sessionKey, cols, rows }),
     dispose: (sessionKey: string) =>
       ipcRenderer.send("terminal:dispose", { sessionKey }),
-    onData: (sessionKey: string, callback: (data: string) => void) => {
-      const channel = `terminal:data:${sessionKey}`
-      const handler = (_event: Electron.IpcRendererEvent, data: string) => callback(data)
-      ipcRenderer.on(channel, handler)
-      return () => ipcRenderer.removeListener(channel, handler)
-    },
-    onExit: (sessionKey: string, callback: () => void) => {
-      const channel = `terminal:exit:${sessionKey}`
-      const handler = () => callback()
-      ipcRenderer.on(channel, handler)
-      return () => ipcRenderer.removeListener(channel, handler)
-    },
+    onData: (sessionKey: string, callback: (data: string) => void) =>
+      onIpc(`terminal:data:${sessionKey}`, callback),
+    onExit: (sessionKey: string, callback: () => void) =>
+      onIpc(`terminal:exit:${sessionKey}`, callback),
   },
   rpc: {
-    onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: { shapeId: string; x: number; y: number; w: number; h: number }) => callback(data)
-      ipcRenderer.on("rpc:create-terminal", handler)
-      return () => ipcRenderer.removeListener("rpc:create-terminal", handler)
-    },
-    onGetShapes: (callback: (data: { responseChannel: string }) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: { responseChannel: string }) => callback(data)
-      ipcRenderer.on("rpc:get-shapes", handler)
-      return () => ipcRenderer.removeListener("rpc:get-shapes", handler)
-    },
+    onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) =>
+      onIpc("rpc:create-terminal", callback),
+    onGetShapes: (callback: (data: { responseChannel: string }) => void) =>
+      onIpc("rpc:get-shapes", callback),
     respondShapes: (channel: string, shapes: unknown) => {
+      if (!channel.startsWith("rpc:shapes-response:")) {
+        throw new Error("Invalid response channel")
+      }
       ipcRenderer.send(channel, shapes)
     },
   },

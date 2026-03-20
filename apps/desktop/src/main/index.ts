@@ -2,12 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
 import crypto from "node:crypto"
 import path from "node:path"
 import os from "node:os"
+import { startRpcServer, stopRpcServer } from "./rpc"
+import { ptys } from "./pty-store"
 
 // node-pty is a native module — require it at runtime to avoid bundler issues
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pty = require("node-pty") as typeof import("node-pty")
-
-export const ptys = new Map<string, import("node-pty").IPty>()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -98,8 +98,6 @@ ipcMain.on("terminal:dispose", (_event, { sessionKey }: { sessionKey: string }) 
   ptys.get(sessionKey)?.kill()
   ptys.delete(sessionKey)
 })
-
-import { startRpcServer, stopRpcServer } from "./rpc"
 
 app.whenReady().then(() => {
   createWindow()
