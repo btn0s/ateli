@@ -34,3 +34,6 @@ npm-debug.log*
 # Misc
 .DS_Store
 *.pem
+.idea/
+.cursor/
+.claude/scheduled_tasks.lock
