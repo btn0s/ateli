@@ -8,35 +8,49 @@
 - [x] Canvas persistence per folder
 - [x] Custom dot grid with cursor glow
 
-## Phase 1: Composable Primitives (CURRENT)
-_The canvas becomes a spatial OS through small, composable primitives._
+## Phase 1: Workspace Shell (CURRENT)
+_The canvas becomes a durable coding workspace with a stable shell._
 
-### Card Shape
+### Workspace Shell
+- [ ] Harden left sidebar chat model
+- [ ] Improve right sidebar file tree and terminal stack
+- [ ] Smooth canvas / sidebar interaction boundaries
+- [ ] Make layout persist cleanly per workspace
+
+### Groups / Workstreams
+- [ ] Rename groups cleanly
+- [ ] Make groups/frame labels feel first-class
+- [ ] Improve grouping and reparenting flows
+- [ ] Clarify how terminals belong to groups
+
+### Worktrees
+- [ ] Make worktree attachment more visible
+- [ ] Improve IDE open flows
+- [ ] Clarify worktree bindings in the UI
+- [ ] Add worktree creation/management ergonomics
+
+### Claude Config / Skills
+- [ ] Global Claude config manager
+- [ ] Global skills manager
+- [ ] Workspace-level defaults and overrides
+- [ ] File-backed config editing flows
+
+## Phase 2: Canvas Primitives
 - [ ] Generic card shape: { title, body, url, sourceType, meta }
 - [ ] Markdown rendering in card body
-- [ ] Source type indicators (icon/badge for linear, github, etc)
-
-### Agent Context
-- [ ] RPC: workspace.context — agent reads its frame + siblings
-- [ ] Spatial proximity fallback when not in a frame
-- [ ] Context includes shape content, not just IDs
-
-### Drop Target / Paste
 - [ ] Paste URL → auto-create card shape
 - [ ] Drag-and-drop URL from browser
-- [ ] URL metadata fetching (title, description, favicon)
+- [ ] URL metadata fetching
+- [ ] RPC: canvas.createFrame
+- [ ] RPC: canvas.moveToFrame
 
-### Frame Enhancements
-- [ ] RPC: canvas.createFrame — create labeled frame via RPC
-- [ ] RPC: canvas.moveToFrame — reparent shapes into a frame
-- [ ] Keyboard shortcut for group-into-frame
+## Phase 3: Agent Runtime Experiments
+- [ ] Prototype isolated agent sessions outside the main canvas product
+- [ ] Prototype custom Claude CLI / wrapper flows
+- [ ] Explore SOUL / identity / memory primitives
+- [ ] Explore agent spawning, delegation, and handoff in a separate UI/TUI
 
-## Phase 2: Agent Orchestration (NEXT)
-- [ ] agent.spawn — create terminal + start claude in one RPC call
-- [ ] Agent can read context, do work, write results back as shapes
-- [ ] Multiple agents working in parallel in different frames
-
-## Phase 3: Polish
+## Phase 4: Polish
 - [ ] Drop targets for files from Finder
 - [ ] Image/screenshot shape
 - [ ] Recent projects list on launch
