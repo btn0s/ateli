@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron"
 
+type WorkspaceTreeNode = {
+  name: string
+  path: string
+  kind: "file" | "directory"
+  children?: WorkspaceTreeNode[]
+}
+
 function onIpc<T>(channel: string, callback: (data: T) => void): () => void {
   const handler = (_event: Electron.IpcRendererEvent, data: T) => callback(data)
   ipcRenderer.on(channel, handler)
@@ -9,6 +16,10 @@ function onIpc<T>(channel: string, callback: (data: T) => void): () => void {
 contextBridge.exposeInMainWorld("electron", {
   platform: process.platform,
   selectFolder: () => ipcRenderer.invoke("select-folder") as Promise<string | null>,
+  workspace: {
+    listTree: (root: string, depth = 3) =>
+      ipcRenderer.invoke("workspace:list-tree", { root, depth }) as Promise<WorkspaceTreeNode[]>,
+  },
   terminal: {
     create: (shapeId: string, cwd: string) =>
       ipcRenderer.invoke("terminal:create", { shapeId, cwd }) as Promise<{

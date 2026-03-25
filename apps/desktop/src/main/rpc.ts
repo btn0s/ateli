@@ -10,7 +10,7 @@ import {
   listTmuxSessions,
   sendTmuxCommand,
   sendTmuxKeys,
-} from "./pty-store"
+} from "./pty-store.js"
 
 const SOCKET_DIR = path.join(os.homedir(), ".collaborator")
 const SOCKET_PATH_FILE = path.join(SOCKET_DIR, "socket-path")

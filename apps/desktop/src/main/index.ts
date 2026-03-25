@@ -1,12 +1,78 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
+import fs from "node:fs/promises"
 import crypto from "node:crypto"
 import path from "node:path"
-import { startRpcServer, stopRpcServer } from "./rpc"
-import { ptys, createTmuxSession, killTmuxSession, tmuxSessionName } from "./pty-store"
+import { startRpcServer, stopRpcServer } from "./rpc.js"
+import { ptys, createTmuxSession, killTmuxSession, tmuxSessionName } from "./pty-store.js"
 
 // node-pty is a native module — require it at runtime to avoid bundler issues
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pty = require("node-pty") as typeof import("node-pty")
+
+type WorkspaceTreeNode = {
+  name: string
+  path: string
+  kind: "file" | "directory"
+  children?: WorkspaceTreeNode[]
+}
+
+const IGNORED_DIRECTORIES = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "out",
+  "build",
+  ".next",
+  ".turbo",
+  ".cache",
+  "coverage",
+])
+
+async function readWorkspaceTree(root: string, depth: number): Promise<WorkspaceTreeNode[]> {
+  try {
+    const entries = (await fs.readdir(root, { withFileTypes: true })) as Array<{
+      isDirectory(): boolean
+      name: string
+    }>
+
+    entries.sort((a, b) => {
+      if (a.isDirectory() !== b.isDirectory()) {
+        return a.isDirectory() ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
+
+    const children: WorkspaceTreeNode[] = []
+
+    for (const entry of entries) {
+      if (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name)) {
+        continue
+      }
+
+      const fullPath = path.join(root, entry.name)
+
+      if (entry.isDirectory()) {
+        children.push({
+          name: entry.name,
+          path: fullPath,
+          kind: "directory",
+          children: depth > 0 ? await readWorkspaceTree(fullPath, depth - 1) : [],
+        })
+        continue
+      }
+
+      children.push({
+        name: entry.name,
+        path: fullPath,
+        kind: "file",
+      })
+    }
+
+    return children
+  } catch {
+    return []
+  }
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -45,6 +111,18 @@ ipcMain.handle("select-folder", async () => {
   if (result.canceled) return null
   return result.filePaths[0] ?? null
 })
+
+ipcMain.handle(
+  "workspace:list-tree",
+  async (_event, { root, depth }: { root: string; depth?: number }) => {
+    if (typeof root !== "string" || root.trim() === "") {
+      throw new Error("root is required")
+    }
+
+    const resolvedRoot = path.resolve(root)
+    return readWorkspaceTree(resolvedRoot, typeof depth === "number" ? depth : 3)
+  },
+)
 
 ipcMain.handle(
   "terminal:create",

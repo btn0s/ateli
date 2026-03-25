@@ -1,7 +1,20 @@
+type WorkspaceTreeNode = {
+  name: string
+  path: string
+  kind: "file" | "directory"
+  children?: WorkspaceTreeNode[]
+}
+
 interface Window {
   electron: {
     platform: string
     selectFolder: () => Promise<string | null>
+    workspace: {
+      listTree: (
+        root: string,
+        depth?: number,
+      ) => Promise<WorkspaceTreeNode[]>
+    }
     terminal: {
       create: (
         shapeId: string,

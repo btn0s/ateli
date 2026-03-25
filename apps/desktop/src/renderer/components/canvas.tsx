@@ -1,23 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useCallback } from "react"
-import {
-  Tldraw,
-  track,
-  useEditor,
-  useValue,
-} from "tldraw"
+import { Tldraw, useEditor, useValue } from "tldraw"
 import type { TLComponents, TLShapeId } from "tldraw"
 import "tldraw/tldraw.css"
-import {
-  MousePointer2,
-  Pencil,
-  Eraser,
-  MoveRight,
-  Type,
-  TerminalSquare,
-} from "lucide-react"
-import { Toggle } from "@workspace/ui/components/toggle"
-import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
-import { CommandMenu } from "./command-menu"
+import { TerminalShapeUtil, setTerminalCwd } from "../shapes/terminal-shape.js"
+import { WorkspaceShell, setWorkspaceRoot } from "./workspace-shell.js"
 
 const customShapeUtils = [TerminalShapeUtil]
 
@@ -221,59 +207,8 @@ const components: TLComponents = {
 
     return <canvas className="tl-grid" ref={canvasRef} />
   },
-  InFrontOfTheCanvas: CommandMenu,
+  InFrontOfTheCanvas: WorkspaceShell,
 }
-
-const tools = [
-  { id: "select", label: "Select", icon: MousePointer2 },
-  { id: "draw", label: "Draw", icon: Pencil },
-  { id: "eraser", label: "Eraser", icon: Eraser },
-  { id: "arrow", label: "Arrow", icon: MoveRight },
-  { id: "text", label: "Text", icon: Type },
-] as const
-
-const CustomUi = track(() => {
-  const editor = useEditor()
-  const currentTool = editor.getCurrentToolId()
-
-  function addTerminal() {
-    const center = editor.getViewportPageBounds().center
-    editor.createShape({
-      type: "terminal",
-      x: center.x - 300,
-      y: center.y - 200,
-    })
-  }
-
-  return (
-    <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
-      <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
-        <div className="pointer-events-auto flex items-center gap-0.5 border border-border bg-background/80 p-1 backdrop-blur-sm">
-          {tools.map((tool) => (
-            <Toggle
-              key={tool.id}
-              size="sm"
-              pressed={currentTool === tool.id}
-              onPressedChange={() => editor.setCurrentTool(tool.id)}
-              aria-label={tool.label}
-            >
-              <tool.icon className="size-4" />
-            </Toggle>
-          ))}
-          <div className="bg-border mx-0.5 h-4 w-px" />
-          <Toggle
-            size="sm"
-            pressed={false}
-            onPressedChange={addTerminal}
-            aria-label="Add Terminal"
-          >
-            <TerminalSquare className="size-4" />
-          </Toggle>
-        </div>
-      </div>
-    </div>
-  )
-})
 
 function RpcBridge() {
   const editor = useEditor()
@@ -313,6 +248,7 @@ function RpcBridge() {
 
 export function Canvas({ folderPath }: { folderPath: string }) {
   setTerminalCwd(folderPath)
+  setWorkspaceRoot(folderPath)
 
   return (
     <div className="h-screen w-screen">
@@ -327,7 +263,6 @@ export function Canvas({ folderPath }: { folderPath: string }) {
           editor.updateInstanceState({ isGridMode: true })
         }}
       >
-        <CustomUi />
         <RpcBridge />
       </Tldraw>
     </div>

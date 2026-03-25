@@ -1,5 +1,5 @@
 # Agents
 
-## Rules
+See [CLAUDE.md](/Users/btn0s/dev/2026/projects/ateli/ateli-02/CLAUDE.md) for repo rules.
 
-- Never run dev servers or start the application. The user will do this themselves.
+For tldraw/editor work in this repo, use the local skill at [skills/tldraw/SKILL.md](/Users/btn0s/dev/2026/projects/ateli/ateli-02/skills/tldraw/SKILL.md).
