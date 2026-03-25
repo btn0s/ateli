@@ -6,3 +6,4 @@
 - Prefer file-backed, inspectable configuration and state when practical.
 - If you need to run the app or a dev server, do it inside tmux session `ateli-dev`.
 - For any tldraw/editor work in this repo, read the local skill at [skills/tldraw/SKILL.md](/Users/btn0s/dev/2026/projects/ateli/ateli-02/skills/tldraw/SKILL.md) first.
+- For manually testing or improving the desktop UI, use the local skill at [skills/ui-loop/SKILL.md](/Users/btn0s/dev/2026/projects/ateli/ateli-02/skills/ui-loop/SKILL.md).

@@ -145,15 +145,10 @@ function WorkspaceFileTree({ root }: { root: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-r border-border/70 bg-background/90 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 flex-col border-r border-border/70 bg-background/90 pt-10 backdrop-blur-sm">
       <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            File Tree
-          </div>
-          <div className="truncate text-xs text-foreground/80">
-            {root || "No workspace"}
-          </div>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          File Tree
         </div>
       </div>
       <div className="border-b border-border/70 px-3 py-2">
@@ -251,16 +246,11 @@ function WorkspaceChat({ root }: { root: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-b border-border/70 bg-background/90 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 flex-col border-b border-border/70 bg-background/90 pt-10 backdrop-blur-sm">
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <MessageSquareText className="size-3.5 text-muted-foreground" />
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Workspace Chat
-          </div>
-          <div className="truncate text-xs text-foreground/80">
-            {root || "No workspace"}
-          </div>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          Workspace Chat
         </div>
       </div>
       <div ref={transcriptRef} className="min-h-0 flex-1 overflow-auto px-3 py-3">
@@ -300,10 +290,7 @@ function WorkspaceChat({ root }: { root: string }) {
           placeholder="Write to the workspace..."
           className="min-h-20 resize-none"
         />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="text-[10px] text-muted-foreground">
-            Local scaffold for now.
-          </div>
+        <div className="mt-2 flex items-center justify-end gap-2">
           <Button size="sm" onClick={sendMessage} disabled={!draft.trim()}>
             <Send className="size-3.5" />
             Send
@@ -428,16 +415,11 @@ function WorkspaceTerminal({ root }: { root: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-border/70 bg-background/90 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 flex-col border-l border-border/70 bg-background/90 pt-10 backdrop-blur-sm">
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <TerminalSquare className="size-3.5 text-muted-foreground" />
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Terminal
-          </div>
-          <div className="truncate text-xs text-foreground/80">
-            {root}
-          </div>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          Terminal
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden p-2">
@@ -485,23 +467,32 @@ const CanvasToolbar = track(() => {
 
 export function WorkspaceShell() {
   const root = workspaceRoot
+  const workspaceLabel = root || "No workspace"
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[300] pt-10">
-      <div
-        className="grid h-full min-h-0 w-full"
-        style={{ gridTemplateColumns: "18rem minmax(0, 1fr) 28rem" }}
-      >
-        <div className="pointer-events-auto min-h-0">
+    <div className="pointer-events-none absolute inset-0 z-[300]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex h-10 items-center justify-center px-3">
+        <div className="pointer-events-auto flex h-8 min-w-0 max-w-[min(42rem,calc(100%-12rem))] items-center justify-center border border-border/70 bg-background/90 px-4 backdrop-blur-sm">
+          <div className="min-w-0 truncate text-center text-xs text-muted-foreground" title={workspaceLabel}>
+            {workspaceLabel}
+          </div>
+        </div>
+      </div>
+      <div className="pointer-events-auto absolute inset-y-0 left-0 min-h-0 w-72">
+        <div className="h-full min-h-0">
           <WorkspaceFileTree root={root} />
         </div>
-        <div className="pointer-events-none relative min-h-0">
-          <CanvasToolbar />
-        </div>
-        <div className="pointer-events-auto grid min-h-0" style={{ gridTemplateRows: "minmax(0, 2fr) minmax(0, 1fr)" }}>
+      </div>
+      <div className="pointer-events-auto absolute inset-y-0 right-0 grid min-h-0 w-[28rem]" style={{ gridTemplateRows: "minmax(0, 2fr) minmax(0, 1fr)" }}>
+        <div className="min-h-0">
           <WorkspaceChat root={root} />
+        </div>
+        <div className="min-h-0">
           <WorkspaceTerminal root={root} />
         </div>
+      </div>
+      <div className="pointer-events-none absolute inset-0 min-h-0">
+        <CanvasToolbar />
       </div>
     </div>
   )

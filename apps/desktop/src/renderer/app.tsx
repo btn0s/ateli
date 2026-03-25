@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Agentation } from "agentation"
 import { FolderPicker } from "@/components/folder-picker"
 import { Canvas } from "@/components/canvas"
 import { Titlebar } from "@/components/titlebar"
@@ -23,6 +24,7 @@ export function App() {
       ) : (
         <FolderPicker onSelect={handleSelect} />
       )}
+      {process.env.NODE_ENV === "development" ? <Agentation /> : null}
     </>
   )
 }
