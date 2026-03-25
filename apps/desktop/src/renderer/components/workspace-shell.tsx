@@ -17,6 +17,11 @@ import {
 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@workspace/ui/components/resizable"
 import { Separator } from "@workspace/ui/components/separator"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Toggle } from "@workspace/ui/components/toggle"
@@ -37,6 +42,14 @@ type ChatMessage = {
   createdAt: number
 }
 
+const OPEN_BY_DEFAULT = new Set(["src", "apps", "packages", "lib"])
+
+const GITIGNORED_NAMES = new Set([
+  "node_modules", ".git", "dist", "build", ".next", ".turbo",
+  "coverage", ".cache", ".output", "out", ".idea", ".cursor",
+  ".vscode", ".DS_Store", ".env", ".env.local",
+])
+
 const TOOLBAR_ITEMS = [
   { id: "select", label: "Select", icon: MousePointer2 },
   { id: "draw", label: "Draw", icon: Pencil },
@@ -55,7 +68,13 @@ function getWorkspaceStorageKey(kind: string) {
   return `ateli:${kind}:${workspaceRoot || "workspace"}`
 }
 
-function WorkspaceFileTree({ root }: { root: string }) {
+function WorkspaceFileTree({
+  root,
+  filterRef,
+}: {
+  root: string
+  filterRef: React.RefObject<HTMLInputElement | null>
+}) {
   const [tree, setTree] = useState<WorkspaceTreeNode[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState("")
@@ -99,34 +118,45 @@ function WorkspaceFileTree({ root }: { root: string }) {
     return node.children?.some((child) => matchesFilter(child, needle)) ?? false
   }
 
+  function TreeGuides({ depth }: { depth: number }) {
+    if (depth === 0) return null
+    return (
+      <span className="inline-flex shrink-0" style={{ width: depth * 12 }} aria-hidden>
+        {Array.from({ length: depth }, (_, i) => (
+          <span
+            key={i}
+            className="absolute top-0 bottom-0 w-px bg-foreground/10"
+            style={{ left: i * 12 + 6 }}
+          />
+        ))}
+      </span>
+    )
+  }
+
   function renderNode(node: WorkspaceTreeNode, depth: number, query: string) {
     if (!matchesFilter(node, query)) return null
-    const indent = `${Math.min(depth, 6) * 12}px`
 
     if (node.kind === "directory") {
       return (
-        <details key={node.path} open={depth < 1} className="group">
-          <summary
-            className="flex cursor-default list-none items-center gap-1.5 py-1 text-xs text-foreground/80"
-            style={{ paddingInlineStart: indent }}
-          >
+        <details key={node.path} open={OPEN_BY_DEFAULT.has(node.name)} className="group">
+          <summary className={cn(
+            "relative flex cursor-default list-none items-center gap-1.5 py-1 text-xs",
+            GITIGNORED_NAMES.has(node.name) ? "text-foreground/40" : "text-foreground/80",
+          )}>
+            <TreeGuides depth={depth} />
             <ChevronRight className="size-3.5 group-open:hidden" />
             <ChevronDown className="hidden size-3.5 group-open:block" />
             <Folder className="size-3.5 text-muted-foreground" />
             <span className="truncate">{node.name}</span>
           </summary>
-          <div>
-            {node.children?.length
-              ? node.children.map((child) => renderNode(child, depth + 1, query))
-              : (
-                <div
-                  className="py-1 text-xs text-muted-foreground"
-                  style={{ paddingInlineStart: `calc(${indent} + 1.5rem)` }}
-                >
-                  Empty folder
-                </div>
-              )}
-          </div>
+          {node.children?.length
+            ? node.children.map((child) => renderNode(child, depth + 1, query))
+            : (
+              <div className="relative flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
+                <TreeGuides depth={depth + 1} />
+                <span className="ml-5">Empty folder</span>
+              </div>
+            )}
         </details>
       )
     }
@@ -134,10 +164,13 @@ function WorkspaceFileTree({ root }: { root: string }) {
     return (
       <div
         key={node.path}
-        className="flex items-center gap-1.5 py-1 text-xs text-foreground/75"
-        style={{ paddingInlineStart: `calc(${indent} + 1.5rem)` }}
+        className={cn(
+          "relative flex items-center gap-1.5 py-1 text-xs",
+          GITIGNORED_NAMES.has(node.name) ? "text-foreground/40" : "text-foreground/75",
+        )}
         title={node.path}
       >
+        <TreeGuides depth={depth} />
         <FileText className="size-3.5 text-muted-foreground" />
         <span className="truncate">{node.name}</span>
       </div>
@@ -145,18 +178,24 @@ function WorkspaceFileTree({ root }: { root: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-r border-border/70 bg-background/90 pt-10 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 flex-col border-r border-border/70 bg-background pt-[var(--titlebar-h)]">
       <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           File Tree
         </div>
       </div>
       <div className="border-b border-border/70 px-3 py-2">
-        <Input
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          placeholder="Filter files"
-        />
+        <div className="relative">
+          <Input
+            ref={filterRef}
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Filter files"
+          />
+          <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 select-none text-[10px] text-muted-foreground/40">
+            ⌘F
+          </kbd>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-1.5 py-2">
         {!root ? (
@@ -246,7 +285,7 @@ function WorkspaceChat({ root }: { root: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-b border-border/70 bg-background/90 pt-10 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <MessageSquareText className="size-3.5 text-muted-foreground" />
         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -291,7 +330,12 @@ function WorkspaceChat({ root }: { root: string }) {
           className="min-h-20 resize-none"
         />
         <div className="mt-2 flex items-center justify-end gap-2">
-          <Button size="sm" onClick={sendMessage} disabled={!draft.trim()}>
+          <Button
+            size="sm"
+            onClick={sendMessage}
+            disabled={!draft.trim()}
+            className="active:scale-[0.97] transition-transform duration-100 ease-out"
+          >
             <Send className="size-3.5" />
             Send
           </Button>
@@ -408,14 +452,14 @@ function WorkspaceTerminal({ root }: { root: string }) {
 
   if (!root) {
     return (
-      <div className="flex h-full min-h-0 items-center justify-center border-l border-border/70 bg-background/90 text-xs text-muted-foreground backdrop-blur-sm">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background/90 text-xs text-muted-foreground backdrop-blur-sm">
         Open a workspace to start a terminal.
       </div>
     )
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-border/70 bg-background/90 pt-10 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <TerminalSquare className="size-3.5 text-muted-foreground" />
         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -452,12 +496,19 @@ const CanvasToolbar = track(() => {
             pressed={currentTool === tool.id}
             onPressedChange={() => editor.setCurrentTool(tool.id)}
             aria-label={tool.label}
+            className="active:scale-[0.95] transition-[background-color,transform] duration-100 ease-out"
           >
             <tool.icon className="size-4" />
           </Toggle>
         ))}
         <Separator orientation="vertical" className="mx-1 h-4" />
-        <Toggle size="sm" pressed={false} onPressedChange={addTerminalShape} aria-label="Add Terminal">
+        <Toggle
+          size="sm"
+          pressed={false}
+          onPressedChange={addTerminalShape}
+          aria-label="Add Terminal"
+          className="active:scale-[0.95] transition-[background-color,transform] duration-100 ease-out"
+        >
           <TerminalSquare className="size-4" />
         </Toggle>
       </div>
@@ -468,29 +519,139 @@ const CanvasToolbar = track(() => {
 export function WorkspaceShell() {
   const root = workspaceRoot
   const workspaceLabel = root || "No workspace"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leftPanelRef = useRef<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rightPanelRef = useRef<any>(null)
+  const filterInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.metaKey && e.key === "b") {
+        e.preventDefault()
+        const panel = leftPanelRef.current
+        if (panel) {
+          if (panel.isCollapsed()) panel.expand()
+          else panel.collapse()
+        }
+      }
+      if (e.metaKey && e.key === "j") {
+        e.preventDefault()
+        const panel = rightPanelRef.current
+        if (panel) {
+          if (panel.isCollapsed()) panel.expand()
+          else panel.collapse()
+        }
+      }
+      if (e.metaKey && e.key === "f") {
+        e.preventDefault()
+        if (leftPanelRef.current?.isCollapsed()) {
+          leftPanelRef.current.expand()
+        }
+        requestAnimationFrame(() => {
+          filterInputRef.current?.focus()
+        })
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
+
+  const hLayoutKey = getWorkspaceStorageKey("panels-h")
+  const vLayoutKey = getWorkspaceStorageKey("panels-v")
+
+  const [defaultLayoutH] = useState(() => {
+    try {
+      const raw = localStorage.getItem(hLayoutKey)
+      return raw ? JSON.parse(raw) : undefined
+    } catch { return undefined }
+  })
+
+  const [defaultLayoutV] = useState(() => {
+    try {
+      const raw = localStorage.getItem(vLayoutKey)
+      return raw ? JSON.parse(raw) : undefined
+    } catch { return undefined }
+  })
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[300]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex h-10 items-center justify-center px-3">
+    <div
+      className="pointer-events-none absolute inset-0 z-[300]"
+      style={{ "--titlebar-h": "2.5rem" } as React.CSSProperties}
+    >
+      {/* Titlebar */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[var(--titlebar-h)] items-center justify-center px-3">
         <div className="pointer-events-auto flex h-8 min-w-0 max-w-[min(42rem,calc(100%-12rem))] items-center justify-center border border-border/70 bg-background/90 px-4 backdrop-blur-sm">
           <div className="min-w-0 truncate text-center text-xs text-muted-foreground" title={workspaceLabel}>
             {workspaceLabel}
           </div>
         </div>
       </div>
-      <div className="pointer-events-auto absolute inset-y-0 left-0 min-h-0 w-72">
-        <div className="h-full min-h-0">
-          <WorkspaceFileTree root={root} />
-        </div>
+
+      {/* Panel layout */}
+      <div className="absolute inset-0">
+        <ResizablePanelGroup
+          key={root}
+          orientation="horizontal"
+          defaultLayout={defaultLayoutH}
+          onLayoutChanged={(layout) => {
+            localStorage.setItem(hLayoutKey, JSON.stringify(layout))
+          }}
+        >
+          {/* Left panel — file tree */}
+          <ResizablePanel
+            id="left"
+            panelRef={leftPanelRef}
+            defaultSize={13}
+            minSize="180px"
+            maxSize="420px"
+            collapsible
+            collapsedSize={0}
+          >
+            <div className="pointer-events-auto h-full">
+              <WorkspaceFileTree root={root} filterRef={filterInputRef} />
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle className="pointer-events-auto w-0 bg-transparent after:!w-1.5 hover:after:bg-border/40 active:after:bg-border/60" />
+
+          {/* Canvas gap — stays pointer-events-none */}
+          <ResizablePanel id="canvas" minSize="200px" />
+
+          <ResizableHandle className="pointer-events-auto w-0 bg-transparent after:!w-1.5 hover:after:bg-border/40 active:after:bg-border/60" />
+
+          {/* Right panel — chat + terminal */}
+          <ResizablePanel
+            id="right"
+            panelRef={rightPanelRef}
+            defaultSize={17}
+            minSize="280px"
+            maxSize="600px"
+            collapsible
+            collapsedSize={0}
+          >
+            <div className="pointer-events-auto h-full border-l border-border/70">
+              <ResizablePanelGroup
+                orientation="vertical"
+                defaultLayout={defaultLayoutV}
+                onLayoutChanged={(layout) => {
+                  localStorage.setItem(vLayoutKey, JSON.stringify(layout))
+                }}
+              >
+                <ResizablePanel id="chat" defaultSize={65} minSize={25}>
+                  <WorkspaceChat root={root} />
+                </ResizablePanel>
+                <ResizableHandle className="h-px bg-border/40 after:!h-2 hover:bg-border/60 active:bg-border/80" />
+                <ResizablePanel id="terminal" defaultSize={35} minSize={20}>
+                  <WorkspaceTerminal root={root} />
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
-      <div className="pointer-events-auto absolute inset-y-0 right-0 grid min-h-0 w-[28rem]" style={{ gridTemplateRows: "minmax(0, 2fr) minmax(0, 1fr)" }}>
-        <div className="min-h-0">
-          <WorkspaceChat root={root} />
-        </div>
-        <div className="min-h-0">
-          <WorkspaceTerminal root={root} />
-        </div>
-      </div>
+
+      {/* Toolbar */}
       <div className="pointer-events-none absolute inset-0 min-h-0">
         <CanvasToolbar />
       </div>
