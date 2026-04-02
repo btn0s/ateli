@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import {
   DefaultContextMenu,
   DefaultContextMenuContent,
+  DefaultToolbar,
+  DefaultToolbarContent,
   Tldraw,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
@@ -11,9 +13,9 @@ import {
 } from "tldraw"
 import type { TLComponents, TLShapeId, TLUiContextMenuProps } from "tldraw"
 import "tldraw/tldraw.css"
-import { Toggle } from "@workspace/ui/components/toggle"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
+import { setRepoPath } from "@/lib/default-actions"
 import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
 
@@ -242,8 +244,26 @@ const components: TLComponents = {
     return <canvas className="tl-grid" ref={canvasRef} />
   },
   InFrontOfTheCanvas: CommandMenu,
-  // Hide tldraw UI panels we replace with our own
-  Toolbar: null,
+  // Extend tldraw's toolbar with our custom actions
+  Toolbar: () => {
+    const editor = useEditor()
+    const actions = getToolbarActions()
+    return (
+      <DefaultToolbar>
+        <DefaultToolbarContent />
+        {actions.map((action) => (
+          <TldrawUiMenuItem
+            key={action.id}
+            id={action.id}
+            label={action.label as any}
+            icon={undefined}
+            readonlyOk
+            onSelect={() => action.execute(editor)}
+          />
+        ))}
+      </DefaultToolbar>
+    )
+  },
   MainMenu: null,
   PageMenu: null,
   NavigationPanel: null,
@@ -258,30 +278,6 @@ const components: TLComponents = {
   SharePanel: null,
 }
 
-const CustomUi = track(() => {
-  const editor = useEditor()
-  const actions = getToolbarActions()
-
-  return (
-    <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
-      <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
-        <div className="pointer-events-auto flex items-center gap-0.5 border border-border bg-background/80 p-1 backdrop-blur-sm">
-          {actions.map((action) => (
-            <Toggle
-              key={action.id}
-              size="sm"
-              pressed={false}
-              onPressedChange={() => action.execute(editor)}
-              aria-label={action.label}
-            >
-              <action.icon className="size-4" />
-            </Toggle>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-})
 
 function RpcBridge() {
   const editor = useEditor()
@@ -336,6 +332,7 @@ function RpcBridge() {
 
 export function Canvas({ folderPath }: { folderPath: string }) {
   setTerminalCwd(folderPath)
+  setRepoPath(folderPath)
 
   return (
     <div className="h-screen w-screen">
@@ -349,7 +346,6 @@ export function Canvas({ folderPath }: { folderPath: string }) {
           editor.updateInstanceState({ isGridMode: true })
         }}
       >
-        <CustomUi />
         <RpcBridge />
       </Tldraw>
     </div>

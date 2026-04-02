@@ -30,6 +30,14 @@ contextBridge.exposeInMainWorld("electron", {
     onExit: (sessionKey: string, callback: () => void) =>
       onIpc(`terminal:exit:${sessionKey}`, callback),
   },
+  worktree: {
+    create: (repoPath: string, branch: string) =>
+      ipcRenderer.invoke("worktree:create", { repoPath, branch }) as Promise<{
+        id: string
+        path: string
+        branch: string
+      }>,
+  },
   rpc: {
     onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) =>
       onIpc("rpc:create-terminal", callback),

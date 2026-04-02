@@ -1,7 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
 import path from "node:path"
+import crypto from "node:crypto"
 import { PtyManager } from "./pty"
-import { startRpcServer, stopRpcServer, onBroadcast } from "./rpc"
+import { startRpcServer, stopRpcServer, onBroadcast, broadcast } from "./rpc"
+import {
+  addWorktree,
+  removeWorktree as removeGitWorktree,
+  worktreePath,
+  loadWorktreeMetadata,
+  saveWorktreeMetadata,
+} from "./worktree"
+import type { WorktreeMetadata } from "./worktree"
 
 const ptyManager = new PtyManager()
 
@@ -97,6 +106,37 @@ ipcMain.on("terminal:detach", (_event, { sessionKey }: { sessionKey: string }) =
   if (!meta) return
   ptyManager.detachSession(meta.id)
 })
+
+// --- Worktree IPC ---
+
+ipcMain.handle(
+  "worktree:create",
+  async (_event, { repoPath, branch }: { repoPath: string; branch: string }) => {
+    const wtPath = worktreePath(repoPath, branch)
+    await addWorktree({
+      repoPath,
+      worktreePath: wtPath,
+      branch,
+      createBranch: true,
+    })
+
+    const id = crypto.randomUUID().slice(0, 8)
+    const metadata: WorktreeMetadata = {
+      id,
+      repoPath,
+      worktreePath: wtPath,
+      branch,
+      createdAt: new Date().toISOString(),
+    }
+
+    const all = loadWorktreeMetadata()
+    all.push(metadata)
+    saveWorktreeMetadata(all)
+
+    broadcast("worktree.created", { id, path: wtPath, branch })
+    return { id, path: wtPath, branch }
+  },
+)
 
 // --- App Lifecycle ---
 

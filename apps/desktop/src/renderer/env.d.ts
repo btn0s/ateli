@@ -15,6 +15,13 @@ interface Window {
       onData: (sessionKey: string, callback: (data: string) => void) => () => void
       onExit: (sessionKey: string, callback: () => void) => () => void
     }
+    worktree: {
+      create: (repoPath: string, branch: string) => Promise<{
+        id: string
+        path: string
+        branch: string
+      }>
+    }
     rpc: {
       onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) => () => void
       onGetShapes: (callback: (data: { responseChannel: string }) => void) => () => void

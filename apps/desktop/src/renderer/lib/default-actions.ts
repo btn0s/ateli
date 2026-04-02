@@ -2,6 +2,12 @@ import type { Editor } from "tldraw"
 import { TerminalSquare, GitBranch } from "lucide-react"
 import { registerAction } from "./tool-registry"
 
+let _repoPath = ""
+
+export function setRepoPath(repoPath: string) {
+  _repoPath = repoPath
+}
+
 function addTerminalAtCenter(editor: Editor) {
   const center = editor.getViewportPageBounds().center
   editor.createShape({
@@ -25,10 +31,14 @@ registerAction({
   id: "add-worktree",
   label: "New Worktree",
   icon: GitBranch,
+  showInToolbar: true,
   showInCommandMenu: true,
   showInContextMenu: true,
-  execute: (_editor) => {
-    // TODO: prompt for branch name, then call worktree.create RPC
-    // For now this is a placeholder — the RPC flow works, UI prompt is next
+  execute: async () => {
+    if (!_repoPath) return
+    const branch = window.prompt("Branch name:")
+    if (!branch) return
+    // IPC call — the worktree.created notification will spawn the terminal shape
+    await window.electron.worktree.create(_repoPath, branch)
   },
 })
