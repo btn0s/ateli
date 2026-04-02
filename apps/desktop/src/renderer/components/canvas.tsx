@@ -12,7 +12,7 @@ import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { getToolbarActions } from "@/lib/tool-registry"
 import "@/lib/default-actions" // Side-effect import: registers all default actions
 import { CommandMenu } from "./command-menu"
-import { CanvasContextMenu } from "./context-menu"
+// TODO: extend tldraw's built-in context menu instead of a custom one
 
 const customShapeUtils = [TerminalShapeUtil]
 
@@ -290,9 +290,24 @@ function RpcBridge() {
       window.electron.rpc.respondShapes(responseChannel, shapes)
     })
 
+    const removeNotifications = window.electron.rpc.onNotification(({ method, params }) => {
+      if (method === "worktree.created") {
+        const center = editor.getViewportPageBounds().center
+        editor.createShape({
+          type: "terminal",
+          x: center.x - 300,
+          y: center.y - 200,
+          props: {
+            cwd: params.path as string,
+          },
+        })
+      }
+    })
+
     return () => {
       removeCreateTerminal()
       removeGetShapes()
+      removeNotifications()
     }
   }, [editor])
 
@@ -317,7 +332,6 @@ export function Canvas({ folderPath }: { folderPath: string }) {
       >
         <CustomUi />
         <RpcBridge />
-        <CanvasContextMenu />
       </Tldraw>
     </div>
   )

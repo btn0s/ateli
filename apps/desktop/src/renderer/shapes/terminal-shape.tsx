@@ -15,7 +15,7 @@ const TERMINAL_SHAPE_TYPE = "terminal" as const
 
 declare module "tldraw" {
   interface TLGlobalShapePropsMap {
-    [TERMINAL_SHAPE_TYPE]: { w: number; h: number; sidecarSessionId?: string }
+    [TERMINAL_SHAPE_TYPE]: { w: number; h: number; sidecarSessionId?: string; cwd?: string }
   }
 }
 
@@ -231,6 +231,7 @@ export class TerminalShapeUtil extends BaseBoxShapeUtil<TerminalShape> {
     w: T.number,
     h: T.number,
     sidecarSessionId: T.string.optional(),
+    cwd: T.string.optional(),
   }
 
   override canEdit() {
@@ -257,7 +258,7 @@ export class TerminalShapeUtil extends BaseBoxShapeUtil<TerminalShape> {
         id={shape.id}
         style={{ pointerEvents: isInteractive ? "all" : "none" }}
       >
-        <TerminalComponent shape={shape} isInteractive={isInteractive} cwd={_cwd} />
+        <TerminalComponent shape={shape} isInteractive={isInteractive} cwd={shape.props.cwd || _cwd} />
       </HTMLContainer>
     )
   }

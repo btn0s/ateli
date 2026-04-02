@@ -1,3 +1,4 @@
+import type { Editor } from "tldraw"
 import {
   MousePointer2,
   Pencil,
@@ -10,19 +11,12 @@ import {
   Maximize,
   SquareDashedMousePointer,
   RotateCcw,
-  GitBranch,
 } from "lucide-react"
 import { registerAction } from "./tool-registry"
 
 const ANIM = { animation: { duration: 200 } }
 
-function addTerminalAtCenter(
-  editor: Parameters<typeof registerAction>[0]["execute"] extends (
-    e: infer E,
-  ) => void
-    ? E
-    : never,
-) {
+function addTerminalAtCenter(editor: Editor) {
   const center = editor.getViewportPageBounds().center
   editor.createShape({
     type: "terminal",
@@ -102,19 +96,6 @@ registerAction({
   showInCommandMenu: true,
   showInContextMenu: true,
   execute: addTerminalAtCenter,
-})
-
-registerAction({
-  id: "add-worktree-terminal",
-  label: "New Worktree Terminal",
-  icon: GitBranch,
-  group: "Create",
-  showInCommandMenu: true,
-  showInContextMenu: true,
-  execute: (editor) => {
-    // For now, just adds a terminal — worktree integration will prompt for branch
-    addTerminalAtCenter(editor)
-  },
 })
 
 // --- Zoom actions ---
