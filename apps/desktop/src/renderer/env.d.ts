@@ -6,10 +6,12 @@ interface Window {
       create: (
         shapeId: string,
         cwd: string,
-      ) => Promise<{ pid: number; sessionKey: string }>
+      ) => Promise<{ pid: number | null; sessionKey: string }>
+      reconnect: (sessionKey: string, cols: number, rows: number) => Promise<void>
       write: (sessionKey: string, data: string) => void
       resize: (sessionKey: string, cols: number, rows: number) => void
       dispose: (sessionKey: string) => void
+      detach: (sessionKey: string) => void
       onData: (sessionKey: string, callback: (data: string) => void) => () => void
       onExit: (sessionKey: string, callback: () => void) => () => void
     }

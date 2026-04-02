@@ -5,6 +5,7 @@ import {
   RecordProps,
   T,
   TLShape,
+  useEditor,
 } from "tldraw"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
@@ -14,7 +15,7 @@ const TERMINAL_SHAPE_TYPE = "terminal" as const
 
 declare module "tldraw" {
   interface TLGlobalShapePropsMap {
-    [TERMINAL_SHAPE_TYPE]: { w: number; h: number }
+    [TERMINAL_SHAPE_TYPE]: { w: number; h: number; sidecarSessionId?: string }
   }
 }
 
@@ -32,15 +33,18 @@ function TerminalComponent({
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const editor = useEditor()
 
   useEffect(() => {
     if (!containerRef.current) return
 
     const shapeId = shape.id
+    const existingSessionId = shape.props.sidecarSessionId
     const state = {
       disposed: false,
-      sessionKey: null as string | null,
+      sessionKey: existingSessionId ?? (null as string | null),
       removeData: null as null | (() => void),
+      removeExit: null as null | (() => void),
     }
 
     const term = new Terminal({
@@ -68,35 +72,76 @@ function TerminalComponent({
     termRef.current = term
     fitRef.current = fitAddon
 
-    term.onResize(({ cols, rows }) => {
-      const sk = state.sessionKey
-      if (!state.disposed && sk) {
-        window.electron.terminal.resize(sk, cols, rows)
+    function attachSession(sessionKey: string) {
+      state.sessionKey = sessionKey
+
+      state.removeData = window.electron.terminal.onData(sessionKey, (data) => {
+        term.write(data)
+      })
+
+      state.removeExit = window.electron.terminal.onExit(sessionKey, () => {
+        editor.updateShape<TerminalShape>({
+          id: shapeId,
+          type: TERMINAL_SHAPE_TYPE,
+          props: { sidecarSessionId: undefined },
+        })
+        term.write("\r\n[Session ended]\r\n")
+      })
+
+      term.onResize(({ cols, rows }) => {
+        if (!state.disposed && state.sessionKey) {
+          window.electron.terminal.resize(state.sessionKey, cols, rows)
+        }
+      })
+
+      term.onData((data) => {
+        if (!state.disposed && state.sessionKey) {
+          window.electron.terminal.write(state.sessionKey, data)
+        }
+      })
+
+      fitAddon.fit()
+      const dim = term.dimensions
+      if (dim) {
+        window.electron.terminal.resize(sessionKey, dim.cols, dim.rows)
       }
-    })
+    }
 
     ;(async () => {
       try {
+        if (existingSessionId) {
+          try {
+            const dim = term.dimensions
+            await window.electron.terminal.reconnect(
+              existingSessionId,
+              dim?.cols ?? 80,
+              dim?.rows ?? 24,
+            )
+            if (state.disposed) return
+            attachSession(existingSessionId)
+            return
+          } catch {
+            editor.updateShape<TerminalShape>({
+              id: shapeId,
+              type: TERMINAL_SHAPE_TYPE,
+              props: { sidecarSessionId: undefined },
+            })
+          }
+        }
+
         const { sessionKey } = await window.electron.terminal.create(shapeId, cwd)
         if (state.disposed) {
           window.electron.terminal.dispose(sessionKey)
           return
         }
-        state.sessionKey = sessionKey
-        state.removeData = window.electron.terminal.onData(sessionKey, (data) => {
-          term.write(data)
+
+        editor.updateShape<TerminalShape>({
+          id: shapeId,
+          type: TERMINAL_SHAPE_TYPE,
+          props: { sidecarSessionId: sessionKey },
         })
 
-        fitAddon.fit()
-        const dim = term.dimensions
-        if (dim) {
-          window.electron.terminal.resize(sessionKey, dim.cols, dim.rows)
-        }
-        term.onData((data) => {
-          if (!state.disposed) {
-            window.electron.terminal.write(sessionKey, data)
-          }
-        })
+        attachSession(sessionKey)
       } catch (err: unknown) {
         term.write(`\r\nFailed to create terminal: ${err}\r\n`)
       }
@@ -111,8 +156,9 @@ function TerminalComponent({
       state.disposed = true
       observer.disconnect()
       state.removeData?.()
+      state.removeExit?.()
       if (state.sessionKey) {
-        window.electron.terminal.dispose(state.sessionKey)
+        window.electron.terminal.detach(state.sessionKey)
       }
       term.dispose()
     }
@@ -130,9 +176,6 @@ function TerminalComponent({
     }
   }, [isInteractive, shape.id])
 
-  // tldraw registers key handlers on the editor container in the bubble phase.
-  // Stop bubbling here only after xterm's textarea has handled the event (do
-  // not use capture phase stop—it blocks keys from reaching the textarea).
   useEffect(() => {
     if (!isInteractive) return
     const el = containerRef.current
@@ -176,7 +219,6 @@ function TerminalComponent({
   )
 }
 
-// Store cwd at module level so the shape util can access it
 let _cwd = ""
 
 export function setTerminalCwd(cwd: string) {
@@ -188,6 +230,7 @@ export class TerminalShapeUtil extends BaseBoxShapeUtil<TerminalShape> {
   static override props: RecordProps<TerminalShape> = {
     w: T.number,
     h: T.number,
+    sidecarSessionId: T.string.optional(),
   }
 
   override canEdit() {

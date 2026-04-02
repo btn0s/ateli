@@ -1,12 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
-import crypto from "node:crypto"
 import path from "node:path"
+import { PtyManager } from "./pty"
 import { startRpcServer, stopRpcServer } from "./rpc"
-import { ptys, createTmuxSession, killTmuxSession, tmuxSessionName } from "./pty-store"
 
-// node-pty is a native module — require it at runtime to avoid bundler issues
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pty = require("node-pty") as typeof import("node-pty")
+const ptyManager = new PtyManager()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -37,6 +34,8 @@ function createWindow() {
   }
 }
 
+// --- IPC Handlers ---
+
 ipcMain.handle("select-folder", async () => {
   const result = await dialog.showOpenDialog({
     properties: ["openDirectory", "createDirectory"],
@@ -48,61 +47,63 @@ ipcMain.handle("select-folder", async () => {
 
 ipcMain.handle(
   "terminal:create",
-  (event, { cwd }: { shapeId: string; cwd: string }) => {
-    const sender = event.sender
-    const sessionKey = crypto.randomUUID().slice(0, 8)
-
-    // Create a tmux session, then attach node-pty to it
-    createTmuxSession(sessionKey, cwd)
-    const tmuxName = tmuxSessionName(sessionKey)
-    const ptyProcess = pty.spawn("tmux", ["attach-session", "-t", tmuxName], {
-      name: "xterm-256color",
-      cols: 80,
-      rows: 24,
-      env: process.env as Record<string, string>,
-    })
-
-    ptys.set(sessionKey, ptyProcess)
-
-    ptyProcess.onData((data) => {
-      sender.send(`terminal:data:${sessionKey}`, data)
-    })
-
-    ptyProcess.onExit(() => {
-      ptys.delete(sessionKey)
-      sender.send(`terminal:exit:${sessionKey}`)
-    })
-
-    return { pid: ptyProcess.pid, sessionKey }
+  async (_event, { cwd }: { shapeId: string; cwd: string }) => {
+    const result = await ptyManager.createSession({ cwd })
+    return { pid: null, sessionKey: result.sessionKey }
   },
 )
+
+ipcMain.handle(
+  "terminal:reconnect",
+  async (_event, { sessionKey, cols, rows }: { sessionKey: string; cols: number; rows: number }) => {
+    const sessions = ptyManager.listSessions()
+    const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
+    if (!meta) throw new Error(`Unknown session: ${sessionKey}`)
+    await ptyManager.reconnectSession(meta.id, cols, rows)
+  },
+)
+
+function findSessionByKey(sessionKey: string) {
+  const sessions = ptyManager.listSessions()
+  return sessions.find((s) => s.sidecarSessionId === sessionKey)
+}
 
 ipcMain.on(
   "terminal:input",
   (_event, { sessionKey, data }: { sessionKey: string; data: string }) => {
-    ptys.get(sessionKey)?.write(data)
+    const meta = findSessionByKey(sessionKey)
+    if (!meta) { console.warn(`terminal:input — unknown session: ${sessionKey}`); return }
+    void ptyManager.writeSession(meta.id, data)
   },
 )
 
 ipcMain.on(
   "terminal:resize",
-  (
-    _event,
-    { sessionKey, cols, rows }: { sessionKey: string; cols: number; rows: number },
-  ) => {
-    ptys.get(sessionKey)?.resize(cols, rows)
+  (_event, { sessionKey, cols, rows }: { sessionKey: string; cols: number; rows: number }) => {
+    const meta = findSessionByKey(sessionKey)
+    if (!meta) { console.warn(`terminal:resize — unknown session: ${sessionKey}`); return }
+    void ptyManager.resizeSession(meta.id, cols, rows)
   },
 )
 
 ipcMain.on("terminal:dispose", (_event, { sessionKey }: { sessionKey: string }) => {
-  ptys.get(sessionKey)?.kill()
-  ptys.delete(sessionKey)
-  killTmuxSession(sessionKey)
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) { console.warn(`terminal:dispose — unknown session: ${sessionKey}`); return }
+  void ptyManager.killSession(meta.id)
 })
 
-app.whenReady().then(() => {
+ipcMain.on("terminal:detach", (_event, { sessionKey }: { sessionKey: string }) => {
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) return
+  ptyManager.detachSession(meta.id)
+})
+
+// --- App Lifecycle ---
+
+app.whenReady().then(async () => {
   createWindow()
-  startRpcServer()
+  await ptyManager.init()
+  startRpcServer(ptyManager)
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -119,4 +120,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   stopRpcServer()
+  void ptyManager.shutdown()
 })
