@@ -1,18 +1,21 @@
 import { useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import {
+  DefaultContextMenu,
+  DefaultContextMenuContent,
   Tldraw,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
   track,
   useEditor,
   useValue,
 } from "tldraw"
-import type { TLComponents, TLShapeId } from "tldraw"
+import type { TLComponents, TLShapeId, TLUiContextMenuProps } from "tldraw"
 import "tldraw/tldraw.css"
 import { Toggle } from "@workspace/ui/components/toggle"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
-import { getToolbarActions } from "@/lib/tool-registry"
-import "@/lib/default-actions" // Side-effect import: registers all default actions
+import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
+import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
-// TODO: extend tldraw's built-in context menu instead of a custom one
 
 const customShapeUtils = [TerminalShapeUtil]
 
@@ -27,7 +30,35 @@ const BASE_DOT_COLOR = [255, 255, 255] as const
 const SMOOTHING = 0.07
 const FADE_SPEED = 0.03
 
+function CustomContextMenu(props: TLUiContextMenuProps) {
+  const editor = useEditor()
+  const actions = getContextMenuActions()
+
+  return (
+    <DefaultContextMenu {...props}>
+      {actions.length > 0 && (
+        <TldrawUiMenuGroup id="ateli-actions">
+          {actions.map((action) => (
+            <TldrawUiMenuItem
+              key={action.id}
+              id={action.id}
+              label={action.label as any}
+              icon={undefined}
+              readonlyOk
+              onSelect={() => action.execute(editor)}
+            />
+          ))}
+        </TldrawUiMenuGroup>
+      )}
+      <DefaultContextMenuContent />
+    </DefaultContextMenu>
+  )
+}
+
 const components: TLComponents = {
+  // Our custom context menu: our items at top + tldraw defaults below
+  ContextMenu: CustomContextMenu,
+  // Keep our custom grid + command menu
   Grid: ({ size, ...camera }) => {
     const editor = useEditor()
     const screenBounds = useValue(
@@ -74,7 +105,6 @@ const components: TLComponents = {
       const tm = mouseRef.current
       const hasPointer = tm !== null
 
-      // Snap smooth position on first contact, then lerp
       if (hasPointer) {
         if (!smoothMouseRef.current) {
           smoothMouseRef.current = { x: tm.x, y: tm.y }
@@ -111,10 +141,8 @@ const components: TLComponents = {
       const [br, bg, bb] = BASE_DOT_COLOR
       const baseFill = `rgba(${br},${bg},${bb},${DOT_BASE_ALPHA})`
 
-      // Collect glow dots to draw in a second pass
       const glowDots: { x: number; y: number; r: number; alpha: number; glow: number }[] = []
 
-      // Pass 1: batch all non-glow dots into a single path
       ctx.fillStyle = baseFill
       ctx.shadowColor = "transparent"
       ctx.shadowBlur = 0
@@ -134,7 +162,6 @@ const components: TLComponents = {
           const glow = t * t * t * fade
 
           if (glow > 0.01) {
-            // Compute repelled position
             const dist = Math.sqrt(dist2) || 1
             const push = DOT_REPEL * glow * dpr
             glowDots.push({
@@ -153,7 +180,6 @@ const components: TLComponents = {
 
       ctx.fill()
 
-      // Pass 2: draw glow dots individually (small set, needs per-dot shadow)
       for (const dot of glowDots) {
         ctx.fillStyle = `rgba(${gr},${gg},${gb},${dot.alpha})`
         ctx.shadowColor = `rgba(${gr},${gg},${gb},${dot.glow * 0.07})`
@@ -166,7 +192,6 @@ const components: TLComponents = {
       ctx.shadowColor = "transparent"
       ctx.shadowBlur = 0
 
-      // Keep animating for smooth interpolation + fade-in/out
       const delta = sm && tm ? Math.abs(sm.x - tm.x) + Math.abs(sm.y - tm.y) : 0
       const fading = fadeRef.current > 0 && fadeRef.current < 1
       if ((delta > 0.5 || fading) && runningRef.current) {
@@ -217,36 +242,31 @@ const components: TLComponents = {
     return <canvas className="tl-grid" ref={canvasRef} />
   },
   InFrontOfTheCanvas: CommandMenu,
+  // Hide tldraw UI panels we replace with our own
+  Toolbar: null,
+  MainMenu: null,
+  PageMenu: null,
+  NavigationPanel: null,
+  StylePanel: null,
+  ActionsMenu: null,
+  HelpMenu: null,
+  ZoomMenu: null,
+  Minimap: null,
+  DebugPanel: null,
+  MenuPanel: null,
+  TopPanel: null,
+  SharePanel: null,
 }
 
 const CustomUi = track(() => {
   const editor = useEditor()
-  const currentTool = editor.getCurrentToolId()
   const actions = getToolbarActions()
-
-  // Split into tool toggles and regular actions
-  const toolToggles = actions.filter((a) => a.isToolToggle)
-  const otherActions = actions.filter((a) => !a.isToolToggle)
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
       <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
         <div className="pointer-events-auto flex items-center gap-0.5 border border-border bg-background/80 p-1 backdrop-blur-sm">
-          {toolToggles.map((action) => (
-            <Toggle
-              key={action.id}
-              size="sm"
-              pressed={currentTool === action.id.replace("tool-", "")}
-              onPressedChange={() => action.execute(editor)}
-              aria-label={action.label}
-            >
-              <action.icon className="size-4" />
-            </Toggle>
-          ))}
-          {otherActions.length > 0 && (
-            <div className="bg-border mx-0.5 h-4 w-px" />
-          )}
-          {otherActions.map((action) => (
+          {actions.map((action) => (
             <Toggle
               key={action.id}
               size="sm"
@@ -320,7 +340,6 @@ export function Canvas({ folderPath }: { folderPath: string }) {
   return (
     <div className="h-screen w-screen">
       <Tldraw
-        hideUi
         persistenceKey={`ateli:canvas:${folderPath}`}
         components={components}
         shapeUtils={customShapeUtils}

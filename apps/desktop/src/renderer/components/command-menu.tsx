@@ -7,10 +7,8 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
-  CommandShortcut,
-  CommandSeparator,
 } from "@workspace/ui/components/command"
-import { getCommandMenuActions, groupActions } from "@/lib/tool-registry"
+import { getCommandMenuActions } from "@/lib/tool-registry"
 
 export function CommandMenu() {
   const editor = useEditor()
@@ -41,8 +39,6 @@ export function CommandMenu() {
   if (!open) return null
 
   const actions = getCommandMenuActions()
-  const groups = groupActions(actions)
-  const groupNames = [...groups.keys()]
 
   return (
     <div className="pointer-events-auto absolute inset-0 z-[400] flex items-start justify-center pt-[20vh]">
@@ -54,29 +50,20 @@ export function CommandMenu() {
         className="relative h-fit w-full max-w-md border border-border bg-background shadow-2xl"
         loop
       >
-        <CommandInput autoFocus placeholder="Search tools and actions..." />
+        <CommandInput autoFocus placeholder="Search actions..." />
         <CommandList className="max-h-72">
           <CommandEmpty>No results found.</CommandEmpty>
-
-          {groupNames.map((groupName, i) => (
-            <div key={groupName}>
-              {i > 0 && <CommandSeparator />}
-              <CommandGroup heading={groupName}>
-                {groups.get(groupName)!.map((action) => (
-                  <CommandItem
-                    key={action.id}
-                    onSelect={() => run(() => action.execute(editor))}
-                  >
-                    <action.icon className="size-4" />
-                    {action.label}
-                    {action.shortcut && (
-                      <CommandShortcut>{action.shortcut}</CommandShortcut>
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </div>
-          ))}
+          <CommandGroup heading="Actions">
+            {actions.map((action) => (
+              <CommandItem
+                key={action.id}
+                onSelect={() => run(() => action.execute(editor))}
+              >
+                <action.icon className="size-4" />
+                {action.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
         </CommandList>
       </Command>
     </div>
