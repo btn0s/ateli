@@ -29,3 +29,8 @@
   --tl-radius-4: calc(var(--radius) * 1.2);
   --tl-font-family: var(--font-sans);
 }
+
+/* Remove trailing border on last context menu group */
+.tlui-menu__group:last-child {
+  border-bottom: none;
+}
