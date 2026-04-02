@@ -421,8 +421,13 @@ export class SidecarServer {
       case "sidecar.ping":
         return this.handlePing(sock, id)
       case "sidecar.shutdown":
-        sock.write(makeResponse(id, { ok: true }))
-        void this.shutdown().then(() => process.exit(0))
+        // Only shut down if idle (no active sessions)
+        if (this.sessions.size > 0) {
+          sock.write(makeResponse(id, { ok: false, reason: "sessions active" }))
+        } else {
+          sock.write(makeResponse(id, { ok: true }))
+          void this.shutdown().then(() => process.exit(0))
+        }
         return
       case "session.create":
         return this.handleCreate(sock, id, params as unknown as SessionCreateParams)
@@ -1174,6 +1179,7 @@ import os from "node:os"
 import { BrowserWindow } from "electron"
 import { SidecarClient } from "./sidecar/client"
 import type { SessionCreateResult } from "./sidecar/protocol"
+import { broadcast } from "./rpc"
 
 const ATELI_DIR = path.join(os.homedir(), ".ateli")
 const SESSIONS_PATH = path.join(ATELI_DIR, "sessions.json")
@@ -1382,6 +1388,9 @@ export class PtyManager {
     if (win) {
       win.webContents.send(`terminal:exit:${sidecarSessionId}`, exitCode)
     }
+
+    // Broadcast to external RPC clients
+    broadcast("terminal.exit", { id: found.id, sessionKey: sidecarSessionId, exitCode })
   }
 
   private async discoverSessions(): Promise<void> {
@@ -1696,7 +1705,12 @@ export function startRpcServer(ptyManager: PtyManager) {
           }
 
           try {
-            const result = await handler(body.params ?? {})
+            const result = await Promise.race([
+              handler(body.params ?? {}),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Request timeout")), 10_000),
+              ),
+            ])
             conn.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n")
           } catch (err) {
             conn.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32000, message: String(err) } }) + "\n")
@@ -1831,43 +1845,39 @@ ipcMain.handle(
   },
 )
 
+function findSessionByKey(sessionKey: string) {
+  const sessions = ptyManager.listSessions()
+  return sessions.find((s) => s.sidecarSessionId === sessionKey)
+}
+
 ipcMain.on(
   "terminal:input",
   (_event, { sessionKey, data }: { sessionKey: string; data: string }) => {
-    // Find session by sidecar session ID
-    const sessions = ptyManager.listSessions()
-    const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
-    if (meta) {
-      void ptyManager.writeSession(meta.id, data)
-    }
+    const meta = findSessionByKey(sessionKey)
+    if (!meta) { console.warn(`terminal:input — unknown session: ${sessionKey}`); return }
+    void ptyManager.writeSession(meta.id, data)
   },
 )
 
 ipcMain.on(
   "terminal:resize",
   (_event, { sessionKey, cols, rows }: { sessionKey: string; cols: number; rows: number }) => {
-    const sessions = ptyManager.listSessions()
-    const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
-    if (meta) {
-      void ptyManager.resizeSession(meta.id, cols, rows)
-    }
+    const meta = findSessionByKey(sessionKey)
+    if (!meta) { console.warn(`terminal:resize — unknown session: ${sessionKey}`); return }
+    void ptyManager.resizeSession(meta.id, cols, rows)
   },
 )
 
 ipcMain.on("terminal:dispose", (_event, { sessionKey }: { sessionKey: string }) => {
-  const sessions = ptyManager.listSessions()
-  const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
-  if (meta) {
-    void ptyManager.killSession(meta.id)
-  }
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) { console.warn(`terminal:dispose — unknown session: ${sessionKey}`); return }
+  void ptyManager.killSession(meta.id)
 })
 
 ipcMain.on("terminal:detach", (_event, { sessionKey }: { sessionKey: string }) => {
-  const sessions = ptyManager.listSessions()
-  const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
-  if (meta) {
-    ptyManager.detachSession(meta.id)
-  }
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) return // Silent — detach on already-dead session is fine
+  ptyManager.detachSession(meta.id)
 })
 
 // --- App Lifecycle ---
