@@ -2,16 +2,16 @@ import { useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import {
   DefaultContextMenu,
   DefaultContextMenuContent,
-  DefaultToolbar,
-  DefaultToolbarContent,
   Tldraw,
+  TldrawUiIcon,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   track,
   useEditor,
+  useTools,
   useValue,
 } from "tldraw"
-import type { TLComponents, TLShapeId, TLUiContextMenuProps } from "tldraw"
+import type { TLComponents, TLShapeId, TLUiContextMenuProps, TLUiIconType } from "tldraw"
 import "tldraw/tldraw.css"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
@@ -31,6 +31,57 @@ const GLOW_COLOR = [210, 210, 220] as const
 const BASE_DOT_COLOR = [255, 255, 255] as const
 const SMOOTHING = 0.07
 const FADE_SPEED = 0.03
+
+// tldraw tools to show in our toolbar, in order
+const TOOLBAR_TOOL_IDS = [
+  "select", "hand", "draw", "eraser", "arrow", "text", "frame", "note",
+]
+
+const CustomToolbar = track(() => {
+  const editor = useEditor()
+  const tools = useTools()
+  const currentToolId = editor.getCurrentToolId()
+  const customActions = getToolbarActions()
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
+      <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border bg-background/80 p-1 backdrop-blur-sm">
+          {TOOLBAR_TOOL_IDS.map((id) => {
+            const tool = tools[id]
+            if (!tool) return null
+            const isActive = currentToolId === id
+            return (
+              <button
+                key={id}
+                className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                }`}
+                onClick={() => tool.onSelect("toolbar")}
+                title={`${id}${tool.kbd ? ` (${tool.kbd.split(",")[0]})` : ""}`}
+              >
+                <TldrawUiIcon icon={tool.icon as TLUiIconType} small />
+              </button>
+            )
+          })}
+          <div className="bg-border mx-1 h-4 w-px" />
+          {customActions.map((action) => (
+            <button
+              key={action.id}
+              className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-accent-foreground"
+              onClick={() => action.execute(editor)}
+              title={action.label}
+            >
+              <action.icon className="size-4" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+})
 
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
@@ -244,26 +295,7 @@ const components: TLComponents = {
     return <canvas className="tl-grid" ref={canvasRef} />
   },
   InFrontOfTheCanvas: CommandMenu,
-  // Extend tldraw's toolbar with our custom actions
-  Toolbar: () => {
-    const editor = useEditor()
-    const actions = getToolbarActions()
-    return (
-      <DefaultToolbar>
-        <DefaultToolbarContent />
-        {actions.map((action) => (
-          <TldrawUiMenuItem
-            key={action.id}
-            id={action.id}
-            label={action.label as any}
-            icon={action.tldrawIcon as any}
-            readonlyOk
-            onSelect={() => action.execute(editor)}
-          />
-        ))}
-      </DefaultToolbar>
-    )
-  },
+  Toolbar: CustomToolbar,
   MainMenu: null,
   PageMenu: null,
   NavigationPanel: null,
@@ -277,6 +309,7 @@ const components: TLComponents = {
   TopPanel: null,
   SharePanel: null,
 }
+
 
 
 function RpcBridge() {
