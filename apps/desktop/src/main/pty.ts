@@ -246,7 +246,8 @@ export class PtyManager {
   private loadSessions(): TerminalMetadata[] {
     try {
       const raw = fs.readFileSync(SESSIONS_PATH, "utf-8")
-      return JSON.parse(raw) as TerminalMetadata[]
+      const parsed: unknown = JSON.parse(raw)
+      return Array.isArray(parsed) ? (parsed as TerminalMetadata[]) : []
     } catch {
       return []
     }
