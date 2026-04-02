@@ -6,6 +6,17 @@ import path from "node:path"
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: path.resolve(__dirname, "src/main/index.ts"),
+          "sidecar-entry": path.resolve(
+            __dirname,
+            "src/main/sidecar/entry.ts",
+          ),
+        },
+      },
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
