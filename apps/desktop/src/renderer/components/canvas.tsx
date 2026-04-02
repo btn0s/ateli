@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import {
   DefaultContextMenu,
-  DefaultContextMenuContent,
   Tldraw,
   TldrawUiIcon,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   track,
+  useActions,
   useEditor,
   useTools,
   useValue,
@@ -83,15 +83,23 @@ const CustomToolbar = track(() => {
   )
 })
 
+// tldraw actions to show in context menu, grouped
+const CONTEXT_MENU_GROUPS = [
+  { id: "clipboard", actions: ["cut", "copy", "paste", "duplicate", "delete"] },
+  { id: "order", actions: ["bring-to-front", "bring-forward", "send-backward", "send-to-back"] },
+  { id: "organize", actions: ["group", "ungroup", "select-all"] },
+]
+
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
-  const actions = getContextMenuActions()
+  const tldrawActions = useActions()
+  const customActions = getContextMenuActions()
 
   return (
     <DefaultContextMenu {...props}>
-      {actions.length > 0 && (
+      {customActions.length > 0 && (
         <TldrawUiMenuGroup id="ateli-actions">
-          {actions.map((action) => (
+          {customActions.map((action) => (
             <TldrawUiMenuItem
               key={action.id}
               id={action.id}
@@ -103,7 +111,25 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
           ))}
         </TldrawUiMenuGroup>
       )}
-      <DefaultContextMenuContent />
+      {CONTEXT_MENU_GROUPS.map((group) => (
+        <TldrawUiMenuGroup key={group.id} id={group.id}>
+          {group.actions.map((actionId) => {
+            const action = tldrawActions[actionId]
+            if (!action) return null
+            return (
+              <TldrawUiMenuItem
+                key={actionId}
+                id={actionId}
+                label={action.label as any}
+                icon={action.icon as any}
+                kbd={action.kbd}
+                readonlyOk={action.readonlyOk}
+                onSelect={() => action.onSelect("context-menu")}
+              />
+            )
+          })}
+        </TldrawUiMenuGroup>
+      ))}
     </DefaultContextMenu>
   )
 }
