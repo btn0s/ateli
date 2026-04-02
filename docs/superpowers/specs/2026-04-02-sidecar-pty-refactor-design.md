@@ -76,8 +76,10 @@ listens on control socket.
 - Creates per-session data sockets under `~/.ateli/pty-sessions/`
 - Manages `node-pty` instances (spawn, write, resize, kill)
 - Each session has a `RingBuffer` (8MB) capturing all PTY output
-- Streams PTY output to all connected data socket clients
-- On reconnect: flushes ring buffer snapshot + queued data to new client
+- **Single-client data socket** (last-attach-wins): new connection evicts the
+  previous client, matching Collaborator's proven model. No multi-client fanout.
+- On reconnect: enters reconnect mode, queues output, flushes ring buffer
+  snapshot + queued data to new client when it connects
 
 **Control channel methods:**
 
@@ -90,7 +92,9 @@ listens on control socket.
 | `session.list` | — | sessions[] |
 | `session.foreground` | sessionId | command |
 | `session.signal` | sessionId, signal | — |
+| `session.snapshot` | sessionId | Buffer (ring buffer contents) |
 | `sidecar.ping` | — | pid, uptime, version, token |
+| `sidecar.shutdown` | — | — (graceful exit if idle) |
 
 **Notifications (sidecar → main):**
 - `session.exited` — { sessionId, exitCode }
@@ -100,6 +104,7 @@ listens on control socket.
 - Main process validates sidecar via ping + token check on startup
 - Stale sidecar (wrong version/token, dead PID) gets respawned
 - 30-minute idle timeout: sidecar exits if no sessions and no clients
+- App quit calls `sidecar.shutdown` for graceful cleanup when idle
 
 **`protocol.ts`** — Shared constants and types:
 ```typescript
@@ -119,12 +124,15 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 **Location:** `src/main/sidecar/client.ts`
 
 **`SidecarClient` class** (used by main process):
-- `ensureSidecar()` — check PID file, ping, respawn if needed
+- `ensureSidecar()` — check PID file, ping, respawn if needed. **Coalesces
+  concurrent calls** (single in-flight promise) to prevent parallel spawn races.
 - `createSession(opts)` — RPC to sidecar, returns session info
 - `reconnectSession(sessionId, cols, rows)` — RPC to sidecar
 - `resizeSession(sessionId, cols, rows)` — RPC to sidecar
 - `killSession(sessionId)` — RPC to sidecar
+- `shutdownIfIdle()` — graceful sidecar shutdown on app quit
 - `listSessions()` — RPC to sidecar
+- `snapshotSession(sessionId)` — get ring buffer contents (backs `terminal.read`)
 - `onNotification(cb)` — listen for sidecar notifications (session.exited)
 - `connectDataSocket(socketPath)` — connect to per-session data socket
 
@@ -139,14 +147,17 @@ Bridges sidecar to the rest of the app. Single module that `index.ts` delegates 
   terminal metadata to `sessions.json`, pipe data to renderer via IPC
 - `reconnectSession(id, cols, rows)` — call sidecar reconnect, attach new data
   socket, pipe ring buffer replay + live data to renderer
-- `killSession(id)` — close data socket, call sidecar kill, remove from
-  `sessions.json`, broadcast `terminal.exit`
+- `killSession(id)` — close data socket, call sidecar kill. The sidecar sends
+  `session.exited` notification which triggers cleanup (remove from
+  `sessions.json`, broadcast `terminal.exit` to RPC clients and renderer).
+  Single exit path — all exits flow through the `session.exited` handler.
 - `resizeSession(id, cols, rows)` — forward to sidecar
 - `writeSession(id, data)` — write to session's data socket
 - `discoverSessions()` — on startup, compare `sessions.json` against sidecar's
-  live sessions. Mark surviving sessions as `alive`, remove dead ones.
+  live sessions. Keep entries with surviving sidecar sessions, remove the rest.
 - `cleanDetachedSessions()` — kill sidecar sessions not referenced by any
-  persisted terminal metadata (prevents leaks)
+  persisted terminal metadata (prevents leaks). Runs after `discoverSessions()`
+  to avoid racing with metadata writes.
 
 ### 4. State Persistence
 
@@ -161,10 +172,13 @@ interface TerminalMetadata {
   shell: string
   cwd: string
   pid: number | null
-  status: "alive" | "dead"
   createdAt: string
 }
 ```
+
+Entries are removed on exit — no `dead` state. If a session is in
+`sessions.json`, it is expected to be alive. Startup reconciliation removes
+entries whose sidecar sessions no longer exist.
 
 **Write strategy:**
 - Atomic writes (write to temp file, then rename)
@@ -261,6 +275,8 @@ Everything else stays the same.
 1. Mount → check `shape.props.sidecarSessionId`
 2. If present → `window.electron.terminal.reconnect(sessionId, cols, rows)`
    → sidecar flushes ring buffer → xterm renders scrollback
+   → **If reconnect fails** (session not found): clear `sidecarSessionId` from
+   shape props, fall through to step 3 (create new session)
 3. If absent → `window.electron.terminal.create(shapeId, cwd)`
    → get sessionId → `editor.updateShape()` to store `sidecarSessionId` in props
 4. Listen for `terminal:data:{sessionKey}` → pipe to xterm
@@ -309,6 +325,22 @@ buffer per session enables scrollback replay on reconnect. tmux is no longer use
 after app restart. External agents get scrollback via `terminal.read` backed
 by the ring buffer instead of `tmux capture-pane`.
 
-### ADR-003: JSON-RPC over Unix socket (path update)
+### ADR-003: JSON-RPC over Unix socket (updated)
 Socket path moves from `~/.collaborator/socket-path` to `~/.ateli/socket-path`.
-Protocol unchanged.
+Adds nonce-based auth (token required on connect) and 10-second request timeout.
+
+## Intentional Divergences from Collaborator
+
+These are deliberate choices, not oversights:
+
+1. **macOS-only for now.** No Windows named-pipe branching. We'll add cross-platform
+   socket paths when we need them.
+2. **Generic `rpc:notification` IPC relay** instead of dedicated per-event IPC
+   channels. Our surface is smaller — one relay channel keeps the preload bridge
+   simple. Can split later if perf demands it.
+3. **Token auth on the agent RPC socket.** Collaborator's socket is open.
+   We add a nonce because external agents (Claude Code, etc.) connecting to
+   `~/.ateli/ipc.sock` should authenticate.
+4. **`sessions.json` is single-writer** — all writes go through `pty.ts`. No
+   concurrent writer conflict because create/kill/exit/discovery are serialized
+   through the same module.

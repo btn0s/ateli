@@ -17,9 +17,10 @@ just references with rendered previews.
 **Status:** Accepted (supersedes tmux)
 
 Terminal sessions run in a detached Node.js sidecar process using node-pty.
-The sidecar survives app restarts. Each session has a control channel (JSON-RPC
-2.0 over Unix socket) and a per-session data socket (raw PTY I/O). An 8MB ring
-buffer per session enables scrollback replay on reconnect. tmux is no longer used.
+The sidecar survives app restarts. A shared control socket (JSON-RPC 2.0)
+handles session lifecycle, and each session gets its own data socket for raw
+PTY I/O. An 8MB ring buffer per session enables scrollback replay on reconnect.
+tmux is no longer used.
 
 **Consequences:** No external tmux dependency. Terminals reconnect seamlessly
 after app restart. External agents get scrollback via `terminal.read` backed
