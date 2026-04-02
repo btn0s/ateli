@@ -45,7 +45,7 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
               key={action.id}
               id={action.id}
               label={action.label as any}
-              icon={undefined}
+              icon={action.tldrawIcon as any}
               readonlyOk
               onSelect={() => action.execute(editor)}
             />
@@ -256,7 +256,7 @@ const components: TLComponents = {
             key={action.id}
             id={action.id}
             label={action.label as any}
-            icon={undefined}
+            icon={action.tldrawIcon as any}
             readonlyOk
             onSelect={() => action.execute(editor)}
           />

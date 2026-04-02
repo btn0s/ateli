@@ -5,6 +5,8 @@ export interface ToolAction {
   id: string
   label: string
   icon: LucideIcon
+  /** Icon name from tldraw's built-in icon set (for tldraw UI components) */
+  tldrawIcon?: string
   shortcut?: string
   showInToolbar?: boolean
   showInCommandMenu?: boolean
