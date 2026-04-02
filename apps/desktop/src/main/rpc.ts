@@ -6,6 +6,15 @@ import os from "node:os"
 import crypto from "node:crypto"
 import { BrowserWindow, ipcMain } from "electron"
 import type { PtyManager } from "./pty"
+import {
+  addWorktree,
+  listGitWorktrees,
+  removeWorktree,
+  worktreePath,
+  loadWorktreeMetadata,
+  saveWorktreeMetadata,
+  type WorktreeMetadata,
+} from "./worktree"
 
 const ATELI_DIR = path.join(os.homedir(), ".ateli")
 const SOCKET_PATH_FILE = path.join(ATELI_DIR, "socket-path")
@@ -178,6 +187,128 @@ export function startRpcServer(ptyManager: PtyManager) {
 
       win.webContents.send("rpc:get-context", { sessionKey, responseChannel: channel })
     })
+  })
+
+  // --- Worktree methods ---
+
+  methods.set("worktree.create", async (params) => {
+    const repoPath = params.repoPath as string
+    if (!repoPath) throw new Error("repoPath is required")
+    const branch = params.branch as string
+    if (!branch) throw new Error("branch is required")
+    const createBranch = params.createBranch as boolean ?? true
+    const startPoint = params.startPoint as string | undefined
+
+    const wtPath = worktreePath(repoPath, branch)
+    await addWorktree({
+      repoPath,
+      worktreePath: wtPath,
+      branch,
+      createBranch,
+      startPoint,
+    })
+
+    const id = crypto.randomUUID().slice(0, 8)
+    const metadata: WorktreeMetadata = {
+      id,
+      repoPath,
+      worktreePath: wtPath,
+      branch,
+      createdAt: new Date().toISOString(),
+    }
+
+    const all = loadWorktreeMetadata()
+    all.push(metadata)
+    saveWorktreeMetadata(all)
+
+    broadcast("worktree.created", { id, path: wtPath, branch })
+    return { id, path: wtPath, branch }
+  })
+
+  methods.set("worktree.list", async (params) => {
+    const repoPath = params.repoPath as string | undefined
+    const metadata = loadWorktreeMetadata()
+    if (repoPath) {
+      return { worktrees: metadata.filter((w) => w.repoPath === repoPath) }
+    }
+    return { worktrees: metadata }
+  })
+
+  methods.set("worktree.remove", async (params) => {
+    const id = params.id as string
+    if (!id) throw new Error("id is required")
+
+    const all = loadWorktreeMetadata()
+    const idx = all.findIndex((w) => w.id === id)
+    if (idx === -1) throw new Error(`Worktree not found: ${id}`)
+
+    const wt = all[idx]
+
+    // Kill terminals whose cwd is inside this worktree
+    const sessions = ptyManager.listSessions()
+    for (const session of sessions) {
+      if (session.cwd.startsWith(wt.worktreePath)) {
+        await ptyManager.killSession(session.id)
+      }
+    }
+
+    // Remove the git worktree
+    try {
+      await removeWorktree(wt.repoPath, wt.worktreePath)
+    } catch {
+      // May already be removed from disk
+    }
+
+    // Remove metadata
+    all.splice(idx, 1)
+    saveWorktreeMetadata(all)
+
+    broadcast("worktree.removed", { id, path: wt.worktreePath, branch: wt.branch })
+    return { ok: true }
+  })
+
+  methods.set("worktree.createSpace", async (params) => {
+    const repoPath = params.repoPath as string
+    if (!repoPath) throw new Error("repoPath is required")
+    const branch = params.branch as string
+    if (!branch) throw new Error("branch is required")
+    const createBranch = params.createBranch as boolean ?? true
+    const startPoint = params.startPoint as string | undefined
+
+    // Create worktree
+    const wtPath = worktreePath(repoPath, branch)
+    await addWorktree({
+      repoPath,
+      worktreePath: wtPath,
+      branch,
+      createBranch,
+      startPoint,
+    })
+
+    const id = crypto.randomUUID().slice(0, 8)
+    const metadata: WorktreeMetadata = {
+      id,
+      repoPath,
+      worktreePath: wtPath,
+      branch,
+      createdAt: new Date().toISOString(),
+    }
+
+    const all = loadWorktreeMetadata()
+    all.push(metadata)
+    saveWorktreeMetadata(all)
+
+    // Create terminal in worktree
+    const terminal = await ptyManager.createSession({
+      cwd: wtPath,
+      name: branch,
+    })
+
+    broadcast("worktree.created", { id, path: wtPath, branch })
+    return {
+      worktree: { id, path: wtPath, branch },
+      terminal: { id: terminal.id, sessionKey: terminal.sessionKey },
+    }
   })
 
   // --- Server ---
