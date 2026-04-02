@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import {
   DefaultContextMenu,
+  DefaultContextMenuContent,
   Tldraw,
   TldrawUiIcon,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
   track,
-  useActions,
   useEditor,
   useTools,
   useValue,
@@ -46,7 +46,7 @@ const CustomToolbar = track(() => {
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
       <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border bg-background/80 p-1 backdrop-blur-sm">
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
           {TOOLBAR_TOOL_IDS.map((id) => {
             const tool = tools[id]
             if (!tool) return null
@@ -54,10 +54,10 @@ const CustomToolbar = track(() => {
             return (
               <button
                 key={id}
-                className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
+                className={`flex size-8 items-center justify-center rounded-lg transition-colors ${
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 }`}
                 onClick={() => tool.onSelect("toolbar")}
                 title={`${id}${tool.kbd ? ` (${tool.kbd.split(",")[0]})` : ""}`}
@@ -66,11 +66,11 @@ const CustomToolbar = track(() => {
               </button>
             )
           })}
-          <div className="bg-border mx-1 h-4 w-px" />
+          <div className="bg-border mx-0.5 h-5 w-px" />
           {customActions.map((action) => (
             <button
               key={action.id}
-              className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-accent-foreground"
+              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               onClick={() => action.execute(editor)}
               title={action.label}
             >
@@ -83,16 +83,8 @@ const CustomToolbar = track(() => {
   )
 })
 
-// tldraw actions to show in context menu, grouped
-const CONTEXT_MENU_GROUPS = [
-  { id: "clipboard", actions: ["cut", "copy", "paste", "duplicate", "delete"] },
-  { id: "order", actions: ["bring-to-front", "bring-forward", "send-backward", "send-to-back"] },
-  { id: "organize", actions: ["group", "ungroup", "select-all"] },
-]
-
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
-  const tldrawActions = useActions()
   const customActions = getContextMenuActions()
 
   return (
@@ -111,25 +103,7 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
           ))}
         </TldrawUiMenuGroup>
       )}
-      {CONTEXT_MENU_GROUPS.map((group) => (
-        <TldrawUiMenuGroup key={group.id} id={group.id}>
-          {group.actions.map((actionId) => {
-            const action = tldrawActions[actionId]
-            if (!action) return null
-            return (
-              <TldrawUiMenuItem
-                key={actionId}
-                id={actionId}
-                label={action.label as any}
-                icon={action.icon as any}
-                kbd={action.kbd}
-                readonlyOk={action.readonlyOk}
-                onSelect={() => action.onSelect("context-menu")}
-              />
-            )
-          })}
-        </TldrawUiMenuGroup>
-      ))}
+      <DefaultContextMenuContent />
     </DefaultContextMenu>
   )
 }
