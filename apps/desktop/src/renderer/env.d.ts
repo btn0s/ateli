@@ -19,6 +19,7 @@ interface Window {
       onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) => () => void
       onGetShapes: (callback: (data: { responseChannel: string }) => void) => () => void
       respondShapes: (channel: string, shapes: unknown) => void
+      onNotification: (callback: (data: { method: string; params: Record<string, unknown> }) => void) => () => void
     }
   }
 }

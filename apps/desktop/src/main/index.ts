@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
 import path from "node:path"
 import { PtyManager } from "./pty"
-import { startRpcServer, stopRpcServer } from "./rpc"
+import { startRpcServer, stopRpcServer, onBroadcast } from "./rpc"
 
 const ptyManager = new PtyManager()
 
@@ -104,6 +104,14 @@ app.whenReady().then(async () => {
   createWindow()
   await ptyManager.init()
   startRpcServer(ptyManager)
+
+  // Relay RPC broadcasts to renderer
+  onBroadcast((method, params) => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.send("rpc:notification", { method, params })
+    }
+  })
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

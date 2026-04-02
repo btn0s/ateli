@@ -41,5 +41,7 @@ contextBridge.exposeInMainWorld("electron", {
       }
       ipcRenderer.send(channel, shapes)
     },
+    onNotification: (callback: (data: { method: string; params: Record<string, unknown> }) => void) =>
+      onIpc("rpc:notification", callback),
   },
 })

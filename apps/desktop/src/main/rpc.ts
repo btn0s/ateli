@@ -32,12 +32,22 @@ function getMainWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows()[0] ?? null
 }
 
+type BroadcastListener = (method: string, params: Record<string, unknown>) => void
+const broadcastListeners: BroadcastListener[] = []
+
+export function onBroadcast(listener: BroadcastListener): void {
+  broadcastListeners.push(listener)
+}
+
 export function broadcast(method: string, params: Record<string, unknown>): void {
   const msg = JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n"
   for (const client of authenticatedClients) {
     if (!client.destroyed) {
       client.write(msg)
     }
+  }
+  for (const listener of broadcastListeners) {
+    listener(method, params)
   }
 }
 
@@ -265,50 +275,6 @@ export function startRpcServer(ptyManager: PtyManager) {
 
     broadcast("worktree.removed", { id, path: wt.worktreePath, branch: wt.branch })
     return { ok: true }
-  })
-
-  methods.set("worktree.createSpace", async (params) => {
-    const repoPath = params.repoPath as string
-    if (!repoPath) throw new Error("repoPath is required")
-    const branch = params.branch as string
-    if (!branch) throw new Error("branch is required")
-    const createBranch = params.createBranch as boolean ?? true
-    const startPoint = params.startPoint as string | undefined
-
-    // Create worktree
-    const wtPath = worktreePath(repoPath, branch)
-    await addWorktree({
-      repoPath,
-      worktreePath: wtPath,
-      branch,
-      createBranch,
-      startPoint,
-    })
-
-    const id = crypto.randomUUID().slice(0, 8)
-    const metadata: WorktreeMetadata = {
-      id,
-      repoPath,
-      worktreePath: wtPath,
-      branch,
-      createdAt: new Date().toISOString(),
-    }
-
-    const all = loadWorktreeMetadata()
-    all.push(metadata)
-    saveWorktreeMetadata(all)
-
-    // Create terminal in worktree
-    const terminal = await ptyManager.createSession({
-      cwd: wtPath,
-      name: branch,
-    })
-
-    broadcast("worktree.created", { id, path: wtPath, branch })
-    return {
-      worktree: { id, path: wtPath, branch },
-      terminal: { id: terminal.id, sessionKey: terminal.sessionKey },
-    }
   })
 
   // --- Server ---
