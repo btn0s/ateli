@@ -12,20 +12,27 @@ is a frame. Agents compose these into workflows.
 that have Linear MCP tools can read/write tickets. Cards on the canvas are
 just references with rendered previews.
 
-## ADR-002: tmux-backed terminals
-**Date:** 2026-03-19
-**Status:** Accepted
+## ADR-002: Sidecar-backed terminals
+**Date:** 2026-03-19 (updated 2026-04-02)
+**Status:** Accepted (supersedes tmux)
 
-Terminal sessions run inside tmux. node-pty attaches to tmux for xterm.js
-rendering. Benefits: sessions persist across app restarts, `tmux capture-pane`
-for reliable output reading, standard tooling.
+Terminal sessions run in a detached Node.js sidecar process using node-pty.
+The sidecar survives app restarts. Each session has a control channel (JSON-RPC
+2.0 over Unix socket) and a per-session data socket (raw PTY I/O). An 8MB ring
+buffer per session enables scrollback replay on reconnect. tmux is no longer used.
+
+**Consequences:** No external tmux dependency. Terminals reconnect seamlessly
+after app restart. External agents get scrollback via `terminal.read` backed
+by the ring buffer instead of `tmux capture-pane`.
+
+See: `docs/superpowers/specs/2026-04-02-sidecar-pty-refactor-design.md`
 
 ## ADR-003: JSON-RPC over Unix socket for agent interface
 **Date:** 2026-03-19
 **Status:** Accepted
 
 Agents interact with the canvas via a JSON-RPC 2.0 server on a Unix domain
-socket. Path written to `~/.collaborator/socket-path`. Newline-delimited JSON.
+socket. Path written to `~/.ateli/socket-path`. Newline-delimited JSON.
 Simple, language-agnostic, works from bash.
 
 ## ADR-004: Spatial proximity = context
