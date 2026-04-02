@@ -7,17 +7,12 @@ import {
 } from "tldraw"
 import type { TLComponents, TLShapeId } from "tldraw"
 import "tldraw/tldraw.css"
-import {
-  MousePointer2,
-  Pencil,
-  Eraser,
-  MoveRight,
-  Type,
-  TerminalSquare,
-} from "lucide-react"
 import { Toggle } from "@workspace/ui/components/toggle"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
+import { getToolbarActions } from "@/lib/tool-registry"
+import "@/lib/default-actions" // Side-effect import: registers all default actions
 import { CommandMenu } from "./command-menu"
+import { CanvasContextMenu } from "./context-menu"
 
 const customShapeUtils = [TerminalShapeUtil]
 
@@ -224,51 +219,44 @@ const components: TLComponents = {
   InFrontOfTheCanvas: CommandMenu,
 }
 
-const tools = [
-  { id: "select", label: "Select", icon: MousePointer2 },
-  { id: "draw", label: "Draw", icon: Pencil },
-  { id: "eraser", label: "Eraser", icon: Eraser },
-  { id: "arrow", label: "Arrow", icon: MoveRight },
-  { id: "text", label: "Text", icon: Type },
-] as const
-
 const CustomUi = track(() => {
   const editor = useEditor()
   const currentTool = editor.getCurrentToolId()
+  const actions = getToolbarActions()
 
-  function addTerminal() {
-    const center = editor.getViewportPageBounds().center
-    editor.createShape({
-      type: "terminal",
-      x: center.x - 300,
-      y: center.y - 200,
-    })
-  }
+  // Split into tool toggles and regular actions
+  const toolToggles = actions.filter((a) => a.isToolToggle)
+  const otherActions = actions.filter((a) => !a.isToolToggle)
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
       <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
         <div className="pointer-events-auto flex items-center gap-0.5 border border-border bg-background/80 p-1 backdrop-blur-sm">
-          {tools.map((tool) => (
+          {toolToggles.map((action) => (
             <Toggle
-              key={tool.id}
+              key={action.id}
               size="sm"
-              pressed={currentTool === tool.id}
-              onPressedChange={() => editor.setCurrentTool(tool.id)}
-              aria-label={tool.label}
+              pressed={currentTool === action.id.replace("tool-", "")}
+              onPressedChange={() => action.execute(editor)}
+              aria-label={action.label}
             >
-              <tool.icon className="size-4" />
+              <action.icon className="size-4" />
             </Toggle>
           ))}
-          <div className="bg-border mx-0.5 h-4 w-px" />
-          <Toggle
-            size="sm"
-            pressed={false}
-            onPressedChange={addTerminal}
-            aria-label="Add Terminal"
-          >
-            <TerminalSquare className="size-4" />
-          </Toggle>
+          {otherActions.length > 0 && (
+            <div className="bg-border mx-0.5 h-4 w-px" />
+          )}
+          {otherActions.map((action) => (
+            <Toggle
+              key={action.id}
+              size="sm"
+              pressed={false}
+              onPressedChange={() => action.execute(editor)}
+              aria-label={action.label}
+            >
+              <action.icon className="size-4" />
+            </Toggle>
+          ))}
         </div>
       </div>
     </div>
@@ -329,6 +317,7 @@ export function Canvas({ folderPath }: { folderPath: string }) {
       >
         <CustomUi />
         <RpcBridge />
+        <CanvasContextMenu />
       </Tldraw>
     </div>
   )
