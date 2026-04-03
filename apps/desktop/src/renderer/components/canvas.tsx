@@ -15,9 +15,11 @@ import type { TLComponents, TLShapeId, TLUiContextMenuProps, TLUiIconType } from
 import "tldraw/tldraw.css"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
-import { setRepoPath, addTerminalAtCenter } from "@/lib/default-actions"
+import { setRepoPath, getRepoPath, addTerminalAtCenter } from "@/lib/default-actions"
 import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
+import { SidebarHud } from "./sidebar-hud"
+import { WorktreeList } from "./worktree-list"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -199,6 +201,12 @@ function TerminalDeleteDialog() {
 function CanvasOverlay() {
   return (
     <>
+      <SidebarHud
+        left={<WorktreeList repoPath={getRepoPath()} />}
+        right={
+          <div className="p-2 text-xs text-muted-foreground">File Tree</div>
+        }
+      />
       <CommandMenu />
       <TerminalDeleteDialog />
     </>

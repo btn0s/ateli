@@ -16,6 +16,9 @@ interface Window {
       onExit: (sessionKey: string, callback: () => void) => () => void
     }
     worktree: {
+      list: (repoPath: string) => Promise<
+        { path: string; branch: string; head: string; isMain: boolean }[]
+      >
       create: (repoPath: string, branch: string) => Promise<{
         id: string
         path: string

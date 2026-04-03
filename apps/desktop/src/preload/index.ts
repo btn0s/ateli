@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld("electron", {
       onIpc(`terminal:exit:${sessionKey}`, callback),
   },
   worktree: {
+    list: (repoPath: string) =>
+      ipcRenderer.invoke("worktree:list", { repoPath }) as Promise<
+        { path: string; branch: string; head: string; isMain: boolean }[]
+      >,
     create: (repoPath: string, branch: string) =>
       ipcRenderer.invoke("worktree:create", { repoPath, branch }) as Promise<{
         id: string

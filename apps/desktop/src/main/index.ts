@@ -5,6 +5,7 @@ import { PtyManager } from "./pty"
 import { startRpcServer, stopRpcServer, onBroadcast, broadcast } from "./rpc"
 import {
   addWorktree,
+  listGitWorktrees,
   removeWorktree as removeGitWorktree,
   worktreePath,
   loadWorktreeMetadata,
@@ -108,6 +109,13 @@ ipcMain.on("terminal:detach", (_event, { sessionKey }: { sessionKey: string }) =
 })
 
 // --- Worktree IPC ---
+
+ipcMain.handle(
+  "worktree:list",
+  async (_event, { repoPath }: { repoPath: string }) => {
+    return listGitWorktrees(repoPath)
+  },
+)
 
 ipcMain.handle(
   "worktree:create",
