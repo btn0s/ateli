@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from "react"
 import { track, useEditor } from "tldraw"
 import type { TLShapeId } from "tldraw"
-import { Plus, ChevronRight } from "lucide-react"
+import { Plus, Terminal } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { addTerminalAtCenter } from "@/lib/default-actions"
 import { SidebarPanelHeader } from "@/components/sidebar-panel-header"
-import { cn } from "@workspace/ui/lib/utils"
+import {
+  SidebarTreeBranch,
+  SidebarTreeRow,
+} from "@/components/sidebar-tree"
 
 interface WorktreeInfo {
   path: string
@@ -66,7 +69,7 @@ export const WorktreeList = track(function WorktreeList({
   }
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
       <SidebarPanelHeader>
         <SidebarPanelHeader.Title>Worktrees</SidebarPanelHeader.Title>
         <SidebarPanelHeader.Trailer>
@@ -109,53 +112,37 @@ export const WorktreeList = track(function WorktreeList({
 
         return (
           <div key={rowKey}>
-            <div className="flex w-full items-center gap-0.5 rounded-sm px-1 py-0.5 hover:bg-accent">
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-1 rounded-sm px-0.5 py-0.5 text-left text-xs transition-colors"
+            <SidebarTreeRow>
+              <SidebarTreeRow.Trigger
                 onClick={() => toggleExpanded(rowKey)}
                 title={wt.path}
               >
-                <span className="flex w-4 shrink-0 justify-center">
-                  <ChevronRight
-                    className={cn(
-                      "size-3 text-muted-foreground transition-transform",
-                      isExpanded && "rotate-90",
-                    )}
-                  />
-                </span>
-                <span className="min-w-0 flex-1 truncate">
+                <SidebarTreeRow.Disclosure expanded={isExpanded} />
+                <SidebarTreeRow.Label>
                   {wt.isMain ? "main" : wt.branch}
-                </span>
-              </button>
-              <span className="min-w-[2ch] shrink-0 text-right tabular-nums text-[10px] text-muted-foreground">
-                {terminals.length}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground"
-                title="Add terminal"
-                onClick={() =>
-                  addTerminalAtCenter(editor, { cwd: cwdForTerminal })
-                }
-              >
-                <Plus />
-              </Button>
-            </div>
+                </SidebarTreeRow.Label>
+              </SidebarTreeRow.Trigger>
+              <SidebarTreeRow.Meta>{terminals.length}</SidebarTreeRow.Meta>
+              <SidebarTreeRow.Actions>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-muted-foreground"
+                  title="Add terminal"
+                  onClick={() =>
+                    addTerminalAtCenter(editor, { cwd: cwdForTerminal })
+                  }
+                >
+                  <Plus />
+                </Button>
+              </SidebarTreeRow.Actions>
+            </SidebarTreeRow>
 
             {isExpanded && (
-              <div className="flex items-stretch gap-1 py-0.5 pl-1">
-                <div className="flex shrink-0 pl-0.5">
-                  <div className="relative w-4 shrink-0">
-                    <div
-                      aria-hidden
-                      className="bg-border/45 absolute top-0 bottom-0 left-1/2 w-px -translate-x-1/2"
-                    />
-                  </div>
-                </div>
-                <div className="min-w-0 flex-1 space-y-0.5">
+              <SidebarTreeBranch>
+                <SidebarTreeBranch.Ruler />
+                <SidebarTreeBranch.Content>
                   {terminals.map((shape) => {
                     const props = shape.props as { cwd?: string }
                     const label = props.cwd
@@ -163,19 +150,23 @@ export const WorktreeList = track(function WorktreeList({
                       : "Terminal"
 
                     return (
-                      <button
-                        type="button"
-                        key={shape.id}
-                        className="flex w-full rounded-sm px-1 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                        onClick={() => navigateToShape(shape.id)}
-                        title={props.cwd}
-                      >
-                        <span className="truncate">{label}</span>
-                      </button>
+                      <SidebarTreeRow key={shape.id}>
+                        <SidebarTreeRow.Trigger
+                          className="text-muted-foreground hover:text-accent-foreground"
+                          onClick={() => navigateToShape(shape.id)}
+                          title={props.cwd}
+                        >
+                          <SidebarTreeRow.Icon>
+                            <Terminal className="size-3 shrink-0 opacity-70" />
+                          </SidebarTreeRow.Icon>
+                          <SidebarTreeRow.Label>{label}</SidebarTreeRow.Label>
+                        </SidebarTreeRow.Trigger>
+                        <SidebarTreeRow.AlignedEnd />
+                      </SidebarTreeRow>
                     )
                   })}
-                </div>
-              </div>
+                </SidebarTreeBranch.Content>
+              </SidebarTreeBranch>
             )}
           </div>
         )

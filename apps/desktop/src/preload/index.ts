@@ -42,6 +42,21 @@ contextBridge.exposeInMainWorld("electron", {
         branch: string
       }>,
   },
+  fs: {
+    readdir: (dirPath: string) =>
+      ipcRenderer.invoke("fs:readdir", { dirPath }) as Promise<{
+        entries: { name: string; path: string; isDirectory: boolean }[]
+        repoRoot: string | null
+      }>,
+    openPath: (filePath: string) =>
+      ipcRenderer.invoke("fs:open-path", { filePath }) as Promise<void>,
+    watchRoot: (rootPath: string) =>
+      ipcRenderer.invoke("fs:watch-root", { rootPath }) as Promise<void>,
+    unwatchRoot: (rootPath: string) =>
+      ipcRenderer.send("fs:unwatch-root", { rootPath }),
+    onChanged: (callback: (data: { rootPath: string }) => void) =>
+      onIpc("fs:changed", callback),
+  },
   rpc: {
     onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) =>
       onIpc("rpc:create-terminal", callback),

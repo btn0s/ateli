@@ -12,8 +12,15 @@ import {
   saveWorktreeMetadata,
 } from "./worktree"
 import type { WorktreeMetadata } from "./worktree"
+import {
+  readProjectDirectory,
+  startFsWatch,
+  fsWatchKey,
+} from "./file-tree"
 
 const ptyManager = new PtyManager()
+
+const fsWatchByKey = new Map<string, () => void>()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -30,6 +37,15 @@ function createWindow() {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow.show()
+  })
+
+  mainWindow.on("closed", () => {
+    for (const [k, fn] of [...fsWatchByKey.entries()]) {
+      if (k.startsWith(`${mainWindow.id}\0`)) {
+        fn()
+        fsWatchByKey.delete(k)
+      }
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -143,6 +159,50 @@ ipcMain.handle(
 
     broadcast("worktree.created", { id, path: wtPath, branch })
     return { id, path: wtPath, branch }
+  },
+)
+
+// --- File tree / FS IPC ---
+
+ipcMain.handle(
+  "fs:readdir",
+  async (_event, { dirPath }: { dirPath: string }) => {
+    return readProjectDirectory(dirPath)
+  },
+)
+
+ipcMain.handle(
+  "fs:open-path",
+  async (_event, { filePath }: { filePath: string }) => {
+    const err = await shell.openPath(filePath)
+    if (err) throw new Error(err)
+  },
+)
+
+ipcMain.handle(
+  "fs:watch-root",
+  async (event, { rootPath }: { rootPath: string }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    const key = fsWatchKey(win.id, rootPath)
+    fsWatchByKey.get(key)?.()
+    const cleanup = startFsWatch(key, rootPath, () => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("fs:changed", { rootPath: path.resolve(rootPath) })
+      }
+    })
+    fsWatchByKey.set(key, cleanup)
+  },
+)
+
+ipcMain.on(
+  "fs:unwatch-root",
+  (event, { rootPath }: { rootPath: string }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    const key = fsWatchKey(win.id, rootPath)
+    fsWatchByKey.get(key)?.()
+    fsWatchByKey.delete(key)
   },
 )
 

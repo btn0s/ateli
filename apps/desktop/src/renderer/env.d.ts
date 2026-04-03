@@ -15,6 +15,16 @@ interface Window {
       onData: (sessionKey: string, callback: (data: string) => void) => () => void
       onExit: (sessionKey: string, callback: () => void) => () => void
     }
+    fs: {
+      readdir: (dirPath: string) => Promise<{
+        entries: { name: string; path: string; isDirectory: boolean }[]
+        repoRoot: string | null
+      }>
+      openPath: (filePath: string) => Promise<void>
+      watchRoot: (rootPath: string) => Promise<void>
+      unwatchRoot: (rootPath: string) => void
+      onChanged: (callback: (data: { rootPath: string }) => void) => () => void
+    }
     worktree: {
       list: (repoPath: string) => Promise<
         { path: string; branch: string; head: string; isMain: boolean }[]

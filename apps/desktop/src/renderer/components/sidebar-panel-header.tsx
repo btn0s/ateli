@@ -56,8 +56,14 @@ function CountSpacer({ value = "0" }: { value?: string }) {
   )
 }
 
+/** Same width as `SidebarTreeRow.ActionSlot` when the panel has no header action button. */
+function ActionSlot({ className }: { className?: string }) {
+  return <span className={cn("size-6 shrink-0", className)} aria-hidden />
+}
+
 export const SidebarPanelHeader = Object.assign(Root, {
   Title,
   Trailer,
   CountSpacer,
+  ActionSlot,
 })

@@ -105,7 +105,7 @@ export function SidebarShell({
       style={{ width: displayWidth }}
     >
       {!collapsed && (
-        <div className="flex h-full w-full flex-col overflow-hidden bg-card/90 px-2 pt-10 backdrop-blur-md">
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-card/90 px-2 pt-10 backdrop-blur-md">
           {children}
         </div>
       )}

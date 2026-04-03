@@ -11,7 +11,7 @@ export function SidebarHud({ left, right }: SidebarHudProps) {
     <div className="pointer-events-none absolute inset-0 z-[200] flex font-sans">
       {/* Left sidebar */}
       <SidebarShell side="left" defaultWidth={240} minWidth={120}>
-        {left}
+        <div className="flex min-h-0 flex-1 flex-col">{left}</div>
       </SidebarShell>
 
       {/* Canvas gap — pointer-events pass through to canvas */}
@@ -19,7 +19,7 @@ export function SidebarHud({ left, right }: SidebarHudProps) {
 
       {/* Right sidebar */}
       <SidebarShell side="right" defaultWidth={240} minWidth={120}>
-        {right}
+        <div className="flex min-h-0 flex-1 flex-col">{right}</div>
       </SidebarShell>
     </div>
   )
