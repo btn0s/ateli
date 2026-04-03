@@ -36,6 +36,6 @@
 }
 
 /* Menu group dividers */
-.tlui-menu__group:last-child {
+.tlui-menu__group:not(:empty):last-of-type {
   border-bottom: none !important;
 }
