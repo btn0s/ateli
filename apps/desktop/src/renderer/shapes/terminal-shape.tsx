@@ -238,10 +238,9 @@ function TerminalComponent({
       icon: X,
       label: "Close terminal",
       onClick: () => {
-        if (sessionKeyRef.current) {
-          window.electron.terminal.dispose(sessionKeyRef.current)
-        }
-        editor.deleteShape(shape.id)
+        // Select this shape and trigger tldraw's delete action (shows confirmation dialog)
+        editor.select(shape.id)
+        editor.deleteShapes([shape.id])
       },
     },
   ], [editor, shape.id])
