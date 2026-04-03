@@ -31,6 +31,9 @@ const GLOW_COLOR = [210, 210, 220] as const
 const BASE_DOT_COLOR = [255, 255, 255] as const
 const SMOOTHING = 0.07
 const FADE_SPEED = 0.03
+const GRID_TARGET_PX = 20
+const GRID_LOD_MIN_PX = 14
+const GRID_LOD_MAX_PX = 28
 
 // tldraw tools to show in our toolbar, in order
 const TOOLBAR_TOOL_IDS = [
@@ -46,7 +49,7 @@ const CustomToolbar = track(() => {
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
       <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
-        <div className="pointer-events-auto flex items-center gap-0.5 border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
           {TOOLBAR_TOOL_IDS.map((id) => {
             const tool = tools[id]
             if (!tool) return null
@@ -133,6 +136,7 @@ const components: TLComponents = {
     const rafRef = useRef<number>(0)
     const runningRef = useRef(true)
     const drawRef = useRef<() => void>()
+    const lodStepRef = useRef(1)
 
     const draw = useCallback(() => {
       const el = canvasRef.current
@@ -175,13 +179,29 @@ const components: TLComponents = {
 
       const sm = smoothMouseRef.current
 
+      // LOD quantization keeps dot spacing perceptually consistent across zoom levels.
+      const idealStep = GRID_TARGET_PX / Math.max(camera.z, 0.0001)
+      const lodStep = Math.max(1, 2 ** Math.round(Math.log2(idealStep / size)))
+      const stepSize = size * lodStep
+      const stepPx = stepSize * camera.z
+
+      if (stepPx < GRID_LOD_MIN_PX) {
+        lodStepRef.current = lodStepRef.current * 2
+      } else if (stepPx > GRID_LOD_MAX_PX && lodStepRef.current > 1) {
+        lodStepRef.current = lodStepRef.current / 2
+      } else {
+        lodStepRef.current = lodStep
+      }
+
+      const quantizedStepSize = size * lodStepRef.current
+
       const pageViewportBounds = editor.getViewportPageBounds()
-      const startPageX = Math.ceil(pageViewportBounds.minX / size) * size
-      const startPageY = Math.ceil(pageViewportBounds.minY / size) * size
-      const endPageX = Math.floor(pageViewportBounds.maxX / size) * size
-      const endPageY = Math.floor(pageViewportBounds.maxY / size) * size
-      const numRows = Math.round((endPageY - startPageY) / size)
-      const numCols = Math.round((endPageX - startPageX) / size)
+      const startPageX = Math.ceil(pageViewportBounds.minX / quantizedStepSize) * quantizedStepSize
+      const startPageY = Math.ceil(pageViewportBounds.minY / quantizedStepSize) * quantizedStepSize
+      const endPageX = Math.floor(pageViewportBounds.maxX / quantizedStepSize) * quantizedStepSize
+      const endPageY = Math.floor(pageViewportBounds.maxY / quantizedStepSize) * quantizedStepSize
+      const numRows = Math.round((endPageY - startPageY) / quantizedStepSize)
+      const numCols = Math.round((endPageX - startPageX) / quantizedStepSize)
 
       const mx = sm ? sm.x * dpr : 0
       const my = sm ? sm.y * dpr : 0
@@ -203,8 +223,8 @@ const components: TLComponents = {
 
       for (let row = 0; row <= numRows; row++) {
         for (let col = 0; col <= numCols; col++) {
-          const pageX = startPageX + col * size
-          const pageY = startPageY + row * size
+          const pageX = startPageX + col * quantizedStepSize
+          const pageY = startPageY + row * quantizedStepSize
           const cx = (pageX + camera.x) * camera.z * dpr
           const cy = (pageY + camera.y) * camera.z * dpr
 
