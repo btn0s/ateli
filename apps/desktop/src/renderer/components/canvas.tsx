@@ -128,6 +128,7 @@ function TerminalDeleteDialog() {
   useEffect(() => {
     return editor.sideEffects.registerBeforeDeleteHandler("shape", (shape) => {
       if (shape.type !== "terminal") return
+      if (!shape.props.sidecarSessionId) return
       const shapeId = shape.id as TLShapeId
       if (allowDeleteRef.current.has(shapeId)) {
         allowDeleteRef.current.delete(shapeId)

@@ -99,6 +99,12 @@ function TerminalComponent({
 
       state.removeExit = window.electron.terminal.onExit(sessionKey, () => {
         state.disposed = true
+        sessionKeyRef.current = null
+        editor.updateShape<TerminalShape>({
+          id: shapeId,
+          type: TERMINAL_SHAPE_TYPE,
+          props: { sidecarSessionId: undefined },
+        })
         editor.deleteShape(shapeId)
       })
 
