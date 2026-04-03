@@ -21,6 +21,13 @@ declare module "tldraw" {
 
 type TerminalShape = TLShape<typeof TERMINAL_SHAPE_TYPE>
 
+function getTerminalSize(term: Terminal): { cols: number; rows: number } {
+  return {
+    cols: Math.max(1, term.cols || 80),
+    rows: Math.max(1, term.rows || 24),
+  }
+}
+
 function TerminalComponent({
   shape,
   isInteractive,
@@ -45,6 +52,8 @@ function TerminalComponent({
       sessionKey: existingSessionId ?? (null as string | null),
       removeData: null as null | (() => void),
       removeExit: null as null | (() => void),
+      disposeTermData: null as null | (() => void),
+      disposeTermResize: null as null | (() => void),
     }
 
     const term = new Terminal({
@@ -74,44 +83,52 @@ function TerminalComponent({
 
     function attachSession(sessionKey: string) {
       state.sessionKey = sessionKey
+      state.removeData?.()
+      state.removeExit?.()
+      state.disposeTermData?.()
+      state.disposeTermResize?.()
 
       state.removeData = window.electron.terminal.onData(sessionKey, (data) => {
         term.write(data)
       })
 
       state.removeExit = window.electron.terminal.onExit(sessionKey, () => {
-        state.disposed = true
-        editor.deleteShape(shapeId)
+        editor.updateShape<TerminalShape>({
+          id: shapeId,
+          type: TERMINAL_SHAPE_TYPE,
+          props: { sidecarSessionId: undefined },
+        })
+        term.write("\r\n[Session ended]\r\n")
       })
 
-      term.onResize(({ cols, rows }) => {
+      const onResizeDisposable = term.onResize(({ cols, rows }) => {
         if (!state.disposed && state.sessionKey) {
           window.electron.terminal.resize(state.sessionKey, cols, rows)
         }
       })
+      state.disposeTermResize = () => onResizeDisposable.dispose()
 
-      term.onData((data) => {
+      const onDataDisposable = term.onData((data) => {
         if (!state.disposed && state.sessionKey) {
           window.electron.terminal.write(state.sessionKey, data)
         }
       })
+      state.disposeTermData = () => onDataDisposable.dispose()
 
       fitAddon.fit()
-      const dim = term.dimensions
-      if (dim) {
-        window.electron.terminal.resize(sessionKey, dim.cols, dim.rows)
-      }
+      const { cols, rows } = getTerminalSize(term)
+      window.electron.terminal.resize(sessionKey, cols, rows)
     }
 
     ;(async () => {
       try {
         if (existingSessionId) {
           try {
-            const dim = term.dimensions
+            const { cols, rows } = getTerminalSize(term)
             await window.electron.terminal.reconnect(
               existingSessionId,
-              dim?.cols ?? 80,
-              dim?.rows ?? 24,
+              cols,
+              rows,
             )
             if (state.disposed) return
             attachSession(existingSessionId)
@@ -145,6 +162,10 @@ function TerminalComponent({
 
     const observer = new ResizeObserver(() => {
       fitAddon.fit()
+      if (!state.disposed && state.sessionKey) {
+        const { cols, rows } = getTerminalSize(term)
+        window.electron.terminal.resize(state.sessionKey, cols, rows)
+      }
     })
     observer.observe(containerRef.current)
 
@@ -153,6 +174,8 @@ function TerminalComponent({
       observer.disconnect()
       state.removeData?.()
       state.removeExit?.()
+      state.disposeTermData?.()
+      state.disposeTermResize?.()
       if (state.sessionKey) {
         window.electron.terminal.detach(state.sessionKey)
       }
