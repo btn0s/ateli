@@ -36,6 +36,8 @@
 }
 
 /* Menu group dividers */
-.tlui-menu__group:not(:empty):last-of-type {
+/* Hide border on the last visible (non-empty) group.
+   :has(~ ...) checks if any non-empty sibling follows — if not, drop the border. */
+.tlui-menu__group:not(:empty):not(:has(~ .tlui-menu__group:not(:empty))) {
   border-bottom: none !important;
 }
