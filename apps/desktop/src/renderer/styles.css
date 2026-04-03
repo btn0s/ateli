@@ -23,14 +23,19 @@
   --tl-color-focus: var(--ring);
   --tl-shadow-3:
     0px 1px 2px rgb(0 0 0 / 28%),
-    0px 2px 6px rgb(0 0 0 / 14%),
-    inset 0px 0px 0px 1px var(--border);
+    0px 2px 6px rgb(0 0 0 / 14%);
   --tl-radius-3: var(--radius);
   --tl-radius-4: calc(var(--radius) * 1.2);
   --tl-font-family: var(--font-sans);
 }
 
-/* Remove trailing border on last context menu group */
+/* Add real border to menus (replaces inset box-shadow) */
+.tlui-popover__content,
+.tlui-menu {
+  border: 1px solid var(--border) !important;
+}
+
+/* Menu group dividers */
 .tlui-menu__group:last-child {
-  border-bottom: none;
+  border-bottom: none !important;
 }
