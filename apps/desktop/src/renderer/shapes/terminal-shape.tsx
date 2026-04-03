@@ -206,7 +206,7 @@ function TerminalComponent({
         height: "100%",
         padding: 8,
         background: "#1a1a1a",
-        borderRadius: 8,
+        borderRadius: "var(--radius)",
         overflow: "hidden",
         border: "1px solid var(--border)",
         boxShadow: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
@@ -260,6 +260,6 @@ export class TerminalShapeUtil extends BaseBoxShapeUtil<TerminalShape> {
   }
 
   indicator(shape: TerminalShape) {
-    return <rect width={shape.props.w} height={shape.props.h} rx={8} ry={8} />
+    return <rect width={shape.props.w} height={shape.props.h} />
   }
 }
