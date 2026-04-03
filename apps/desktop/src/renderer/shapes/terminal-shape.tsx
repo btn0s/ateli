@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react"
+import { useEffect, useRef } from "react"
 import {
   BaseBoxShapeUtil,
   HTMLContainer,
@@ -9,10 +9,9 @@ import {
 } from "tldraw"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
-import { X, TerminalSquare } from "lucide-react"
+import { TerminalSquare } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { ShapeChrome } from "@/components/shape-chrome"
-import type { ShapeChromeAction } from "@/components/shape-chrome"
 
 const TERMINAL_SHAPE_TYPE = "terminal" as const
 
@@ -232,24 +231,10 @@ function TerminalComponent({
     ? shape.props.cwd.split("/").pop() || "Terminal"
     : "Terminal"
 
-  const actions: ShapeChromeAction[] = useMemo(() => [
-    {
-      id: "close",
-      icon: X,
-      label: "Close terminal",
-      onClick: () => {
-        // Select this shape and trigger tldraw's delete action (shows confirmation dialog)
-        editor.select(shape.id)
-        editor.deleteShapes([shape.id])
-      },
-    },
-  ], [editor, shape.id])
-
   return (
     <ShapeChrome
       title={titleText}
       icon={TerminalSquare}
-      actions={actions}
       isInteractive={isInteractive}
     >
       <div
