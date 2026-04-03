@@ -12,7 +12,7 @@ function RowRoot({
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-0.5 rounded-sm px-1 py-0.5 hover:bg-accent",
+        "flex w-full items-center gap-0 rounded-sm px-0.5 py-px hover:bg-accent",
         className,
       )}
     >
@@ -30,7 +30,7 @@ function RowTrigger({
     <button
       type="button"
       className={cn(
-        "flex min-w-0 flex-1 items-center gap-1 rounded-sm px-0.5 py-0.5 text-left text-xs transition-colors",
+        "flex min-w-0 flex-1 items-center gap-0.5 rounded-sm px-0 py-px text-left text-xs leading-tight transition-colors",
         className,
       )}
       {...props}
@@ -51,7 +51,7 @@ function RowDisclosure({
     <span className="flex w-4 shrink-0 justify-center">
       <ChevronRight
         className={cn(
-          "size-3 shrink-0 text-muted-foreground transition-transform",
+          "size-2.5 shrink-0 text-muted-foreground transition-transform",
           expanded && "rotate-90",
           className,
         )}
@@ -128,7 +128,7 @@ function RowAlignedEnd() {
 
 function BranchRoot({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("flex items-stretch gap-0 py-0.5 pl-1", className)}>
+    <div className={cn("flex items-stretch gap-0 py-0 pl-0.5", className)}>
       {children}
     </div>
   )
@@ -136,23 +136,26 @@ function BranchRoot({ className, children }: { className?: string; children: Rea
 
 function BranchRuler({ className }: { className?: string }) {
   return (
-    <div className="flex shrink-0 pl-0.5">
-      <div className="relative w-4 shrink-0">
-        <div
-          aria-hidden
-          className={cn(
-            "bg-border/45 absolute top-0 bottom-0 left-1/2 w-px -translate-x-1/2",
-            className,
-          )}
-        />
-      </div>
+    <div className="relative w-4 shrink-0">
+      <div
+        aria-hidden
+        className={cn(
+          "bg-border/45 absolute top-0 bottom-0 left-1/2 w-px -translate-x-1/2",
+          className,
+        )}
+      />
     </div>
   )
 }
 
 function BranchContent({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("min-w-0 flex-1 space-y-0.5", className)}>
+    <div
+      className={cn(
+        "min-w-0 flex-1 space-y-0 pl-0.5",
+        className,
+      )}
+    >
       {children}
     </div>
   )
@@ -167,7 +170,7 @@ function NestedItem({
     <button
       type="button"
       className={cn(
-        "flex w-full rounded-sm px-1 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+        "flex w-full rounded-sm px-0.5 py-px text-left text-xs leading-tight text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
         className,
       )}
       {...props}
