@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useMemo } from "react"
 import {
   BaseBoxShapeUtil,
   HTMLContainer,
@@ -9,7 +9,10 @@ import {
 } from "tldraw"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
+import { X, TerminalSquare } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
+import { ShapeChrome } from "@/components/shape-chrome"
+import type { ShapeChromeAction } from "@/components/shape-chrome"
 
 const TERMINAL_SHAPE_TYPE = "terminal" as const
 
@@ -40,6 +43,7 @@ function TerminalComponent({
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const sessionKeyRef = useRef<string | null>(shape.props.sidecarSessionId ?? null)
   const editor = useEditor()
 
   useEffect(() => {
@@ -83,6 +87,7 @@ function TerminalComponent({
 
     function attachSession(sessionKey: string) {
       state.sessionKey = sessionKey
+      sessionKeyRef.current = sessionKey
       state.removeData?.()
       state.removeExit?.()
       state.disposeTermData?.()
@@ -221,20 +226,41 @@ function TerminalComponent({
     }
   }, [isInteractive])
 
+  const titleText = shape.props.cwd
+    ? shape.props.cwd.split("/").pop() || "Terminal"
+    : "Terminal"
+
+  const actions: ShapeChromeAction[] = useMemo(() => [
+    {
+      id: "close",
+      icon: X,
+      label: "Close terminal",
+      onClick: () => {
+        if (sessionKeyRef.current) {
+          window.electron.terminal.dispose(sessionKeyRef.current)
+        }
+      },
+    },
+  ], [])
+
   return (
-    <div
-      ref={containerRef}
-      style={{
-        width: "100%",
-        height: "100%",
-        padding: 8,
-        background: "#1a1a1a",
-        borderRadius: "var(--radius)",
-        overflow: "hidden",
-        border: "1px solid var(--border)",
-        boxShadow: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-      }}
-    />
+    <ShapeChrome
+      title={titleText}
+      icon={TerminalSquare}
+      actions={actions}
+      isInteractive={isInteractive}
+    >
+      <div
+        ref={containerRef}
+        style={{
+          width: "100%",
+          height: "100%",
+          padding: 8,
+          background: "#1a1a1a",
+          overflow: "hidden",
+        }}
+      />
+    </ShapeChrome>
   )
 }
 

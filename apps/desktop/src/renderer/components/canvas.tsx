@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useCallback } from "react"
+import { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react"
 import {
   DefaultContextMenu,
   DefaultContextMenuContent,
@@ -18,6 +18,15 @@ import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
 import { setRepoPath } from "@/lib/default-actions"
 import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
+import { Button } from "@workspace/ui/components/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 
 const customShapeUtils = [TerminalShapeUtil]
 
@@ -108,6 +117,90 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
       )}
       <DefaultContextMenuContent />
     </DefaultContextMenu>
+  )
+}
+
+function TerminalDeleteDialog() {
+  const editor = useEditor()
+  const [pendingTerminalIds, setPendingTerminalIds] = useState<TLShapeId[]>([])
+  const allowDeleteRef = useRef<Set<TLShapeId>>(new Set())
+
+  useEffect(() => {
+    return editor.sideEffects.registerBeforeDeleteHandler("shape", (shape) => {
+      if (shape.type !== "terminal") return
+      const shapeId = shape.id as TLShapeId
+      if (allowDeleteRef.current.has(shapeId)) {
+        allowDeleteRef.current.delete(shapeId)
+        return
+      }
+
+      setPendingTerminalIds((prev) => (
+        prev.includes(shapeId) ? prev : [...prev, shapeId]
+      ))
+      return false
+    })
+  }, [editor])
+
+  const open = pendingTerminalIds.length > 0
+
+  function onCancel() {
+    setPendingTerminalIds([])
+  }
+
+  function onConfirmDelete() {
+    const ids = pendingTerminalIds
+    if (ids.length === 0) return
+
+    const sessionKeys = ids
+      .map((id) => editor.getShape(id))
+      .flatMap((shape) => (
+        shape?.type === "terminal" && shape.props.sidecarSessionId
+          ? [shape.props.sidecarSessionId]
+          : []
+      ))
+
+    for (const id of ids) {
+      allowDeleteRef.current.add(id)
+    }
+
+    editor.deleteShapes(ids)
+    setPendingTerminalIds([])
+
+    for (const sessionKey of sessionKeys) {
+      window.electron.terminal.dispose(sessionKey)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Delete Terminal?</DialogTitle>
+          <DialogDescription>
+            {pendingTerminalIds.length > 1
+              ? `This will delete ${pendingTerminalIds.length} terminal shapes and end their running sessions.`
+              : "This will delete the terminal shape and end its running session."}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={onConfirmDelete}>
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CanvasOverlay() {
+  return (
+    <>
+      <CommandMenu />
+      <TerminalDeleteDialog />
+    </>
   )
 }
 
@@ -314,7 +407,7 @@ const components: TLComponents = {
 
     return <canvas className="tl-grid" ref={canvasRef} />
   },
-  InFrontOfTheCanvas: CommandMenu,
+  InFrontOfTheCanvas: CanvasOverlay,
   Toolbar: CustomToolbar,
   MainMenu: null,
   PageMenu: null,
