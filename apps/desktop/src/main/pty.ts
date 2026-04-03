@@ -110,7 +110,11 @@ export class PtyManager {
   async writeSession(id: string, data: string): Promise<void> {
     const session = this.sessions.get(id)
     if (!session?.dataSocket) return
-    session.dataSocket.write(data)
+    const normalized =
+      data.includes("\n") && !data.includes("\r")
+        ? data.replace(/\n/g, "\r")
+        : data
+    session.dataSocket.write(normalized)
   }
 
   async resizeSession(id: string, cols: number, rows: number): Promise<void> {

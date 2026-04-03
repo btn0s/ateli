@@ -454,7 +454,17 @@ function RpcBridge() {
     })
 
     const removeNotifications = window.electron.rpc.onNotification(({ method, params }) => {
-      if (method === "worktree.created") {
+      if (method === "terminal.created") {
+        const center = editor.getViewportPageBounds().center
+        editor.createShape({
+          type: "terminal",
+          x: center.x - 300,
+          y: center.y - 200,
+          props: {
+            sidecarSessionId: params.sessionKey as string,
+          },
+        })
+      } else if (method === "worktree.created") {
         const center = editor.getViewportPageBounds().center
         editor.createShape({
           type: "terminal",

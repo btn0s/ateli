@@ -241,9 +241,10 @@ function TerminalComponent({
         if (sessionKeyRef.current) {
           window.electron.terminal.dispose(sessionKeyRef.current)
         }
+        editor.deleteShape(shape.id)
       },
     },
-  ], [])
+  ], [editor, shape.id])
 
   return (
     <ShapeChrome
