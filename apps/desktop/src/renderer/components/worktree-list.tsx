@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react"
 import { track, useEditor } from "tldraw"
 import type { TLShapeId } from "tldraw"
-import { GitBranch, Plus, TerminalSquare, ChevronRight } from "lucide-react"
+import { Plus, ChevronRight } from "lucide-react"
+import { Button } from "@workspace/ui/components/button"
 import { addTerminalAtCenter } from "@/lib/default-actions"
+import { SidebarPanelHeader } from "@/components/sidebar-panel-header"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface WorktreeInfo {
@@ -19,7 +21,9 @@ export const WorktreeList = track(function WorktreeList({
 }) {
   const editor = useEditor()
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([])
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [expanded, setExpanded] = useState(
+    () => new Set<string>([repoPath]),
+  )
 
   const refresh = useCallback(() => {
     window.electron.worktree.list(repoPath).then(setWorktrees)
@@ -63,23 +67,30 @@ export const WorktreeList = track(function WorktreeList({
 
   return (
     <div className="flex flex-col gap-0.5">
-      <div className="flex items-center justify-between px-1 pb-1">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Worktrees
-        </span>
-        <button
-          className="flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          onClick={() => {
-            const branch = `ateli/${Date.now().toString(36)}`
-            window.electron.worktree.create(repoPath, branch)
-          }}
-          title="New worktree"
-        >
-          <Plus className="size-3" />
-        </button>
-      </div>
+      <SidebarPanelHeader>
+        <SidebarPanelHeader.Title>Worktrees</SidebarPanelHeader.Title>
+        <SidebarPanelHeader.Trailer>
+          <SidebarPanelHeader.CountSpacer />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground"
+            title="New worktree"
+            onClick={() => {
+              const branch = `ateli/${Date.now().toString(36)}`
+              window.electron.worktree.create(repoPath, branch)
+            }}
+          >
+            <Plus />
+          </Button>
+        </SidebarPanelHeader.Trailer>
+      </SidebarPanelHeader>
 
       {entries.map((wt) => {
+        const rowKey = wt.isMain ? repoPath : wt.path
+        const cwdForTerminal = wt.isMain ? repoPath : wt.path
+
         const terminals = terminalShapes.filter((s) => {
           const cwd = (s.props as { cwd?: string }).cwd
           if (!cwd) return wt.isMain
@@ -94,61 +105,78 @@ export const WorktreeList = track(function WorktreeList({
           return cwd.startsWith(wt.path)
         })
 
-        const isExpanded = expanded.has(wt.path)
-        const hasTerminals = terminals.length > 0
+        const isExpanded = expanded.has(rowKey)
 
         return (
-          <div key={wt.path}>
-            <button
-              className="flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-xs transition-colors hover:bg-accent"
-              onClick={() => {
-                if (hasTerminals) {
-                  toggleExpanded(wt.path)
-                } else {
-                  addTerminalAtCenter(editor, { cwd: wt.path })
-                }
-              }}
-              title={wt.path}
-            >
-              <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">
-                {wt.isMain ? "main" : wt.branch}
-              </span>
-              {hasTerminals && (
-                <span className="shrink-0 text-[10px] text-muted-foreground">
-                  {terminals.length}
+          <div key={rowKey}>
+            <div className="flex w-full items-center gap-0.5 rounded-sm px-1 py-0.5 hover:bg-accent">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-1 rounded-sm px-0.5 py-0.5 text-left text-xs transition-colors"
+                onClick={() => toggleExpanded(rowKey)}
+                title={wt.path}
+              >
+                <span className="flex w-4 shrink-0 justify-center">
+                  <ChevronRight
+                    className={cn(
+                      "size-3 text-muted-foreground transition-transform",
+                      isExpanded && "rotate-90",
+                    )}
+                  />
                 </span>
-              )}
-              <div className="flex-1" />
-              {hasTerminals && (
-                <ChevronRight
-                  className={cn(
-                    "size-3 shrink-0 text-muted-foreground transition-transform",
-                    isExpanded && "rotate-90",
-                  )}
-                />
-              )}
-            </button>
+                <span className="min-w-0 flex-1 truncate">
+                  {wt.isMain ? "main" : wt.branch}
+                </span>
+              </button>
+              <span className="min-w-[2ch] shrink-0 text-right tabular-nums text-[10px] text-muted-foreground">
+                {terminals.length}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="text-muted-foreground"
+                title="Add terminal"
+                onClick={() =>
+                  addTerminalAtCenter(editor, { cwd: cwdForTerminal })
+                }
+              >
+                <Plus />
+              </Button>
+            </div>
 
-            {isExpanded &&
-              terminals.map((shape) => {
-                const props = shape.props as { cwd?: string }
-                const label = props.cwd
-                  ? props.cwd.split("/").pop() || "Terminal"
-                  : "Terminal"
+            {isExpanded && (
+              <div className="flex items-stretch gap-1 py-0.5 pl-1">
+                <div className="flex shrink-0 pl-0.5">
+                  <div className="relative w-4 shrink-0">
+                    <div
+                      aria-hidden
+                      className="bg-border/45 absolute top-0 bottom-0 left-1/2 w-px -translate-x-1/2"
+                    />
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  {terminals.map((shape) => {
+                    const props = shape.props as { cwd?: string }
+                    const label = props.cwd
+                      ? props.cwd.split("/").pop() || "Terminal"
+                      : "Terminal"
 
-                return (
-                  <button
-                    key={shape.id}
-                    className="flex w-full items-center gap-1.5 rounded-sm py-0.5 pl-8 pr-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => navigateToShape(shape.id)}
-                    title={props.cwd}
-                  >
-                    <TerminalSquare className="size-3 shrink-0" />
-                    <span className="truncate">{label}</span>
-                  </button>
-                )
-              })}
+                    return (
+                      <button
+                        type="button"
+                        key={shape.id}
+                        className="flex w-full rounded-sm px-1 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => navigateToShape(shape.id)}
+                        title={props.cwd}
+                      >
+                        <span className="truncate">{label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )
       })}

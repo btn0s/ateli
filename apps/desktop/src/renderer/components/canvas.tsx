@@ -19,6 +19,7 @@ import { setRepoPath, getRepoPath, addTerminalAtCenter } from "@/lib/default-act
 import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
 import { SidebarHud } from "./sidebar-hud"
+import { SidebarPanelHeader } from "./sidebar-panel-header"
 import { WorktreeList } from "./worktree-list"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -202,9 +203,21 @@ function CanvasOverlay() {
   return (
     <>
       <SidebarHud
-        left={<WorktreeList repoPath={getRepoPath()} />}
+        left={
+          <WorktreeList
+            key={getRepoPath()}
+            repoPath={getRepoPath()}
+          />
+        }
         right={
-          <div className="p-2 text-xs text-muted-foreground">File Tree</div>
+          <div className="flex flex-col gap-0.5">
+            <SidebarPanelHeader>
+              <SidebarPanelHeader.Title>Files</SidebarPanelHeader.Title>
+            </SidebarPanelHeader>
+            <div className="px-1 py-0.5 text-xs text-muted-foreground">
+              File tree
+            </div>
+          </div>
         }
       />
       <CommandMenu />
