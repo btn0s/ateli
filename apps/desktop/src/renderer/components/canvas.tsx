@@ -15,7 +15,7 @@ import type { TLComponents, TLShapeId, TLUiContextMenuProps, TLUiIconType } from
 import "tldraw/tldraw.css"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
-import { setRepoPath } from "@/lib/default-actions"
+import { setRepoPath, addTerminalAtCenter } from "@/lib/default-actions"
 import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
 import { Button } from "@workspace/ui/components/button"
@@ -455,25 +455,9 @@ function RpcBridge() {
 
     const removeNotifications = window.electron.rpc.onNotification(({ method, params }) => {
       if (method === "terminal.created") {
-        const center = editor.getViewportPageBounds().center
-        editor.createShape({
-          type: "terminal",
-          x: center.x - 300,
-          y: center.y - 200,
-          props: {
-            sidecarSessionId: params.sessionKey as string,
-          },
-        })
+        addTerminalAtCenter(editor, { sidecarSessionId: params.sessionKey as string })
       } else if (method === "worktree.created") {
-        const center = editor.getViewportPageBounds().center
-        editor.createShape({
-          type: "terminal",
-          x: center.x - 300,
-          y: center.y - 200,
-          props: {
-            cwd: params.path as string,
-          },
-        })
+        addTerminalAtCenter(editor, { cwd: params.path as string })
       }
     })
 

@@ -8,12 +8,13 @@ export function setRepoPath(repoPath: string) {
   _repoPath = repoPath
 }
 
-function addTerminalAtCenter(editor: Editor) {
+export function addTerminalAtCenter(editor: Editor, props?: Record<string, unknown>) {
   const center = editor.getViewportPageBounds().center
   editor.createShape({
     type: "terminal",
     x: center.x - 300,
     y: center.y - 200,
+    props,
   })
 }
 
