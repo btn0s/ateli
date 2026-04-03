@@ -98,12 +98,8 @@ function TerminalComponent({
       })
 
       state.removeExit = window.electron.terminal.onExit(sessionKey, () => {
-        editor.updateShape<TerminalShape>({
-          id: shapeId,
-          type: TERMINAL_SHAPE_TYPE,
-          props: { sidecarSessionId: undefined },
-        })
-        term.write("\r\n[Session ended]\r\n")
+        state.disposed = true
+        editor.deleteShape(shapeId)
       })
 
       const onResizeDisposable = term.onResize(({ cols, rows }) => {
