@@ -46,7 +46,7 @@ const CustomToolbar = track(() => {
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
       <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-[9px] border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
+        <div className="pointer-events-auto flex items-center gap-0.5 border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
           {TOOLBAR_TOOL_IDS.map((id) => {
             const tool = tools[id]
             if (!tool) return null
@@ -54,7 +54,7 @@ const CustomToolbar = track(() => {
             return (
               <button
                 key={id}
-                className={`flex size-8 items-center justify-center rounded-[6px] transition-colors ${
+                className={`flex size-8 items-center justify-center rounded-sm transition-colors ${
                   isActive
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -70,7 +70,7 @@ const CustomToolbar = track(() => {
           {customActions.map((action) => (
             <button
               key={action.id}
-              className="flex size-8 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               onClick={() => action.execute(editor)}
               title={action.label}
             >

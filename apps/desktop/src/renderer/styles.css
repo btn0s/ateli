@@ -3,8 +3,7 @@
   --font-mono: "Geist Mono", ui-monospace, monospace;
 }
 
-/* Align tldraw's design tokens with our shadcn theme.
-   tldraw reads these variables for all its built-in UI. */
+/* Align tldraw's design tokens with our shadcn theme */
 .tl-container {
   /* Surfaces */
   --tl-color-background: var(--background);
@@ -30,9 +29,12 @@
   --tl-color-primary: var(--primary);
   --tl-color-focus: var(--ring);
 
-  /* Rounding — adopt tldraw's values into our system */
-  --tl-radius-3: 9px;
-  --tl-radius-4: 11px;
+  /* Rounding — flow from shadcn --radius */
+  --tl-radius-0: var(--radius);
+  --tl-radius-1: var(--radius);
+  --tl-radius-2: var(--radius);
+  --tl-radius-3: var(--radius);
+  --tl-radius-4: var(--radius);
 
   /* Shadows — no inset border (we use real borders) */
   --tl-shadow-3:
@@ -43,11 +45,10 @@
   --tl-font-family: var(--font-sans);
 }
 
-/* Context menu: real border instead of inset box-shadow */
+/* Context menu: real border */
 .tlui-popover__content,
 .tlui-menu {
   border: 1px solid var(--border) !important;
-  border-radius: 9px !important;
 }
 
 /* Last visible menu group: no trailing border */
