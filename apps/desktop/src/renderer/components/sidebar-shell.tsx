@@ -77,7 +77,6 @@ export function SidebarShell({
     persist(collapsed ? 0 : width)
   }, [collapsed, width, persist])
 
-  // Keyboard toggle
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!e.metaKey && !e.ctrlKey) return
@@ -107,7 +106,7 @@ export function SidebarShell({
       {!collapsed && (
         <div
           className={cn(
-            "flex h-full min-h-0 w-full flex-col overflow-hidden border-border/50 bg-card/90 px-2 pt-10 backdrop-blur-md",
+            "flex h-full min-h-0 w-full flex-col overflow-hidden border-border/50 bg-card/90 pt-10 backdrop-blur-md",
             side === "left" ? "border-r" : "border-l",
           )}
         >
@@ -115,7 +114,6 @@ export function SidebarShell({
         </div>
       )}
 
-      {/* Drag handle */}
       <div
         className={cn(
           "absolute top-0 z-10 h-full w-1 cursor-col-resize transition-colors hover:bg-border",

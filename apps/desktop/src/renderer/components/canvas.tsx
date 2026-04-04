@@ -203,13 +203,8 @@ function CanvasOverlay() {
   return (
     <>
       <SidebarHud
-        left={
-          <WorktreeList
-            key={getRepoPath()}
-            repoPath={getRepoPath()}
-          />
-        }
-        right={<FileTree key={getRepoPath()} />}
+        left={<WorktreeList repoPath={getRepoPath()} />}
+        right={<FileTree />}
       />
       <CommandMenu />
       <TerminalDeleteDialog />

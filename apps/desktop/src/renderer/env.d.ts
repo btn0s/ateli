@@ -25,6 +25,21 @@ interface Window {
       unwatchRoot: (rootPath: string) => void
       onChanged: (callback: (data: { rootPath: string }) => void) => () => void
     }
+    git: {
+      status: (repoPath: string) => Promise<{
+        entries: {
+          path: string
+          absPath: string
+          indexStatus: string
+          workTreeStatus: string
+          added: number
+          removed: number
+        }[]
+        branch: string
+        trunk: string | null
+        error: string | null
+      }>
+    }
     worktree: {
       list: (repoPath: string) => Promise<
         { path: string; branch: string; head: string; isMain: boolean }[]

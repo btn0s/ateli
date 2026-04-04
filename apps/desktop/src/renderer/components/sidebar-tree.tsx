@@ -12,7 +12,7 @@ function RowRoot({
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-0 rounded-sm px-0.5 py-px hover:bg-accent",
+        "flex w-full items-center gap-0 rounded-sm py-px pl-1.5 pr-0 hover:bg-accent",
         className,
       )}
     >
@@ -89,7 +89,6 @@ function RowMeta({ className, children }: { className?: string; children: ReactN
   )
 }
 
-/** Invisible count column — lines up with `SidebarPanelHeader.CountSpacer` and visible `RowMeta`. */
 function RowMetaPlaceholder({ value = "0" }: { value?: string }) {
   return (
     <span
@@ -109,12 +108,10 @@ function RowActions({ className, children }: { className?: string; children: Rea
   )
 }
 
-/** Reserves `icon-xs` width when a row has no trailing buttons (aligns with worktree rows). */
 function RowActionSlot({ className }: { className?: string }) {
   return <span className={cn("size-6 shrink-0", className)} aria-hidden />
 }
 
-/** Trailing columns matching worktrees: placeholder count + empty action slot. */
 function RowAlignedEnd() {
   return (
     <>

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Agentation } from "agentation"
 import { FolderPicker } from "@/components/folder-picker"
 import { Canvas } from "@/components/canvas"
 import { Titlebar } from "@/components/titlebar"
@@ -17,6 +18,9 @@ export function App() {
 
   return (
     <>
+      {process.env.NODE_ENV === "development" && (
+        <Agentation endpoint="http://localhost:4747" />
+      )}
       <Titlebar />
       {folderPath ? (
         <Canvas folderPath={folderPath} />

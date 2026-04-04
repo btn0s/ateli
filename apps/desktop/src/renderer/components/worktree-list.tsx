@@ -33,6 +33,10 @@ export const WorktreeList = track(function WorktreeList({
   }, [repoPath])
 
   useEffect(() => {
+    setExpanded(new Set([repoPath]))
+  }, [repoPath])
+
+  useEffect(() => {
     refresh()
     const remove = window.electron.rpc.onNotification(({ method }) => {
       if (method === "worktree.created" || method === "worktree.removed") {
