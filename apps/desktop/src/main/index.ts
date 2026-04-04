@@ -19,6 +19,10 @@ import {
 } from "./file-tree"
 import { getGitChangesOverview } from "./git-status"
 
+if (process.env.NODE_ENV_ELECTRON_VITE === "development") {
+  console.log("[ateli] main dev load (change this file to confirm --watch restart)")
+}
+
 const ptyManager = new PtyManager()
 
 const fsWatchByKey = new Map<string, () => void>()

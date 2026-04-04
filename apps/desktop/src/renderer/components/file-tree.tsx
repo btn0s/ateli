@@ -1,8 +1,14 @@
 import type { MutableRefObject } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { File } from "lucide-react"
+import { track, useEditor } from "tldraw"
 import { cn } from "@workspace/ui/lib/utils"
 import { getRepoPath } from "@/lib/default-actions"
+import {
+  normalizeFsRoot,
+  resolveFilesRootFromCwd,
+  type WorktreeRootCandidate,
+} from "@/lib/worktree-files-root"
 import { SidebarPanelHeader } from "@/components/sidebar-panel-header"
 import {
   SidebarTreeBranch,
@@ -140,10 +146,6 @@ type DirEntry = {
   isDirectory: boolean
 }
 
-function normalizeRoot(p: string): string {
-  return p.replace(/[/\\]+$/, "") || p
-}
-
 function pathDepth(p: string): number {
   return p.split(/[/\\]/).filter(Boolean).length
 }
@@ -255,13 +257,15 @@ function ChangesList({
   )
 }
 
-export function FileTree() {
-  const rootPath = getRepoPath()
+export const FileTree = track(function FileTree() {
+  const editor = useEditor()
+  const repoPath = getRepoPath()
+  const [worktrees, setWorktrees] = useState<WorktreeRootCandidate[]>([])
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
   const [gitOverview, setGitOverview] = useState<GitChangesOverview | null>(null)
   const [gitOverviewLoading, setGitOverviewLoading] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(() =>
-    rootPath ? new Set([normalizeRoot(rootPath)]) : new Set(),
+    repoPath ? new Set([normalizeFsRoot(repoPath)]) : new Set(),
   )
   const [reloadSeq, setReloadSeq] = useState(0)
   const [, setRenderVersion] = useState(0)
@@ -271,24 +275,56 @@ export function FileTree() {
     setRenderVersion((v) => v + 1)
   }, [])
 
+  const refreshWorktrees = useCallback(() => {
+    if (!repoPath) {
+      setWorktrees([])
+      return
+    }
+    void window.electron.worktree.list(repoPath).then(setWorktrees)
+  }, [repoPath])
+
   useEffect(() => {
-    if (!rootPath) {
+    refreshWorktrees()
+    const remove = window.electron.rpc.onNotification(({ method }) => {
+      if (method === "worktree.created" || method === "worktree.removed") {
+        refreshWorktrees()
+      }
+    })
+    return remove
+  }, [refreshWorktrees])
+
+  let filesRootPath = ""
+  if (repoPath) {
+    const normRepo = normalizeFsRoot(repoPath)
+    filesRootPath = normRepo
+    const ids = editor.getSelectedShapeIds()
+    if (ids.length === 1) {
+      const shape = editor.getShape(ids[0]!)
+      if (shape?.type === "terminal") {
+        const cwd = shape.props.cwd ?? normRepo
+        filesRootPath = resolveFilesRootFromCwd(repoPath, worktrees, cwd)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!filesRootPath) {
       setExpanded(new Set())
       cacheRef.current = new Map()
       return
     }
-    const norm = normalizeRoot(rootPath)
+    const norm = normalizeFsRoot(filesRootPath)
     setExpanded(new Set([norm]))
     cacheRef.current = new Map()
     setReloadSeq((s) => s + 1)
-  }, [rootPath])
+  }, [filesRootPath])
 
   useEffect(() => {
-    if (!rootPath) return
-    const norm = normalizeRoot(rootPath)
+    if (!filesRootPath) return
+    const norm = normalizeFsRoot(filesRootPath)
     void window.electron.fs.watchRoot(norm)
     const remove = window.electron.fs.onChanged(({ rootPath: changed }) => {
-      if (normalizeRoot(changed) === norm) {
+      if (normalizeFsRoot(changed) === norm) {
         setReloadSeq((s) => s + 1)
       }
     })
@@ -296,12 +332,12 @@ export function FileTree() {
       remove()
       window.electron.fs.unwatchRoot(norm)
     }
-  }, [rootPath])
+  }, [filesRootPath])
 
   useEffect(() => {
-    if (!rootPath) return
+    if (!filesRootPath) return
     let cancelled = false
-    const norm = normalizeRoot(rootPath)
+    const norm = normalizeFsRoot(filesRootPath)
     const dirs = [...expanded].sort((a, b) => pathDepth(a) - pathDepth(b))
 
     ;(async () => {
@@ -321,19 +357,19 @@ export function FileTree() {
     return () => {
       cancelled = true
     }
-  }, [rootPath, expanded, reloadSeq, bump])
+  }, [filesRootPath, expanded, reloadSeq, bump])
 
   const gitOverviewLoadedRef = useRef(false)
 
   const refreshGitOverview = useCallback(
     async (opts?: { showLoading?: boolean }) => {
-      if (!rootPath) {
+      if (!filesRootPath) {
         setGitOverview(null)
         setGitOverviewLoading(false)
         gitOverviewLoadedRef.current = false
         return
       }
-      const norm = normalizeRoot(rootPath)
+      const norm = normalizeFsRoot(filesRootPath)
       const showLoading = opts?.showLoading ?? !gitOverviewLoadedRef.current
       if (showLoading) setGitOverviewLoading(true)
       const r = await window.electron.git.status(norm)
@@ -341,7 +377,7 @@ export function FileTree() {
       gitOverviewLoadedRef.current = true
       if (showLoading) setGitOverviewLoading(false)
     },
-    [rootPath],
+    [filesRootPath],
   )
 
   useEffect(() => {
@@ -350,11 +386,11 @@ export function FileTree() {
   }, [refreshGitOverview])
 
   useEffect(() => {
-    if (!rootPath) return
-    const norm = normalizeRoot(rootPath)
+    if (!filesRootPath) return
+    const norm = normalizeFsRoot(filesRootPath)
     let debounce: ReturnType<typeof setTimeout> | undefined
     const remove = window.electron.fs.onChanged(({ rootPath: changed }) => {
-      if (normalizeRoot(changed) !== norm) return
+      if (normalizeFsRoot(changed) !== norm) return
       if (debounce !== undefined) clearTimeout(debounce)
       debounce = setTimeout(() => {
         debounce = undefined
@@ -365,7 +401,7 @@ export function FileTree() {
       if (debounce !== undefined) clearTimeout(debounce)
       remove()
     }
-  }, [rootPath, refreshGitOverview])
+  }, [filesRootPath, refreshGitOverview])
 
   const changeCount =
     gitOverview && !gitOverview.error ? gitOverview.entries.length : 0
@@ -379,9 +415,9 @@ export function FileTree() {
     })
   }, [])
 
-  if (!rootPath) return null
+  if (!repoPath) return null
 
-  const norm = normalizeRoot(rootPath)
+  const norm = normalizeFsRoot(filesRootPath)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
@@ -428,4 +464,4 @@ export function FileTree() {
       </div>
     </div>
   )
-}
+})

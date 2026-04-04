@@ -1,0 +1,8 @@
+{
+  "watch": ["electron.vite.config.ts", "package.json"],
+  "ignore": ["node_modules/**", "out/**"],
+  "ext": "ts,json",
+  "exec": "electron-vite dev --watch",
+  "delay": 400,
+  "signal": "SIGTERM"
+}
