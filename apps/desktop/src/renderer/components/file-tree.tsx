@@ -216,7 +216,7 @@ function FileTreeRows({
 }
 
 const changesPanelHintClass =
-  "py-px text-[10px] leading-tight text-muted-foreground"
+  "py-2 pl-1.5 text-[10px] leading-tight text-muted-foreground"
 
 function ChangesList({
   overview,
