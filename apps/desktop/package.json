@@ -33,6 +33,7 @@
     "@vitejs/plugin-react": "^4.5.2",
     "@workspace/eslint-config": "workspace:^",
     "@workspace/typescript-config": "workspace:*",
+    "agentation": "^3.0.2",
     "electron": "^36.3.2",
     "electron-vite": "^3.1.0",
     "eslint": "^9.39.2",

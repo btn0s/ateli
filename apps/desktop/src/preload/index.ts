@@ -30,6 +30,22 @@ contextBridge.exposeInMainWorld("electron", {
     onExit: (sessionKey: string, callback: () => void) =>
       onIpc(`terminal:exit:${sessionKey}`, callback),
   },
+  git: {
+    status: (repoPath: string) =>
+      ipcRenderer.invoke("git:status", { repoPath }) as Promise<{
+        entries: {
+          path: string
+          absPath: string
+          indexStatus: string
+          workTreeStatus: string
+          added: number
+          removed: number
+        }[]
+        branch: string
+        trunk: string | null
+        error: string | null
+      }>,
+  },
   worktree: {
     list: (repoPath: string) =>
       ipcRenderer.invoke("worktree:list", { repoPath }) as Promise<

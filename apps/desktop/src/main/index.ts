@@ -17,6 +17,7 @@ import {
   startFsWatch,
   fsWatchKey,
 } from "./file-tree"
+import { getGitChangesOverview } from "./git-status"
 
 const ptyManager = new PtyManager()
 
@@ -130,6 +131,13 @@ ipcMain.handle(
   "worktree:list",
   async (_event, { repoPath }: { repoPath: string }) => {
     return listGitWorktrees(repoPath)
+  },
+)
+
+ipcMain.handle(
+  "git:status",
+  async (_event, { repoPath }: { repoPath: string }) => {
+    return getGitChangesOverview(repoPath)
   },
 )
 
