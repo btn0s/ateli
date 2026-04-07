@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { track, useEditor } from "tldraw"
 import type { TLShapeId } from "tldraw"
 import { Plus, Terminal } from "lucide-react"
@@ -9,13 +9,11 @@ import {
   SidebarTreeBranch,
   SidebarTreeRow,
 } from "@/components/sidebar-tree"
-
-interface WorktreeInfo {
-  path: string
-  branch: string
-  head: string
-  isMain: boolean
-}
+import {
+  useWorktrees,
+  type WorktreeIndexEntry,
+} from "@/contexts/worktree-index-context"
+import { terminalsBelongingToWorktree } from "@/lib/worktree-terminals"
 
 export const WorktreeList = track(function WorktreeList({
   repoPath,
@@ -23,28 +21,14 @@ export const WorktreeList = track(function WorktreeList({
   repoPath: string
 }) {
   const editor = useEditor()
-  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([])
+  const worktrees = useWorktrees()
   const [expanded, setExpanded] = useState(
     () => new Set<string>([repoPath]),
   )
 
-  const refresh = useCallback(() => {
-    window.electron.worktree.list(repoPath).then(setWorktrees)
-  }, [repoPath])
-
   useEffect(() => {
     setExpanded(new Set([repoPath]))
   }, [repoPath])
-
-  useEffect(() => {
-    refresh()
-    const remove = window.electron.rpc.onNotification(({ method }) => {
-      if (method === "worktree.created" || method === "worktree.removed") {
-        refresh()
-      }
-    })
-    return remove
-  }, [refresh])
 
   // Get all terminal shapes reactively
   const terminalShapes = editor
@@ -53,7 +37,7 @@ export const WorktreeList = track(function WorktreeList({
 
   // Main repo first, then non-main worktrees (avoid duplicate main)
   const mainWt = worktrees.find((w) => w.isMain)
-  const entries: WorktreeInfo[] = [
+  const entries: WorktreeIndexEntry[] = [
     mainWt ?? { path: repoPath, branch: "main", head: "", isMain: true },
     ...worktrees.filter((w) => !w.isMain),
   ]
@@ -98,19 +82,12 @@ export const WorktreeList = track(function WorktreeList({
         const rowKey = wt.isMain ? repoPath : wt.path
         const cwdForTerminal = wt.isMain ? repoPath : wt.path
 
-        const terminals = terminalShapes.filter((s) => {
-          const cwd = (s.props as { cwd?: string }).cwd
-          if (!cwd) return wt.isMain
-          if (wt.isMain) {
-            // Main gets terminals whose cwd is the repo root (not inside a worktree)
-            return (
-              cwd === repoPath ||
-              (cwd.startsWith(repoPath) &&
-                !worktrees.some((w) => cwd.startsWith(w.path)))
-            )
-          }
-          return cwd.startsWith(wt.path)
-        })
+        const terminals = terminalsBelongingToWorktree(
+          repoPath,
+          worktrees,
+          wt,
+          terminalShapes,
+        )
 
         const isExpanded = expanded.has(rowKey)
 

@@ -4,7 +4,9 @@ import {
   HTMLContainer,
   RecordProps,
   T,
+  type Editor,
   TLShape,
+  type TLShapeId,
   useEditor,
 } from "tldraw"
 import { Terminal } from "@xterm/xterm"
@@ -12,8 +14,46 @@ import { FitAddon } from "@xterm/addon-fit"
 import { TerminalSquare } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { ShapeChrome } from "@/components/shape-chrome"
+import { useWorktrees } from "@/contexts/worktree-index-context"
+import { terminalTitleFromCwd } from "@/lib/terminal-worktree-title"
 
 const TERMINAL_SHAPE_TYPE = "terminal" as const
+
+/** Bypass confirm dialog when deleting terminals programmatically (e.g. worktree removed). */
+const terminalDeleteBypassIds = new Set<string>()
+
+export function consumeTerminalDeleteBypass(shapeId: string): boolean {
+  if (!terminalDeleteBypassIds.has(shapeId)) return false
+  terminalDeleteBypassIds.delete(shapeId)
+  return true
+}
+
+function markTerminalDeleteBypass(ids: readonly TLShapeId[]) {
+  for (const id of ids) terminalDeleteBypassIds.add(id)
+}
+
+export function deleteTerminalShapesSilently(
+  editor: Editor,
+  ids: TLShapeId[],
+): void {
+  if (ids.length === 0) return
+  const sessionKeys: string[] = []
+  for (const id of ids) {
+    const s = editor.getShape(id)
+    if (s?.type === "terminal" && s.props.sidecarSessionId) {
+      sessionKeys.push(s.props.sidecarSessionId)
+    }
+  }
+  markTerminalDeleteBypass(ids)
+  try {
+    editor.deleteShapes(ids)
+  } finally {
+    for (const id of ids) terminalDeleteBypassIds.delete(id)
+  }
+  for (const key of sessionKeys) {
+    window.electron.terminal.dispose(key)
+  }
+}
 
 declare module "tldraw" {
   interface TLGlobalShapePropsMap {
@@ -39,6 +79,7 @@ function TerminalComponent({
   isInteractive: boolean
   cwd: string
 }) {
+  const worktrees = useWorktrees()
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -227,9 +268,7 @@ function TerminalComponent({
     }
   }, [isInteractive])
 
-  const titleText = shape.props.cwd
-    ? shape.props.cwd.split("/").pop() || "Terminal"
-    : "Terminal"
+  const titleText = terminalTitleFromCwd(shape.props.cwd, cwd, worktrees)
 
   return (
     <ShapeChrome

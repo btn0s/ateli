@@ -4,11 +4,8 @@ import { File } from "lucide-react"
 import { track, useEditor } from "tldraw"
 import { cn } from "@workspace/ui/lib/utils"
 import { getRepoPath } from "@/lib/default-actions"
-import {
-  normalizeFsRoot,
-  resolveFilesRootFromCwd,
-  type WorktreeRootCandidate,
-} from "@/lib/worktree-files-root"
+import { useWorktrees } from "@/contexts/worktree-index-context"
+import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
 import { SidebarPanelHeader } from "@/components/sidebar-panel-header"
 import {
   SidebarTreeBranch,
@@ -260,7 +257,7 @@ function ChangesList({
 export const FileTree = track(function FileTree() {
   const editor = useEditor()
   const repoPath = getRepoPath()
-  const [worktrees, setWorktrees] = useState<WorktreeRootCandidate[]>([])
+  const worktrees = useWorktrees()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
   const [gitOverview, setGitOverview] = useState<GitChangesOverview | null>(null)
   const [gitOverviewLoading, setGitOverviewLoading] = useState(false)
@@ -274,24 +271,6 @@ export const FileTree = track(function FileTree() {
   const bump = useCallback(() => {
     setRenderVersion((v) => v + 1)
   }, [])
-
-  const refreshWorktrees = useCallback(() => {
-    if (!repoPath) {
-      setWorktrees([])
-      return
-    }
-    void window.electron.worktree.list(repoPath).then(setWorktrees)
-  }, [repoPath])
-
-  useEffect(() => {
-    refreshWorktrees()
-    const remove = window.electron.rpc.onNotification(({ method }) => {
-      if (method === "worktree.created" || method === "worktree.removed") {
-        refreshWorktrees()
-      }
-    })
-    return remove
-  }, [refreshWorktrees])
 
   let filesRootPath = ""
   if (repoPath) {

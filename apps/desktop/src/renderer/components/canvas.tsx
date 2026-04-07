@@ -13,7 +13,14 @@ import {
 } from "tldraw"
 import type { TLComponents, TLShapeId, TLUiContextMenuProps, TLUiIconType } from "tldraw"
 import "tldraw/tldraw.css"
-import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
+import { WorktreeIndexProvider } from "@/contexts/worktree-index-context"
+import {
+  TerminalShapeUtil,
+  setTerminalCwd,
+  consumeTerminalDeleteBypass,
+  deleteTerminalShapesSilently,
+} from "@/shapes/terminal-shape"
+import { cwdUnderRemovedWorktree } from "@/lib/terminal-worktree-title"
 import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
 import { setRepoPath, getRepoPath, addTerminalAtCenter } from "@/lib/default-actions"
 import "@/lib/default-actions"
@@ -133,6 +140,7 @@ function TerminalDeleteDialog() {
       if (shape.type !== "terminal") return
       if (!shape.props.sidecarSessionId) return
       const shapeId = shape.id as TLShapeId
+      if (consumeTerminalDeleteBypass(shapeId)) return
       if (allowDeleteRef.current.has(shapeId)) {
         allowDeleteRef.current.delete(shapeId)
         return
@@ -465,6 +473,20 @@ function RpcBridge() {
         addTerminalAtCenter(editor, { sidecarSessionId: params.sessionKey as string })
       } else if (method === "worktree.created") {
         addTerminalAtCenter(editor, { cwd: params.path as string })
+      } else if (method === "worktree.removed") {
+        const removedPath = params.path as string
+        const terminals = editor
+          .getCurrentPageShapes()
+          .filter((s) => s.type === "terminal")
+        const toRemove = terminals
+          .filter((s) =>
+            cwdUnderRemovedWorktree(
+              (s.props as { cwd?: string }).cwd,
+              removedPath,
+            ),
+          )
+          .map((s) => s.id as TLShapeId)
+        deleteTerminalShapesSilently(editor, toRemove)
       }
     })
 
@@ -484,18 +506,20 @@ export function Canvas({ folderPath }: { folderPath: string }) {
 
   return (
     <div className="h-screen w-screen">
-      <Tldraw
-        persistenceKey={`ateli:canvas:${folderPath}`}
-        components={components}
-        shapeUtils={customShapeUtils}
-        options={{ gridSteps: [{ min: 1, step: 20 }] }}
-        onMount={(editor) => {
-          editor.user.updateUserPreferences({ colorScheme: "dark" })
-          editor.updateInstanceState({ isGridMode: true })
-        }}
-      >
-        <RpcBridge />
-      </Tldraw>
+      <WorktreeIndexProvider repoPath={folderPath}>
+        <Tldraw
+          persistenceKey={`ateli:canvas:${folderPath}`}
+          components={components}
+          shapeUtils={customShapeUtils}
+          options={{ gridSteps: [{ min: 1, step: 20 }] }}
+          onMount={(editor) => {
+            editor.user.updateUserPreferences({ colorScheme: "dark" })
+            editor.updateInstanceState({ isGridMode: true })
+          }}
+        >
+          <RpcBridge />
+        </Tldraw>
+      </WorktreeIndexProvider>
     </div>
   )
 }
