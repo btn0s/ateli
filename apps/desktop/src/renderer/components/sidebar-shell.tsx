@@ -106,10 +106,14 @@ export function SidebarShell({
       {!collapsed && (
         <div
           className={cn(
-            "flex h-full min-h-0 w-full flex-col overflow-hidden border-border/50 bg-card/90 pt-10 backdrop-blur-md",
+            "flex h-full min-h-0 w-full flex-col overflow-hidden border-border/50 bg-card/90 backdrop-blur-md",
             side === "left" ? "border-r" : "border-l",
           )}
         >
+          <div
+            className="h-10 shrink-0 border-border/50 border-b"
+            aria-hidden
+          />
           {children}
         </div>
       )}
