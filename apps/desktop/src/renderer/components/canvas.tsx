@@ -207,13 +207,26 @@ function TerminalDeleteDialog() {
   )
 }
 
+const SidebarHudWithSelection = track(function SidebarHudWithSelection() {
+  const editor = useEditor()
+  const hasCanvasSelection = useValue(
+    "right-sidebar-selection",
+    () => editor.getSelectedShapeIds().length > 0,
+    [editor],
+  )
+
+  return (
+    <SidebarHud
+      left={<WorktreeList repoPath={getRepoPath()} />}
+      right={hasCanvasSelection ? <FileTree /> : undefined}
+    />
+  )
+})
+
 function CanvasOverlay() {
   return (
     <>
-      <SidebarHud
-        left={<WorktreeList repoPath={getRepoPath()} />}
-        right={<FileTree />}
-      />
+      <SidebarHudWithSelection />
       <CommandMenu />
       <TerminalDeleteDialog />
     </>

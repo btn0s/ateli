@@ -3,7 +3,8 @@ import { SidebarShell } from "./sidebar-shell"
 
 interface SidebarHudProps {
   left?: ReactNode
-  right?: ReactNode
+  /** Omitted or null: right sidebar is not mounted (no panel chrome or width). */
+  right?: ReactNode | null
 }
 
 export function SidebarHud({ left, right }: SidebarHudProps) {
@@ -17,11 +18,13 @@ export function SidebarHud({ left, right }: SidebarHudProps) {
 
       <div className="min-w-0 flex-1" />
 
-      <SidebarShell side="right" defaultWidth={240} minWidth={120}>
-        <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col px-3">
-          {right}
-        </div>
-      </SidebarShell>
+      {right != null ? (
+        <SidebarShell side="right" defaultWidth={240} minWidth={120}>
+          <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col px-3">
+            {right}
+          </div>
+        </SidebarShell>
+      ) : null}
     </div>
   )
 }
