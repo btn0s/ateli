@@ -1,18 +1,38 @@
 import type { MutableRefObject } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { File } from "lucide-react"
+import { Eye, File, MoreHorizontal } from "lucide-react"
 import { track, useEditor } from "tldraw"
 import { cn } from "@workspace/ui/lib/utils"
+import { Button } from "@workspace/ui/components/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
 import { getRepoPath } from "@/lib/default-actions"
 import { useWorktrees } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
-import { SidebarPanelHeader } from "@/components/sidebar-panel-header"
+import { SidebarTerminalDock } from "@/components/sidebar-terminal-dock"
 import {
   SidebarTreeBranch,
   SidebarTreeRow,
 } from "@/components/sidebar-tree"
 
-type FilesPanelTab = "files" | "changes"
+type FilesPanelTab = "files" | "changes" | "checks"
+
+const PANEL_ROW_BLEED =
+  "-mx-3 flex w-[calc(100%+1.5rem)] max-w-none items-center border-border/50 border-b px-3"
+
+function pillTabClass(selected: boolean) {
+  return cn(
+    "rounded-md px-2 py-0.5 text-left text-[10px] font-medium tracking-wide uppercase transition-colors",
+    "focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 focus-visible:outline-none",
+    selected
+      ? "bg-secondary text-secondary-foreground"
+      : "text-muted-foreground/55 hover:text-muted-foreground",
+  )
+}
 
 type GitChangesOverview = Awaited<ReturnType<typeof window.electron.git.status>>
 
@@ -394,52 +414,146 @@ export const FileTree = track(function FileTree() {
     })
   }, [])
 
+  const refreshPanel = useCallback(() => {
+    void refreshGitOverview({ showLoading: true })
+    setReloadSeq((s) => s + 1)
+  }, [refreshGitOverview])
+
   if (!repoPath) return null
 
   const norm = normalizeFsRoot(filesRootPath)
 
+  const workingTitle =
+    gitOverview && !gitOverview.error && gitOverview.branch
+      ? gitOverview.branch
+      : "Working…"
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
-      <SidebarPanelHeader>
-        <SidebarPanelHeader.TabList aria-label="Files panel">
-          <SidebarPanelHeader.Tab
-            selected={panelTab === "files"}
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className={cn(PANEL_ROW_BLEED, "justify-between gap-2 py-1")}>
+        <span className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
+          {workingTitle}
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className={cn(
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-none text-muted-foreground outline-none",
+              "hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring",
+            )}
+            aria-label="Panel menu"
+          >
+            <MoreHorizontal className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-40">
+            <DropdownMenuItem onClick={refreshPanel}>
+              Refresh files and git
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => void window.electron.fs.openPath(repoPath)}
+            >
+              Open repository folder
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className={cn(PANEL_ROW_BLEED, "gap-1 py-1")}>
+        <div
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5"
+          role="tablist"
+          aria-label="Workspace panel"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelTab === "files"}
+            className={pillTabClass(panelTab === "files")}
             onClick={() => setPanelTab("files")}
           >
             All files
-          </SidebarPanelHeader.Tab>
-          <SidebarPanelHeader.Tab
-            selected={panelTab === "changes"}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelTab === "changes"}
+            className={pillTabClass(panelTab === "changes")}
             onClick={() => setPanelTab("changes")}
           >
             Changes
             {changeCount > 0 ? (
-              <>
-                {" "}
-                <span className="tabular-nums">{changeCount}</span>
-              </>
+              <span className="ml-0.5 tabular-nums">{changeCount}</span>
             ) : null}
-          </SidebarPanelHeader.Tab>
-        </SidebarPanelHeader.TabList>
-        <SidebarPanelHeader.Trailer>
-          <SidebarPanelHeader.CountSpacer />
-          <SidebarPanelHeader.ActionSlot />
-        </SidebarPanelHeader.Trailer>
-      </SidebarPanelHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2 [scrollbar-gutter:stable]">
-        {panelTab === "files" ? (
-          <FileTreeRows
-            rootPath={norm}
-            expanded={expanded}
-            toggleDir={toggleDir}
-            cacheRef={cacheRef}
-          />
-        ) : (
-          <ChangesList
-            overview={gitOverview}
-            loading={gitOverviewLoading}
-          />
-        )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelTab === "checks"}
+            className={pillTabClass(panelTab === "checks")}
+            onClick={() => setPanelTab("checks")}
+          >
+            Checks
+          </button>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground"
+          title="Review changes"
+          aria-label="Review changes"
+          onClick={() => setPanelTab("changes")}
+        >
+          <Eye className="size-3" />
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className={cn(
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-none text-muted-foreground outline-none",
+              "hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring",
+            )}
+            aria-label="More"
+          >
+            <MoreHorizontal className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-36">
+            <DropdownMenuItem onClick={() => setPanelTab("files")}>
+              Show all files
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPanelTab("changes")}>
+              Show changes
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPanelTab("checks")}>
+              Show checks
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2 [scrollbar-gutter:stable]">
+          {panelTab === "checks" ? (
+            <p className="py-2 pl-0.5 text-[10px] leading-snug text-muted-foreground">
+              No automated checks are wired up for this workspace yet.
+            </p>
+          ) : panelTab === "files" ? (
+            <FileTreeRows
+              rootPath={norm}
+              expanded={expanded}
+              toggleDir={toggleDir}
+              cacheRef={cacheRef}
+            />
+          ) : (
+            <ChangesList
+              overview={gitOverview}
+              loading={gitOverviewLoading}
+            />
+          )}
+        </div>
+        <SidebarTerminalDock
+          editor={editor}
+          repoPath={repoPath}
+          worktrees={worktrees}
+        />
       </div>
     </div>
   )
