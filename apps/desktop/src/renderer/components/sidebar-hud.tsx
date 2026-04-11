@@ -18,13 +18,7 @@ export function SidebarHud({ left, right }: SidebarHudProps) {
 
       <div className="min-w-0 flex-1" />
 
-      {right != null ? (
-        <SidebarShell side="right" defaultWidth={240} minWidth={120}>
-          <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col px-3">
-            {right}
-          </div>
-        </SidebarShell>
-      ) : null}
+      {right != null ? right : null}
     </div>
   )
 }

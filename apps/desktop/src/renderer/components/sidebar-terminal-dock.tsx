@@ -66,7 +66,7 @@ export function SidebarTerminalDock({
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 w-fit rounded-md text-[10px] font-medium"
+              className="h-7 w-fit rounded-none text-[10px] font-medium"
               onClick={() =>
                 editor.zoomToSelection({ animation: { duration: 200 } })
               }

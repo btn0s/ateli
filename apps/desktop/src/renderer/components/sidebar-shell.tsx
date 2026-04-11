@@ -7,6 +7,8 @@ interface SidebarShellProps {
   side: "left" | "right"
   defaultWidth?: number
   minWidth?: number
+  /** Content for the top traffic-light strip (e.g. branch + menu). Omit for an empty inset. */
+  safeArea?: ReactNode
   children: ReactNode
   className?: string
 }
@@ -23,6 +25,7 @@ export function SidebarShell({
   side,
   defaultWidth = 240,
   minWidth = 120,
+  safeArea,
   children,
   className,
 }: SidebarShellProps) {
@@ -110,10 +113,16 @@ export function SidebarShell({
             side === "left" ? "border-r" : "border-l",
           )}
         >
-          <div
-            className="h-10 shrink-0 border-border/50 border-b"
-            aria-hidden
-          />
+          {safeArea != null ? (
+            <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-border/50 border-b px-3">
+              {safeArea}
+            </div>
+          ) : (
+            <div
+              className="h-10 shrink-0 border-border/50 border-b"
+              aria-hidden
+            />
+          )}
           {children}
         </div>
       )}

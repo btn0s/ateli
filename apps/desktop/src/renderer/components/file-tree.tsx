@@ -13,11 +13,9 @@ import {
 import { getRepoPath } from "@/lib/default-actions"
 import { useWorktrees } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
+import { SidebarShell } from "@/components/sidebar-shell"
 import { SidebarTerminalDock } from "@/components/sidebar-terminal-dock"
-import {
-  chromeIconTriggerClass,
-  WORKSPACE_PANEL_BLEED,
-} from "@/components/sidebar-workspace-chrome"
+import { chromeIconTriggerClass } from "@/components/sidebar-workspace-chrome"
 import {
   SidebarTreeBranch,
   SidebarTreeRow,
@@ -25,13 +23,13 @@ import {
 
 type FilesPanelTab = "files" | "changes" | "checks"
 
-function workspaceTabClass(selected: boolean) {
+function filePanelTabClass(selected: boolean) {
   return cn(
-    "min-w-0 flex-1 rounded-[5px] px-1.5 py-1 text-[10px] font-medium transition-all",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
+    "min-h-9 px-1.5 text-center text-[10px] font-medium transition-colors",
+    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
     selected
-      ? "bg-background text-foreground shadow-sm dark:bg-background/90"
-      : "text-muted-foreground hover:text-foreground/85",
+      ? "bg-muted/45 text-foreground"
+      : "text-muted-foreground hover:bg-muted/20 hover:text-foreground/90",
   )
 }
 
@@ -435,47 +433,44 @@ export const FileTree = track(function FileTree() {
     gitOverviewLoading && !(gitOverview && !gitOverview.error && gitOverview.branch),
   )
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div
+  const safeArea = (
+    <>
+      <span
         className={cn(
-          WORKSPACE_PANEL_BLEED,
-          "flex flex-col border-border/50 border-b",
+          "min-w-0 flex-1 truncate font-mono text-[10px] leading-none text-foreground/90",
+          branchLabelPending && "animate-pulse text-muted-foreground",
         )}
+        title={workingTitle}
       >
-        <div className="flex items-center justify-between gap-2 px-3 py-2">
-          <span
-            className={cn(
-              "min-w-0 truncate font-mono text-[10px] leading-none text-foreground/90",
-              branchLabelPending && "animate-pulse text-muted-foreground",
-            )}
-            title={workingTitle}
+        {workingTitle}
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className={chromeIconTriggerClass}
+          aria-label="Workspace menu"
+        >
+          <MoreHorizontal className="size-3.5 opacity-80" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-40">
+          <DropdownMenuItem onClick={refreshPanel}>
+            Refresh files and git
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => void window.electron.fs.openPath(repoPath)}
           >
-            {workingTitle}
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className={chromeIconTriggerClass}
-              aria-label="Workspace menu"
-            >
-              <MoreHorizontal className="size-3.5 opacity-80" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-40">
-              <DropdownMenuItem onClick={refreshPanel}>
-                Refresh files and git
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => void window.electron.fs.openPath(repoPath)}
-              >
-                Open repository folder
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            Open repository folder
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
 
-        <div className="flex items-center gap-2 border-border/40 border-t px-3 py-2">
+  return (
+    <SidebarShell side="right" defaultWidth={240} minWidth={120} safeArea={safeArea}>
+      <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3">
+        <div className="flex w-full min-w-0 items-stretch border-b border-border/50">
           <div
-            className="flex min-h-7 min-w-0 flex-1 items-stretch rounded-md bg-muted/35 p-0.5 ring-1 ring-border/30 dark:bg-muted/20 dark:ring-border/20"
+            className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-border/40"
             role="tablist"
             aria-label="Workspace panel"
           >
@@ -483,10 +478,7 @@ export const FileTree = track(function FileTree() {
               type="button"
               role="tab"
               aria-selected={panelTab === "files"}
-              className={cn(
-                workspaceTabClass(panelTab === "files"),
-                "inline-flex min-h-7 items-center justify-center gap-1",
-              )}
+              className={filePanelTabClass(panelTab === "files")}
               onClick={() => setPanelTab("files")}
             >
               Files
@@ -496,21 +488,14 @@ export const FileTree = track(function FileTree() {
               role="tab"
               aria-selected={panelTab === "changes"}
               className={cn(
-                workspaceTabClass(panelTab === "changes"),
-                "inline-flex min-h-7 items-center justify-center gap-1",
+                filePanelTabClass(panelTab === "changes"),
+                "inline-flex items-center justify-center gap-1",
               )}
               onClick={() => setPanelTab("changes")}
             >
               <span>Changes</span>
               {changeCount > 0 ? (
-                <span
-                  className={cn(
-                    "rounded-sm px-1 py-px font-mono text-[9px] tabular-nums",
-                    panelTab === "changes"
-                      ? "bg-primary/12 text-primary"
-                      : "bg-muted-foreground/12 text-muted-foreground",
-                  )}
-                >
+                <span className="font-mono text-[9px] tabular-nums text-muted-foreground/90">
                   {changeCount}
                 </span>
               ) : null}
@@ -519,61 +504,60 @@ export const FileTree = track(function FileTree() {
               type="button"
               role="tab"
               aria-selected={panelTab === "checks"}
-              className={cn(
-                workspaceTabClass(panelTab === "checks"),
-                "inline-flex min-h-7 items-center justify-center gap-1",
-              )}
+              className={filePanelTabClass(panelTab === "checks")}
               onClick={() => setPanelTab("checks")}
             >
               Checks
             </button>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-pressed={panelTab === "changes"}
-            className={cn(
-              "size-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
-              panelTab === "changes" && "bg-muted/70 text-foreground",
-            )}
-            title="Review changes"
-            aria-label="Review changes"
-            onClick={() => setPanelTab("changes")}
-          >
-            <Eye className="size-3.5 opacity-80" />
-          </Button>
+          <div className="flex shrink-0 items-stretch border-l border-border/40">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-pressed={panelTab === "changes"}
+              className={cn(
+                "h-auto min-h-9 w-9 shrink-0 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground",
+                panelTab === "changes" && "bg-muted/60 text-foreground",
+              )}
+              title="Review changes"
+              aria-label="Review changes"
+              onClick={() => setPanelTab("changes")}
+            >
+              <Eye className="size-3.5 opacity-80" />
+            </Button>
+          </div>
         </div>
-      </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-px pb-2 pt-0.5 [scrollbar-gutter:stable]">
-          {panelTab === "checks" ? (
-            <div className="mx-0.5 rounded-md border border-dashed border-border/50 bg-muted/15 px-3 py-6 text-center">
-              <p className="text-[10px] leading-relaxed text-muted-foreground">
-                No checks configured for this repo.
-              </p>
-            </div>
-          ) : panelTab === "files" ? (
-            <FileTreeRows
-              rootPath={norm}
-              expanded={expanded}
-              toggleDir={toggleDir}
-              cacheRef={cacheRef}
-            />
-          ) : (
-            <ChangesList
-              overview={gitOverview}
-              loading={gitOverviewLoading}
-            />
-          )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2 pt-1 [scrollbar-gutter:stable]">
+            {panelTab === "checks" ? (
+              <div className="border border-dashed border-border/50 bg-muted/10 px-3 py-6 text-center">
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                  No checks configured for this repo.
+                </p>
+              </div>
+            ) : panelTab === "files" ? (
+              <FileTreeRows
+                rootPath={norm}
+                expanded={expanded}
+                toggleDir={toggleDir}
+                cacheRef={cacheRef}
+              />
+            ) : (
+              <ChangesList
+                overview={gitOverview}
+                loading={gitOverviewLoading}
+              />
+            )}
+          </div>
+          <SidebarTerminalDock
+            editor={editor}
+            repoPath={repoPath}
+            worktrees={worktrees}
+          />
         </div>
-        <SidebarTerminalDock
-          editor={editor}
-          repoPath={repoPath}
-          worktrees={worktrees}
-        />
       </div>
-    </div>
+    </SidebarShell>
   )
 })
