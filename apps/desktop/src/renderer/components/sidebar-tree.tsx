@@ -12,7 +12,7 @@ function RowRoot({
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-0 rounded-sm py-px pl-1.5 pr-0 hover:bg-accent",
+        "flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 hover:bg-accent",
         className,
       )}
     >

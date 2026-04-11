@@ -22,7 +22,7 @@ import {
   SidebarTreeRow,
 } from "@/components/sidebar-tree"
 
-type FilesPanelTab = "files" | "changes" | "checks"
+type FilesPanelTab = "files" | "changes"
 
 function filePanelTabClass(selected: boolean) {
   return cn(
@@ -119,7 +119,7 @@ function ChangeFileRow({ entry }: { entry: GitChangeRow }) {
   return (
     <div
       className={cn(
-        "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-sm py-px pl-1.5 pr-0",
+        "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-sm py-0 pl-1 pr-0",
         "hover:bg-accent",
       )}
     >
@@ -470,7 +470,7 @@ export const FileTree = track(function FileTree() {
       <Sidebar.Root>
         <div className="flex w-full min-w-0 items-stretch border-b border-border">
           <div
-            className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-border"
+            className="grid min-w-0 flex-1 grid-cols-2 divide-x divide-border"
             role="tablist"
             aria-label="Workspace panel"
           >
@@ -500,15 +500,6 @@ export const FileTree = track(function FileTree() {
                 </span>
               ) : null}
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={panelTab === "checks"}
-              className={filePanelTabClass(panelTab === "checks")}
-              onClick={() => setPanelTab("checks")}
-            >
-              Checks
-            </button>
           </div>
           <div className="flex shrink-0 items-stretch border-l border-border">
             <Button
@@ -530,14 +521,8 @@ export const FileTree = track(function FileTree() {
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <Sidebar.Section className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1 [scrollbar-gutter:stable]">
-            {panelTab === "checks" ? (
-              <div className="border border-dashed border-border bg-muted py-4 text-center">
-                <p className="text-xs text-muted-foreground">
-                  No checks configured for this repo.
-                </p>
-              </div>
-            ) : panelTab === "files" ? (
+          <Sidebar.Section className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-1 [scrollbar-gutter:stable]">
+            {panelTab === "files" ? (
               <FileTreeRows
                 rootPath={norm}
                 expanded={expanded}
@@ -551,11 +536,7 @@ export const FileTree = track(function FileTree() {
               />
             )}
           </Sidebar.Section>
-          <SidebarTerminalDock
-            editor={editor}
-            repoPath={repoPath}
-            worktrees={worktrees}
-          />
+          <SidebarTerminalDock cwd={normalizeFsRoot(repoPath)} />
         </div>
       </Sidebar.Root>
     </SidebarShell>

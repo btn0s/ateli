@@ -1,33 +1,24 @@
-import { Plus } from "lucide-react"
-import type { Editor } from "tldraw"
+import { useCallback, useState } from "react"
+import { Plus, X } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 import { Sidebar } from "@/components/sidebar"
-import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
-import { addTerminalAtCenter } from "@/lib/default-actions"
-import { terminalTitleFromCwd } from "@/lib/terminal-worktree-title"
+import { SidebarEmbeddedTerminal } from "@/components/sidebar-embedded-terminal"
 
-function selectedTerminalShape(editor: Editor) {
-  const ids = editor.getSelectedShapeIds()
-  if (ids.length !== 1) return null
-  const s = editor.getShape(ids[0]!)
-  if (s?.type !== "terminal") return null
-  return s
+function newInstanceId(): string {
+  return crypto.randomUUID()
 }
 
-export function SidebarTerminalDock({
-  editor,
-  repoPath,
-  worktrees,
-}: {
-  editor: Editor
-  repoPath: string
-  worktrees: WorktreeIndexEntry[]
-}) {
-  const shape = selectedTerminalShape(editor)
-  const title = shape
-    ? terminalTitleFromCwd(shape.props.cwd, repoPath, worktrees)
-    : null
+export function SidebarTerminalDock({ cwd }: { cwd: string }) {
+  const [instances, setInstances] = useState<string[]>(() => [newInstanceId()])
+
+  const add = useCallback(() => {
+    setInstances((s) => [...s, newInstanceId()])
+  }, [])
+
+  const remove = useCallback((id: string) => {
+    setInstances((s) => s.filter((x) => x !== id))
+  }, [])
 
   return (
     <div
@@ -44,36 +35,45 @@ export function SidebarTerminalDock({
           variant="ghost"
           size="icon-sm"
           className="text-muted-foreground"
-          title="New terminal on canvas"
-          aria-label="New terminal on canvas"
-          onClick={() => addTerminalAtCenter(editor)}
+          title="Add terminal"
+          aria-label="Add terminal"
+          onClick={add}
         >
           <Plus />
         </Button>
       </Sidebar.SectionHeader>
-      <Sidebar.Section className="py-2">
-        {shape ? (
-          <div className="flex flex-col gap-2">
-            <p className="truncate font-mono text-xs text-foreground">{title}</p>
-            <p className="text-xs text-muted-foreground">
-              Session I/O stays on the canvas; select the shape there to type.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                editor.zoomToSelection({ animation: { duration: 200 } })
-              }
-            >
-              Zoom to terminal
-            </Button>
-          </div>
-        ) : (
+
+      <Sidebar.Section className="flex flex-col gap-2 py-1.5">
+        {instances.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Select a terminal on the canvas to show its session title here.
+            No terminals open. Use + in the header to start one.
           </p>
-        )}
+        ) : null}
+        {instances.map((id) => (
+          <div
+            key={id}
+            className="relative border border-border bg-background"
+          >
+            <div className="flex items-center justify-end border-b border-border px-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="text-muted-foreground"
+                title="Close terminal"
+                aria-label="Close terminal"
+                onClick={() => remove(id)}
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
+            <SidebarEmbeddedTerminal
+              instanceKey={id}
+              cwd={cwd}
+              onSessionEnded={() => remove(id)}
+            />
+          </div>
+        ))}
       </Sidebar.Section>
     </div>
   )
