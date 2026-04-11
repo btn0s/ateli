@@ -434,7 +434,7 @@ export const FileTree = track(function FileTree() {
   )
 
   const safeArea = (
-    <Sidebar.Section className="flex h-9 min-h-9 items-center justify-between gap-1 border-b border-border">
+    <Sidebar.SectionHeader className="h-9 min-h-9">
       <span
         className={cn(
           "min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",
@@ -462,12 +462,12 @@ export const FileTree = track(function FileTree() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </Sidebar.Section>
+    </Sidebar.SectionHeader>
   )
 
   return (
     <SidebarShell side="right" defaultWidth={240} minWidth={120} safeArea={safeArea}>
-      <Sidebar.Section className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <Sidebar.Root>
         <div className="flex w-full min-w-0 items-stretch border-b border-border">
           <div
             className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-border"
@@ -530,9 +530,9 @@ export const FileTree = track(function FileTree() {
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1 [scrollbar-gutter:stable]">
+          <Sidebar.Section className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1 [scrollbar-gutter:stable]">
             {panelTab === "checks" ? (
-              <div className="border border-dashed border-border bg-muted px-2 py-4 text-center">
+              <div className="border border-dashed border-border bg-muted py-4 text-center">
                 <p className="text-xs text-muted-foreground">
                   No checks configured for this repo.
                 </p>
@@ -550,14 +550,14 @@ export const FileTree = track(function FileTree() {
                 loading={gitOverviewLoading}
               />
             )}
-          </div>
+          </Sidebar.Section>
           <SidebarTerminalDock
             editor={editor}
             repoPath={repoPath}
             worktrees={worktrees}
           />
         </div>
-      </Sidebar.Section>
+      </Sidebar.Root>
     </SidebarShell>
   )
 })

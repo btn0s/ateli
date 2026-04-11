@@ -3,7 +3,6 @@ import type { Editor } from "tldraw"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 import { Sidebar } from "@/components/sidebar"
-import { WORKSPACE_PANEL_BLEED } from "@/components/sidebar-workspace-chrome"
 import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
 import { addTerminalAtCenter } from "@/lib/default-actions"
 import { terminalTitleFromCwd } from "@/lib/terminal-worktree-title"
@@ -33,11 +32,10 @@ export function SidebarTerminalDock({
   return (
     <div
       className={cn(
-        WORKSPACE_PANEL_BLEED,
-        "flex shrink-0 flex-col border-t border-border bg-muted",
+        "flex w-full shrink-0 flex-col border-t border-border bg-muted",
       )}
     >
-      <Sidebar.Section className="flex h-8 items-center justify-between gap-1 border-b border-border">
+      <Sidebar.SectionHeader>
         <span className="text-xs font-medium text-muted-foreground uppercase">
           Terminal
         </span>
@@ -52,7 +50,7 @@ export function SidebarTerminalDock({
         >
           <Plus />
         </Button>
-      </Sidebar.Section>
+      </Sidebar.SectionHeader>
       <Sidebar.Section className="py-2">
         {shape ? (
           <div className="flex flex-col gap-2">
