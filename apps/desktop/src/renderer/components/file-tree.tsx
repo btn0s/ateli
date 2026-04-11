@@ -15,24 +15,19 @@ import { useWorktrees } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
 import { SidebarTerminalDock } from "@/components/sidebar-terminal-dock"
 import {
+  chromeIconTriggerClass,
+  WORKSPACE_PANEL_BLEED,
+} from "@/components/sidebar-workspace-chrome"
+import {
   SidebarTreeBranch,
   SidebarTreeRow,
 } from "@/components/sidebar-tree"
 
 type FilesPanelTab = "files" | "changes" | "checks"
 
-const PANEL_ROW_BLEED =
-  "-mx-3 flex w-[calc(100%+1.5rem)] max-w-none items-center border-border/50 border-b px-3"
-
-const CHROME_ICON_TRIGGER = cn(
-  "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none",
-  "transition-colors hover:bg-muted hover:text-foreground",
-  "focus-visible:ring-1 focus-visible:ring-ring",
-)
-
 function workspaceTabClass(selected: boolean) {
   return cn(
-    "min-w-0 shrink rounded-[5px] px-2 py-0.5 text-[10px] font-medium transition-all",
+    "min-w-0 flex-1 rounded-[5px] px-1.5 py-1 text-[10px] font-medium transition-all",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
     selected
       ? "bg-background text-foreground shadow-sm dark:bg-background/90"
@@ -432,87 +427,123 @@ export const FileTree = track(function FileTree() {
   const workingTitle =
     gitOverview && !gitOverview.error && gitOverview.branch
       ? gitOverview.branch
-      : "Working…"
+      : gitOverviewLoading
+        ? "…"
+        : "Working…"
+
+  const branchLabelPending = Boolean(
+    gitOverviewLoading && !(gitOverview && !gitOverview.error && gitOverview.branch),
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className={cn(PANEL_ROW_BLEED, "justify-between gap-2 py-1.5")}>
-        <span
-          className="min-w-0 truncate font-mono text-[10px] leading-none text-foreground/90"
-          title={workingTitle}
-        >
-          {workingTitle}
-        </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger className={CHROME_ICON_TRIGGER} aria-label="Workspace menu">
-            <MoreHorizontal className="size-3.5 opacity-80" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-40">
-            <DropdownMenuItem onClick={refreshPanel}>
-              Refresh files and git
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => void window.electron.fs.openPath(repoPath)}
-            >
-              Open repository folder
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className={cn(PANEL_ROW_BLEED, "gap-2 py-1.5")}>
-        <div
-          className="flex min-w-0 flex-1 items-center rounded-md bg-muted/35 p-0.5 ring-1 ring-border/30 dark:bg-muted/20 dark:ring-border/20"
-          role="tablist"
-          aria-label="Workspace panel"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panelTab === "files"}
-            className={workspaceTabClass(panelTab === "files")}
-            onClick={() => setPanelTab("files")}
-          >
-            Files
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panelTab === "changes"}
+      <div
+        className={cn(
+          WORKSPACE_PANEL_BLEED,
+          "flex flex-col border-border/50 border-b",
+        )}
+      >
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <span
             className={cn(
-              workspaceTabClass(panelTab === "changes"),
-              "inline-flex items-center gap-1",
+              "min-w-0 truncate font-mono text-[10px] leading-none text-foreground/90",
+              branchLabelPending && "animate-pulse text-muted-foreground",
             )}
+            title={workingTitle}
+          >
+            {workingTitle}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={chromeIconTriggerClass}
+              aria-label="Workspace menu"
+            >
+              <MoreHorizontal className="size-3.5 opacity-80" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuItem onClick={refreshPanel}>
+                Refresh files and git
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => void window.electron.fs.openPath(repoPath)}
+              >
+                Open repository folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="flex items-center gap-2 border-border/40 border-t px-3 py-2">
+          <div
+            className="flex min-h-7 min-w-0 flex-1 items-stretch rounded-md bg-muted/35 p-0.5 ring-1 ring-border/30 dark:bg-muted/20 dark:ring-border/20"
+            role="tablist"
+            aria-label="Workspace panel"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panelTab === "files"}
+              className={cn(
+                workspaceTabClass(panelTab === "files"),
+                "inline-flex min-h-7 items-center justify-center gap-1",
+              )}
+              onClick={() => setPanelTab("files")}
+            >
+              Files
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panelTab === "changes"}
+              className={cn(
+                workspaceTabClass(panelTab === "changes"),
+                "inline-flex min-h-7 items-center justify-center gap-1",
+              )}
+              onClick={() => setPanelTab("changes")}
+            >
+              <span>Changes</span>
+              {changeCount > 0 ? (
+                <span
+                  className={cn(
+                    "rounded-sm px-1 py-px font-mono text-[9px] tabular-nums",
+                    panelTab === "changes"
+                      ? "bg-primary/12 text-primary"
+                      : "bg-muted-foreground/12 text-muted-foreground",
+                  )}
+                >
+                  {changeCount}
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panelTab === "checks"}
+              className={cn(
+                workspaceTabClass(panelTab === "checks"),
+                "inline-flex min-h-7 items-center justify-center gap-1",
+              )}
+              onClick={() => setPanelTab("checks")}
+            >
+              Checks
+            </button>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-pressed={panelTab === "changes"}
+            className={cn(
+              "size-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
+              panelTab === "changes" && "bg-muted/70 text-foreground",
+            )}
+            title="Review changes"
+            aria-label="Review changes"
             onClick={() => setPanelTab("changes")}
           >
-            <span>Changes</span>
-            {changeCount > 0 ? (
-              <span className="rounded-sm bg-muted-foreground/15 px-1 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
-                {changeCount}
-              </span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panelTab === "checks"}
-            className={workspaceTabClass(panelTab === "checks")}
-            onClick={() => setPanelTab("checks")}
-          >
-            Checks
-          </button>
+            <Eye className="size-3.5 opacity-80" />
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Open changes"
-          aria-label="Open changes"
-          onClick={() => setPanelTab("changes")}
-        >
-          <Eye className="size-3.5 opacity-80" />
-        </Button>
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
