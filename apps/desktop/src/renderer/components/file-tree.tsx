@@ -24,13 +24,19 @@ type FilesPanelTab = "files" | "changes" | "checks"
 const PANEL_ROW_BLEED =
   "-mx-3 flex w-[calc(100%+1.5rem)] max-w-none items-center border-border/50 border-b px-3"
 
-function pillTabClass(selected: boolean) {
+const CHROME_ICON_TRIGGER = cn(
+  "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none",
+  "transition-colors hover:bg-muted hover:text-foreground",
+  "focus-visible:ring-1 focus-visible:ring-ring",
+)
+
+function workspaceTabClass(selected: boolean) {
   return cn(
-    "rounded-md px-2 py-0.5 text-left text-[10px] font-medium tracking-wide uppercase transition-colors",
-    "focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 focus-visible:outline-none",
+    "min-w-0 shrink rounded-[5px] px-2 py-0.5 text-[10px] font-medium transition-all",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
     selected
-      ? "bg-secondary text-secondary-foreground"
-      : "text-muted-foreground/55 hover:text-muted-foreground",
+      ? "bg-background text-foreground shadow-sm dark:bg-background/90"
+      : "text-muted-foreground hover:text-foreground/85",
   )
 }
 
@@ -430,19 +436,16 @@ export const FileTree = track(function FileTree() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className={cn(PANEL_ROW_BLEED, "justify-between gap-2 py-1")}>
-        <span className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
+      <div className={cn(PANEL_ROW_BLEED, "justify-between gap-2 py-1.5")}>
+        <span
+          className="min-w-0 truncate font-mono text-[10px] leading-none text-foreground/90"
+          title={workingTitle}
+        >
           {workingTitle}
         </span>
         <DropdownMenu>
-          <DropdownMenuTrigger
-            className={cn(
-              "inline-flex size-6 shrink-0 items-center justify-center rounded-none text-muted-foreground outline-none",
-              "hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring",
-            )}
-            aria-label="Panel menu"
-          >
-            <MoreHorizontal className="size-3.5" />
+          <DropdownMenuTrigger className={CHROME_ICON_TRIGGER} aria-label="Workspace menu">
+            <MoreHorizontal className="size-3.5 opacity-80" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-40">
             <DropdownMenuItem onClick={refreshPanel}>
@@ -457,9 +460,9 @@ export const FileTree = track(function FileTree() {
         </DropdownMenu>
       </div>
 
-      <div className={cn(PANEL_ROW_BLEED, "gap-1 py-1")}>
+      <div className={cn(PANEL_ROW_BLEED, "gap-2 py-1.5")}>
         <div
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5"
+          className="flex min-w-0 flex-1 items-center rounded-md bg-muted/35 p-0.5 ring-1 ring-border/30 dark:bg-muted/20 dark:ring-border/20"
           role="tablist"
           aria-label="Workspace panel"
         >
@@ -467,28 +470,33 @@ export const FileTree = track(function FileTree() {
             type="button"
             role="tab"
             aria-selected={panelTab === "files"}
-            className={pillTabClass(panelTab === "files")}
+            className={workspaceTabClass(panelTab === "files")}
             onClick={() => setPanelTab("files")}
           >
-            All files
+            Files
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={panelTab === "changes"}
-            className={pillTabClass(panelTab === "changes")}
+            className={cn(
+              workspaceTabClass(panelTab === "changes"),
+              "inline-flex items-center gap-1",
+            )}
             onClick={() => setPanelTab("changes")}
           >
-            Changes
+            <span>Changes</span>
             {changeCount > 0 ? (
-              <span className="ml-0.5 tabular-nums">{changeCount}</span>
+              <span className="rounded-sm bg-muted-foreground/15 px-1 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
+                {changeCount}
+              </span>
             ) : null}
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={panelTab === "checks"}
-            className={pillTabClass(panelTab === "checks")}
+            className={workspaceTabClass(panelTab === "checks")}
             onClick={() => setPanelTab("checks")}
           >
             Checks
@@ -498,43 +506,23 @@ export const FileTree = track(function FileTree() {
           type="button"
           variant="ghost"
           size="icon-xs"
-          className="text-muted-foreground"
-          title="Review changes"
-          aria-label="Review changes"
+          className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Open changes"
+          aria-label="Open changes"
           onClick={() => setPanelTab("changes")}
         >
-          <Eye className="size-3" />
+          <Eye className="size-3.5 opacity-80" />
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className={cn(
-              "inline-flex size-6 shrink-0 items-center justify-center rounded-none text-muted-foreground outline-none",
-              "hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring",
-            )}
-            aria-label="More"
-          >
-            <MoreHorizontal className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-36">
-            <DropdownMenuItem onClick={() => setPanelTab("files")}>
-              Show all files
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setPanelTab("changes")}>
-              Show changes
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setPanelTab("checks")}>
-              Show checks
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2 [scrollbar-gutter:stable]">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-px pb-2 pt-0.5 [scrollbar-gutter:stable]">
           {panelTab === "checks" ? (
-            <p className="py-2 pl-0.5 text-[10px] leading-snug text-muted-foreground">
-              No automated checks are wired up for this workspace yet.
-            </p>
+            <div className="mx-0.5 rounded-md border border-dashed border-border/50 bg-muted/15 px-3 py-6 text-center">
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                No checks configured for this repo.
+              </p>
+            </div>
           ) : panelTab === "files" ? (
             <FileTreeRows
               rootPath={norm}
