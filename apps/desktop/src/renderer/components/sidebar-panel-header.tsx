@@ -11,7 +11,7 @@ function Root({
   return (
     <div
       className={cn(
-        "-mx-2 flex w-[calc(100%+1rem)] max-w-none items-center gap-0.5 border-b border-border px-2 py-0.5",
+        "flex w-full items-center gap-0.5 border-b border-border py-0.5",
         className,
       )}
     >

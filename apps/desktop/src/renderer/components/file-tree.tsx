@@ -13,6 +13,7 @@ import {
 import { getRepoPath } from "@/lib/default-actions"
 import { useWorktrees } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
+import { Sidebar } from "@/components/sidebar"
 import { SidebarShell } from "@/components/sidebar-shell"
 import { SidebarTerminalDock } from "@/components/sidebar-terminal-dock"
 import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
@@ -433,7 +434,7 @@ export const FileTree = track(function FileTree() {
   )
 
   const safeArea = (
-    <>
+    <Sidebar.Section className="flex h-9 min-h-9 items-center justify-between gap-1 border-b border-border">
       <span
         className={cn(
           "min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",
@@ -461,12 +462,12 @@ export const FileTree = track(function FileTree() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </>
+    </Sidebar.Section>
   )
 
   return (
     <SidebarShell side="right" defaultWidth={240} minWidth={120} safeArea={safeArea}>
-      <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-2">
+      <Sidebar.Section className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex w-full min-w-0 items-stretch border-b border-border">
           <div
             className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-border"
@@ -556,7 +557,7 @@ export const FileTree = track(function FileTree() {
             worktrees={worktrees}
           />
         </div>
-      </div>
+      </Sidebar.Section>
     </SidebarShell>
   )
 })

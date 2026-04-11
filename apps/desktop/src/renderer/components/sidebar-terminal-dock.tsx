@@ -2,6 +2,7 @@ import { Plus } from "lucide-react"
 import type { Editor } from "tldraw"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
+import { Sidebar } from "@/components/sidebar"
 import { WORKSPACE_PANEL_BLEED } from "@/components/sidebar-workspace-chrome"
 import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
 import { addTerminalAtCenter } from "@/lib/default-actions"
@@ -36,7 +37,7 @@ export function SidebarTerminalDock({
         "flex shrink-0 flex-col border-t border-border bg-muted",
       )}
     >
-      <div className="flex h-8 items-center justify-between gap-1 border-b border-border px-2">
+      <Sidebar.Section className="flex h-8 items-center justify-between gap-1 border-b border-border">
         <span className="text-xs font-medium text-muted-foreground uppercase">
           Terminal
         </span>
@@ -51,8 +52,8 @@ export function SidebarTerminalDock({
         >
           <Plus />
         </Button>
-      </div>
-      <div className="px-2 py-2">
+      </Sidebar.Section>
+      <Sidebar.Section className="py-2">
         {shape ? (
           <div className="flex flex-col gap-2">
             <p className="truncate font-mono text-xs text-foreground">{title}</p>
@@ -75,7 +76,7 @@ export function SidebarTerminalDock({
             Select a terminal on the canvas to show its session title here.
           </p>
         )}
-      </div>
+      </Sidebar.Section>
     </div>
   )
 }

@@ -114,9 +114,7 @@ export function SidebarShell({
           )}
         >
           {safeArea != null ? (
-            <div className="flex h-9 shrink-0 items-center justify-between gap-1 border-b border-border px-2">
-              {safeArea}
-            </div>
+            <div className="shrink-0">{safeArea}</div>
           ) : (
             <div className="h-9 shrink-0 border-b border-border" aria-hidden />
           )}
