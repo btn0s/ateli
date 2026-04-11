@@ -1,10 +1,11 @@
+import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** Full-bleed width inside `SidebarHud`’s `px-3` content. */
-export const WORKSPACE_PANEL_BLEED = "-mx-3 w-[calc(100%+1.5rem)] max-w-none"
+/** Full-bleed inside sidebar content padded with `px-2` (matches `SidebarHud`). */
+export const WORKSPACE_PANEL_BLEED = "-mx-2 w-[calc(100%+1rem)] max-w-none"
 
-export const chromeIconTriggerClass = cn(
-  "inline-flex size-7 shrink-0 items-center justify-center rounded-none text-muted-foreground outline-none",
-  "transition-colors hover:bg-muted hover:text-foreground",
-  "focus-visible:ring-1 focus-visible:ring-ring",
+/** Shared ghost icon control — same as `Button variant="ghost" size="icon-sm"`. */
+export const workspaceIconButtonClass = cn(
+  buttonVariants({ variant: "ghost", size: "icon-sm" }),
+  "text-muted-foreground",
 )

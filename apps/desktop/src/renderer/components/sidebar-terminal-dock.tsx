@@ -2,10 +2,7 @@ import { Plus } from "lucide-react"
 import type { Editor } from "tldraw"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
-import {
-  chromeIconTriggerClass,
-  WORKSPACE_PANEL_BLEED,
-} from "@/components/sidebar-workspace-chrome"
+import { WORKSPACE_PANEL_BLEED } from "@/components/sidebar-workspace-chrome"
 import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
 import { addTerminalAtCenter } from "@/lib/default-actions"
 import { terminalTitleFromCwd } from "@/lib/terminal-worktree-title"
@@ -36,37 +33,36 @@ export function SidebarTerminalDock({
     <div
       className={cn(
         WORKSPACE_PANEL_BLEED,
-        "flex shrink-0 flex-col border-border/50 border-t bg-muted/10 dark:bg-muted/5",
+        "flex shrink-0 flex-col border-t border-border bg-muted",
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-border/40 border-b px-3 py-2">
-        <span className="text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+      <div className="flex h-8 items-center justify-between gap-1 border-b border-border px-2">
+        <span className="text-xs font-medium text-muted-foreground uppercase">
           Terminal
         </span>
-        <button
+        <Button
           type="button"
-          className={chromeIconTriggerClass}
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
           title="New terminal on canvas"
           aria-label="New terminal on canvas"
           onClick={() => addTerminalAtCenter(editor)}
         >
-          <Plus className="size-3.5 opacity-90" />
-        </button>
+          <Plus />
+        </Button>
       </div>
-      <div className="px-3 py-3">
+      <div className="px-2 py-2">
         {shape ? (
-          <div className="flex flex-col gap-2.5">
-            <p className="truncate font-mono text-[10px] leading-tight text-foreground/95">
-              {title}
-            </p>
-            <p className="text-[10px] leading-relaxed text-muted-foreground">
+          <div className="flex flex-col gap-2">
+            <p className="truncate font-mono text-xs text-foreground">{title}</p>
+            <p className="text-xs text-muted-foreground">
               Session I/O stays on the canvas; select the shape there to type.
             </p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 w-fit rounded-none text-[10px] font-medium"
               onClick={() =>
                 editor.zoomToSelection({ animation: { duration: 200 } })
               }
@@ -75,7 +71,7 @@ export function SidebarTerminalDock({
             </Button>
           </div>
         ) : (
-          <p className="text-[10px] leading-relaxed text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Select a terminal on the canvas to show its session title here.
           </p>
         )}

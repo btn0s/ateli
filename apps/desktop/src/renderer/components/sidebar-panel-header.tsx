@@ -11,7 +11,7 @@ function Root({
   return (
     <div
       className={cn(
-        "-mx-3 flex w-[calc(100%+1.5rem)] max-w-none items-center gap-0.5 border-border/50 border-b px-3 py-0.5",
+        "-mx-2 flex w-[calc(100%+1rem)] max-w-none items-center gap-0.5 border-b border-border px-2 py-0.5",
         className,
       )}
     >
@@ -23,7 +23,7 @@ function Root({
 function Title({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-1 items-center px-0.5 py-0.5">
-      <span className="truncate pl-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <span className="truncate pl-0.5 text-xs font-medium uppercase text-muted-foreground">
         {children}
       </span>
     </div>
@@ -47,7 +47,7 @@ function Trailer({
 function CountSpacer({ value = "0" }: { value?: string }) {
   return (
     <span
-      className="min-w-[2ch] shrink-0 text-right tabular-nums text-[10px] text-transparent select-none"
+      className="min-w-[2ch] shrink-0 text-right tabular-nums text-xs text-transparent select-none"
       aria-hidden
     >
       {value}
@@ -103,10 +103,10 @@ function Tab({
     >
       <span
         className={cn(
-          "truncate pl-0.5 text-left text-[10px] font-medium uppercase tracking-wider transition-colors",
+          "truncate pl-0.5 text-left text-xs font-medium uppercase transition-colors",
           selected
             ? "text-muted-foreground"
-            : "text-muted-foreground/45 hover:text-muted-foreground/75",
+            : "text-muted-foreground/70 hover:text-muted-foreground",
         )}
       >
         {children}

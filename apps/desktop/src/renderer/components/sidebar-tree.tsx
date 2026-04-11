@@ -80,7 +80,7 @@ function RowMeta({ className, children }: { className?: string; children: ReactN
   return (
     <span
       className={cn(
-        "min-w-[2ch] shrink-0 text-right tabular-nums text-[10px] text-muted-foreground",
+        "min-w-[2ch] shrink-0 text-right tabular-nums text-xs text-muted-foreground",
         className,
       )}
     >
@@ -92,7 +92,7 @@ function RowMeta({ className, children }: { className?: string; children: ReactN
 function RowMetaPlaceholder({ value = "0" }: { value?: string }) {
   return (
     <span
-      className="min-w-[2ch] shrink-0 text-right tabular-nums text-[10px] text-transparent select-none"
+      className="min-w-[2ch] shrink-0 text-right tabular-nums text-xs text-transparent select-none"
       aria-hidden
     >
       {value}

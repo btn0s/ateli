@@ -15,7 +15,7 @@ import { useWorktrees } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
 import { SidebarShell } from "@/components/sidebar-shell"
 import { SidebarTerminalDock } from "@/components/sidebar-terminal-dock"
-import { chromeIconTriggerClass } from "@/components/sidebar-workspace-chrome"
+import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
 import {
   SidebarTreeBranch,
   SidebarTreeRow,
@@ -25,11 +25,11 @@ type FilesPanelTab = "files" | "changes" | "checks"
 
 function filePanelTabClass(selected: boolean) {
   return cn(
-    "min-h-9 px-1.5 text-center text-[10px] font-medium transition-colors",
+    "h-8 min-h-8 px-1 text-center text-xs font-medium transition-colors",
     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
     selected
-      ? "bg-muted/45 text-foreground"
-      : "text-muted-foreground hover:bg-muted/20 hover:text-foreground/90",
+      ? "bg-muted text-foreground"
+      : "text-muted-foreground hover:bg-muted",
   )
 }
 
@@ -93,11 +93,11 @@ function statusLetterBadge(
 function DiffStat({ added, removed }: { added: number; removed: number }) {
   if (added === 0 && removed === 0) {
     return (
-      <span className="text-[10px] text-muted-foreground tabular-nums">—</span>
+      <span className="text-xs text-muted-foreground tabular-nums">—</span>
     )
   }
   return (
-    <span className="flex shrink-0 items-baseline gap-1 text-[10px] tabular-nums">
+    <span className="flex shrink-0 items-baseline gap-1 text-xs tabular-nums">
       {added > 0 ? (
         <span className="font-medium text-emerald-500/95">+{added}</span>
       ) : null}
@@ -125,7 +125,7 @@ function ChangeFileRow({ entry }: { entry: GitChangeRow }) {
       <button
         type="button"
         className={cn(
-          "min-w-0 rounded-sm px-0 py-0 text-left font-mono text-[11px] leading-tight transition-colors",
+          "min-w-0 rounded-sm px-0 py-0 text-left font-mono text-xs leading-tight transition-colors",
           "text-muted-foreground hover:text-accent-foreground",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         )}
@@ -144,7 +144,7 @@ function ChangeFileRow({ entry }: { entry: GitChangeRow }) {
       </div>
       <span
         className={cn(
-          "flex size-6 shrink-0 items-center justify-center font-mono text-[10px] font-semibold tabular-nums",
+          "flex size-6 shrink-0 items-center justify-center font-mono text-xs font-semibold tabular-nums",
           badge.className,
         )}
         title={badgeDescription}
@@ -233,8 +233,7 @@ function FileTreeRows({
   )
 }
 
-const changesPanelHintClass =
-  "py-2 pl-1.5 text-[10px] leading-tight text-muted-foreground"
+const changesPanelHintClass = "py-1.5 pl-1 text-xs text-muted-foreground"
 
 function ChangesList({
   overview,
@@ -437,7 +436,7 @@ export const FileTree = track(function FileTree() {
     <>
       <span
         className={cn(
-          "min-w-0 flex-1 truncate font-mono text-[10px] leading-none text-foreground/90",
+          "min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",
           branchLabelPending && "animate-pulse text-muted-foreground",
         )}
         title={workingTitle}
@@ -446,10 +445,10 @@ export const FileTree = track(function FileTree() {
       </span>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className={chromeIconTriggerClass}
+          className={workspaceIconButtonClass}
           aria-label="Workspace menu"
         >
-          <MoreHorizontal className="size-3.5 opacity-80" />
+          <MoreHorizontal />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-40">
           <DropdownMenuItem onClick={refreshPanel}>
@@ -467,10 +466,10 @@ export const FileTree = track(function FileTree() {
 
   return (
     <SidebarShell side="right" defaultWidth={240} minWidth={120} safeArea={safeArea}>
-      <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3">
-        <div className="flex w-full min-w-0 items-stretch border-b border-border/50">
+      <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-2">
+        <div className="flex w-full min-w-0 items-stretch border-b border-border">
           <div
-            className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-border/40"
+            className="grid min-w-0 flex-1 grid-cols-3 divide-x divide-border"
             role="tablist"
             aria-label="Workspace panel"
           >
@@ -495,7 +494,7 @@ export const FileTree = track(function FileTree() {
             >
               <span>Changes</span>
               {changeCount > 0 ? (
-                <span className="font-mono text-[9px] tabular-nums text-muted-foreground/90">
+                <span className="font-mono text-xs tabular-nums text-muted-foreground">
                   {changeCount}
                 </span>
               ) : null}
@@ -510,30 +509,30 @@ export const FileTree = track(function FileTree() {
               Checks
             </button>
           </div>
-          <div className="flex shrink-0 items-stretch border-l border-border/40">
+          <div className="flex shrink-0 items-stretch border-l border-border">
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               aria-pressed={panelTab === "changes"}
               className={cn(
-                "h-auto min-h-9 w-9 shrink-0 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground",
-                panelTab === "changes" && "bg-muted/60 text-foreground",
+                "h-8 min-h-8 w-8 shrink-0 text-muted-foreground",
+                panelTab === "changes" && "bg-muted text-foreground",
               )}
               title="Review changes"
               aria-label="Review changes"
               onClick={() => setPanelTab("changes")}
             >
-              <Eye className="size-3.5 opacity-80" />
+              <Eye />
             </Button>
           </div>
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2 pt-1 [scrollbar-gutter:stable]">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1 [scrollbar-gutter:stable]">
             {panelTab === "checks" ? (
-              <div className="border border-dashed border-border/50 bg-muted/10 px-3 py-6 text-center">
-                <p className="text-[10px] leading-relaxed text-muted-foreground">
+              <div className="border border-dashed border-border bg-muted px-2 py-4 text-center">
+                <p className="text-xs text-muted-foreground">
                   No checks configured for this repo.
                 </p>
               </div>
