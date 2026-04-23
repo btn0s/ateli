@@ -1,6 +1,32 @@
 :root {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Single-family commitment: Geist Mono for both sans and mono. */
+  --font-sans: "Geist Mono", ui-monospace, monospace;
   --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  /* Signal accent — used sparingly for live/active state. */
+  --accent-signal: oklch(0.82 0.16 80);
+
+  /* Motion tokens — short, eased-out, never bouncy. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 80ms;
+  --dur-normal: 150ms;
+  --dur-slow: 240ms;
+}
+
+@theme inline {
+  --color-signal: var(--accent-signal);
+}
+
+/* Atmospheric dark: subtle top-glow so the canvas isn't flat. */
+body {
+  background:
+    radial-gradient(
+      ellipse 90% 50% at 50% -10%,
+      oklch(1 0 0 / 3.5%) 0%,
+      transparent 60%
+    ),
+    var(--background);
 }
 
 /* Align tldraw's design tokens with our shadcn theme */
