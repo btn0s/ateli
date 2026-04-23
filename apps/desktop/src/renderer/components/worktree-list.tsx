@@ -22,6 +22,7 @@ import {
 } from "@/contexts/worktree-index-context"
 import { terminalsBelongingToWorktree } from "@/lib/worktree-terminals"
 import { useTerminalKillConfirmation } from "@/components/terminal-kill-dialog"
+import { useWorktreeRemoveConfirmation } from "@/components/worktree-remove-dialog"
 
 export const WorktreeList = track(function WorktreeList({
   repoPath,
@@ -31,6 +32,7 @@ export const WorktreeList = track(function WorktreeList({
   const editor = useEditor()
   const worktrees = useWorktrees()
   const { requestKill, dialog: killDialog } = useTerminalKillConfirmation()
+  const { requestRemove, dialog: removeDialog } = useWorktreeRemoveConfirmation()
   const [expanded, setExpanded] = useState(
     () => new Set<string>([repoPath]),
   )
@@ -75,17 +77,14 @@ export const WorktreeList = track(function WorktreeList({
     }
   }
 
-  async function removeWorktree(wt: WorktreeIndexEntry) {
+  function removeWorktree(wt: WorktreeIndexEntry) {
     if (!wt.id || wt.isMain) return
-    const ok = window.confirm(
-      `Remove worktree "${wt.branch}"?\n\nAny terminals rooted in ${wt.path} will be killed. The branch itself is not deleted.`,
-    )
-    if (!ok) return
-    try {
-      await window.electron.worktree.remove(repoPath, wt.id)
-    } catch (err) {
-      console.error("worktree.remove failed", err)
-    }
+    requestRemove({
+      repoPath,
+      id: wt.id,
+      branch: wt.branch,
+      path: wt.path,
+    })
   }
 
   function toggleExpanded(path: string) {
@@ -276,6 +275,7 @@ export const WorktreeList = track(function WorktreeList({
         )
       })}
       {killDialog}
+      {removeDialog}
     </div>
   )
 })
