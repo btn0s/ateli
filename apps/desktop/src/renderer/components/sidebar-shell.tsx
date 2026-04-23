@@ -119,10 +119,13 @@ export function SidebarShell({
             side === "left" ? "border-r" : "border-l",
           )}
         >
+          {/* Safe zone height matches the macOS hiddenInset titlebar (40px).
+              Inside, content top-aligns with pt-3 so it sits at y=12 —
+              matching BrowserWindow trafficLightPosition.y. */}
           {safeArea != null ? (
-            <div className="h-9 min-h-9 shrink-0">{safeArea}</div>
+            <div className="h-10 min-h-10 shrink-0 px-3 pt-3 pb-1">{safeArea}</div>
           ) : (
-            <div className="h-9 min-h-9 shrink-0" aria-hidden />
+            <div className="h-10 min-h-10 shrink-0" aria-hidden />
           )}
           {children}
         </div>

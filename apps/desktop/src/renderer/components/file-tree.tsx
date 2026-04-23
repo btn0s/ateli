@@ -461,11 +461,14 @@ export const FileTree = track(function FileTree() {
     gitOverviewLoading && !(gitOverview && !gitOverview.error && gitOverview.branch),
   )
 
+  // NOTE: the outer safe-zone wrapper (SidebarShell) provides height +
+  // padding that aligns with the macOS traffic lights. This inner content
+  // just fills the available space.
   const safeArea = (
-    <Sidebar.SectionHeader className="h-full">
-      {/* The outer titlebar (z-[999]) is the drag region. Interactive
-          elements in the safe zone must sit above it AND be marked
-          no-drag, otherwise clicks fall through to the drag handler. */}
+    <div className="flex h-full items-center justify-between gap-2">
+      {/* The Titlebar (z-[999]) is the drag region; interactive elements
+          in the safe zone must sit above it AND be marked no-drag, or
+          clicks fall through to the drag handler. */}
       <span
         className={cn(
           "relative z-[1000] min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",
@@ -495,7 +498,7 @@ export const FileTree = track(function FileTree() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </Sidebar.SectionHeader>
+    </div>
   )
 
   return (
