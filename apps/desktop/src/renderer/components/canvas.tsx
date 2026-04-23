@@ -53,16 +53,12 @@ import {
 
 const customShapeUtils = [TerminalShapeUtil]
 
-// Spotlight config
-const GLOW_RADIUS = 80
-const DOT_BASE_ALPHA = 0.12
-const DOT_BASE_RADIUS = 1
-const DOT_MAX_RADIUS = 1.8
-const DOT_REPEL = 4
-const GLOW_COLOR = [210, 210, 220] as const
+// Dot grid rendering
+const DOT_OUTER_ALPHA = 0.14
+const DOT_INNER_ALPHA = 0.3
+const DOT_MIN_RADIUS = 0.8
+const DOT_MAX_RADIUS = 1.25
 const BASE_DOT_COLOR = [255, 255, 255] as const
-const SMOOTHING = 0.07
-const FADE_SPEED = 0.03
 const GRID_TARGET_PX = 20
 const GRID_LOD_MIN_PX = 14
 const GRID_LOD_MAX_PX = 28
@@ -78,6 +74,164 @@ const TOOLBAR_TOOL_IDS = [
   "frame",
   "note",
 ]
+
+const ZOOM_ANIMATION = { duration: 120 }
+const ZOOM_FIT_INSET_PX = 32
+
+const ZoomControls = track(() => {
+  const editor = useEditor()
+  const zoom = useValue("canvas-zoom-level", () => editor.getZoomLevel(), [editor])
+  const hasSelection = useValue(
+    "canvas-has-selection",
+    () => editor.getSelectedShapeIds().length > 0,
+    [editor]
+  )
+
+  const zoomSteps = editor.getCameraOptions().zoomSteps
+  const minZoom = zoomSteps[0] ?? 0.1
+  const maxZoom = zoomSteps[zoomSteps.length - 1] ?? 8
+  const clampedZoom = Math.min(maxZoom, Math.max(minZoom, zoom))
+  const zoomPercent = Math.round(clampedZoom * 100)
+  const isAtMinZoom = clampedZoom <= minZoom + 0.001
+  const isAtMaxZoom = clampedZoom >= maxZoom - 0.001
+  const laneRef = useRef<HTMLDivElement>(null)
+
+  function getLaneScreenRect() {
+    const rect = laneRef.current?.getBoundingClientRect()
+    if (rect && rect.width > 0 && rect.height > 0) return rect
+
+    const viewport = editor.getViewportScreenBounds()
+    return {
+      left: viewport.x,
+      top: viewport.y,
+      width: viewport.w,
+      height: viewport.h,
+    }
+  }
+
+  function getLaneScreenCenter() {
+    const rect = getLaneScreenRect()
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    }
+  }
+
+  function getLaneScreenPoint() {
+    const center = getLaneScreenCenter()
+    const point = editor.getViewportScreenCenter().clone()
+    point.x = center.x
+    point.y = center.y
+    return point
+  }
+
+  function fitBoundsToLane(
+    bounds: { x: number; y: number; w: number; h: number },
+    opts?: { maxTargetZoom?: number; zoomOutFactor?: number }
+  ) {
+    const rect = getLaneScreenRect()
+    const laneCenter = getLaneScreenCenter()
+    const availableW = Math.max(1, rect.width - ZOOM_FIT_INSET_PX * 2)
+    const availableH = Math.max(1, rect.height - ZOOM_FIT_INSET_PX * 2)
+    const boundsW = Math.max(1, bounds.w)
+    const boundsH = Math.max(1, bounds.h)
+    const fitZoom = Math.min(
+      maxZoom,
+      Math.max(minZoom, Math.min(availableW / boundsW, availableH / boundsH))
+    )
+    const zoomOutFactor = opts?.zoomOutFactor ?? 1
+    const maxTargetZoom = opts?.maxTargetZoom ?? maxZoom
+    const targetZoom = Math.max(
+      minZoom,
+      Math.min(maxZoom, Math.min(maxTargetZoom, fitZoom * zoomOutFactor))
+    )
+
+    const centerX = bounds.x + bounds.w / 2
+    const centerY = bounds.y + bounds.h / 2
+    editor.setCamera(
+      {
+        x: laneCenter.x / targetZoom - centerX,
+        y: laneCenter.y / targetZoom - centerY,
+        z: targetZoom,
+      },
+      { animation: ZOOM_ANIMATION }
+    )
+  }
+
+  return (
+    <div className="pointer-events-none absolute inset-0" ref={laneRef}>
+      <div className="absolute bottom-0 left-0 m-3 flex items-center gap-2">
+        <div className="pointer-events-auto inline-flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
+          <button
+            className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={isAtMinZoom}
+            onClick={() =>
+              editor.zoomOut(getLaneScreenPoint(), {
+                animation: ZOOM_ANIMATION,
+              })
+            }
+            title="Zoom out"
+          >
+            -
+          </button>
+          <button
+            className="min-w-12 rounded-sm px-2 py-1 text-center text-xs font-medium tabular-nums text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
+            onClick={() =>
+              editor.resetZoom(getLaneScreenPoint(), {
+                animation: ZOOM_ANIMATION,
+              })
+            }
+            title="Reset zoom to 100%"
+          >
+            {zoomPercent}%
+          </button>
+          <button
+            className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={isAtMaxZoom}
+            onClick={() =>
+              editor.zoomIn(getLaneScreenPoint(), {
+                animation: ZOOM_ANIMATION,
+              })
+            }
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
+
+        <div className="pointer-events-auto inline-flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
+          <button
+            className="rounded-sm px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            onClick={() => {
+              const bounds = editor.getCurrentPageBounds()
+              if (!bounds) return
+              fitBoundsToLane(bounds)
+            }}
+            title="Zoom to fit"
+          >
+            Fit
+          </button>
+          <button
+            className="rounded-sm px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!hasSelection}
+            onClick={() => {
+              const bounds = editor.getSelectionPageBounds()
+              if (!bounds) return
+              fitBoundsToLane(bounds, { maxTargetZoom: 1, zoomOutFactor: 0.9 })
+            }}
+            title={
+              hasSelection
+                ? "Zoom to selection"
+                : "Select shapes to zoom to selection"
+            }
+          >
+            Sel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+})
 
 const CustomToolbar = track(() => {
   const editor = useEditor()
@@ -260,6 +414,7 @@ const SidebarHudWithSelection = track(function SidebarHudWithSelection() {
     <SidebarHud
       left={<LeftSidebarTabs repoPath={getRepoPath()} />}
       center={<DiffPreviewTabs />}
+      centerOverlay={<ZoomControls />}
       right={hasCanvasSelection ? <FileTree /> : undefined}
     />
   )
@@ -293,13 +448,6 @@ const components: TLComponents = {
     )
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
-    const mouseRef = useRef<{ x: number; y: number } | null>(null)
-    const smoothMouseRef = useRef<{ x: number; y: number } | null>(null)
-    const fadeRef = useRef(0)
-    const pointerInsideRef = useRef(false)
-    const rafRef = useRef<number>(0)
-    const runningRef = useRef(true)
-    const drawRef = useRef<() => void>()
     const lodStepRef = useRef(1)
 
     const draw = useCallback(() => {
@@ -323,37 +471,15 @@ const components: TLComponents = {
 
       ctx.clearRect(0, 0, canvasW, canvasH)
 
-      const tm = mouseRef.current
-      const hasPointer = tm !== null
-
-      if (hasPointer) {
-        if (!smoothMouseRef.current) {
-          smoothMouseRef.current = { x: tm.x, y: tm.y }
-        } else {
-          smoothMouseRef.current.x +=
-            (tm.x - smoothMouseRef.current.x) * SMOOTHING
-          smoothMouseRef.current.y +=
-            (tm.y - smoothMouseRef.current.y) * SMOOTHING
-        }
-      }
-
-      if (pointerInsideRef.current) {
-        fadeRef.current = Math.min(1, fadeRef.current + FADE_SPEED)
-      } else {
-        fadeRef.current = Math.max(0, fadeRef.current - FADE_SPEED)
-      }
-
-      const sm = smoothMouseRef.current
-
       // LOD quantization keeps dot spacing perceptually consistent across zoom levels.
       const idealStep = GRID_TARGET_PX / Math.max(camera.z, 0.0001)
       const lodStep = Math.max(1, 2 ** Math.round(Math.log2(idealStep / size)))
       const stepSize = size * lodStep
-      const stepPx = stepSize * camera.z
+      const lodStepPx = stepSize * camera.z
 
-      if (stepPx < GRID_LOD_MIN_PX) {
+      if (lodStepPx < GRID_LOD_MIN_PX) {
         lodStepRef.current = lodStepRef.current * 2
-      } else if (stepPx > GRID_LOD_MAX_PX && lodStepRef.current > 1) {
+      } else if (lodStepPx > GRID_LOD_MAX_PX && lodStepRef.current > 1) {
         lodStepRef.current = lodStepRef.current / 2
       } else {
         lodStepRef.current = lodStep
@@ -377,26 +503,18 @@ const components: TLComponents = {
       const numRows = Math.round((endPageY - startPageY) / quantizedStepSize)
       const numCols = Math.round((endPageX - startPageX) / quantizedStepSize)
 
-      const mx = sm ? sm.x * dpr : 0
-      const my = sm ? sm.y * dpr : 0
-      const fade = fadeRef.current
-      const glowR = GLOW_RADIUS * dpr
-      const glowR2 = glowR * glowR
-      const baseR = DOT_BASE_RADIUS * dpr
-      const maxR = DOT_MAX_RADIUS * dpr
-      const [gr, gg, gb] = GLOW_COLOR
+      const stepPx = quantizedStepSize * camera.z
+      const dotRadiusPx = Math.max(
+        DOT_MIN_RADIUS,
+        Math.min(DOT_MAX_RADIUS, stepPx * 0.05)
+      )
+      const outerR = dotRadiusPx * dpr
+      const innerR = outerR * 0.52
       const [br, bg, bb] = BASE_DOT_COLOR
-      const baseFill = `rgba(${br},${bg},${bb},${DOT_BASE_ALPHA})`
+      const outerFill = `rgba(${br},${bg},${bb},${DOT_OUTER_ALPHA})`
+      const innerFill = `rgba(${br},${bg},${bb},${DOT_INNER_ALPHA})`
 
-      const glowDots: {
-        x: number
-        y: number
-        r: number
-        alpha: number
-        glow: number
-      }[] = []
-
-      ctx.fillStyle = baseFill
+      ctx.fillStyle = outerFill
       ctx.shadowColor = "transparent"
       ctx.shadowBlur = 0
       ctx.beginPath()
@@ -407,90 +525,34 @@ const components: TLComponents = {
           const pageY = startPageY + row * quantizedStepSize
           const cx = (pageX + camera.x) * camera.z * dpr
           const cy = (pageY + camera.y) * camera.z * dpr
-
-          const dx = cx - mx
-          const dy = cy - my
-          const dist2 = dx * dx + dy * dy
-          const t = hasPointer ? Math.max(0, 1 - dist2 / glowR2) : 0
-          const glow = t * t * t * fade
-
-          if (glow > 0.01) {
-            const dist = Math.sqrt(dist2) || 1
-            const push = DOT_REPEL * glow * dpr
-            glowDots.push({
-              x: cx + (dx / dist) * push,
-              y: cy + (dy / dist) * push,
-              r: baseR + (maxR - baseR) * glow,
-              alpha: DOT_BASE_ALPHA + (1 - DOT_BASE_ALPHA) * glow * 0.35,
-              glow,
-            })
-          } else {
-            ctx.moveTo(cx + baseR, cy)
-            ctx.arc(cx, cy, baseR, 0, Math.PI * 2)
-          }
+          ctx.moveTo(cx + outerR, cy)
+          ctx.arc(cx, cy, outerR, 0, Math.PI * 2)
         }
       }
 
       ctx.fill()
 
-      for (const dot of glowDots) {
-        ctx.fillStyle = `rgba(${gr},${gg},${gb},${dot.alpha})`
-        ctx.shadowColor = `rgba(${gr},${gg},${gb},${dot.glow * 0.07})`
-        ctx.shadowBlur = 2.5 * dot.glow * dpr
-        ctx.beginPath()
-        ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2)
-        ctx.fill()
+      ctx.fillStyle = innerFill
+      ctx.beginPath()
+      for (let row = 0; row <= numRows; row++) {
+        for (let col = 0; col <= numCols; col++) {
+          const pageX = startPageX + col * quantizedStepSize
+          const pageY = startPageY + row * quantizedStepSize
+          const cx = (pageX + camera.x) * camera.z * dpr
+          const cy = (pageY + camera.y) * camera.z * dpr
+          ctx.moveTo(cx + innerR, cy)
+          ctx.arc(cx, cy, innerR, 0, Math.PI * 2)
+        }
       }
+      ctx.fill()
 
       ctx.shadowColor = "transparent"
       ctx.shadowBlur = 0
-
-      const delta = sm && tm ? Math.abs(sm.x - tm.x) + Math.abs(sm.y - tm.y) : 0
-      const fading = fadeRef.current > 0 && fadeRef.current < 1
-      if ((delta > 0.5 || fading) && runningRef.current) {
-        rafRef.current = requestAnimationFrame(draw)
-      }
     }, [screenBounds, camera, size, devicePixelRatio, editor])
-
-    drawRef.current = draw
 
     useLayoutEffect(() => {
       draw()
     }, [draw])
-
-    useEffect(() => {
-      runningRef.current = true
-
-      function scheduleFrame() {
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = requestAnimationFrame(() => drawRef.current?.())
-      }
-
-      function onMouseMove(e: MouseEvent) {
-        pointerInsideRef.current = true
-        if (!mouseRef.current) {
-          mouseRef.current = { x: e.clientX, y: e.clientY }
-        } else {
-          mouseRef.current.x = e.clientX
-          mouseRef.current.y = e.clientY
-        }
-        scheduleFrame()
-      }
-
-      function onMouseLeave() {
-        pointerInsideRef.current = false
-        scheduleFrame()
-      }
-
-      window.addEventListener("mousemove", onMouseMove)
-      document.addEventListener("mouseleave", onMouseLeave)
-      return () => {
-        runningRef.current = false
-        window.removeEventListener("mousemove", onMouseMove)
-        document.removeEventListener("mouseleave", onMouseLeave)
-        cancelAnimationFrame(rafRef.current)
-      }
-    }, [])
 
     return <canvas className="tl-grid" ref={canvasRef} />
   },
