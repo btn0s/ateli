@@ -3,7 +3,7 @@ import path from "node:path"
 import os from "node:os"
 
 export const ATELI_DIR = path.join(os.homedir(), ".ateli")
-export const SIDECAR_VERSION = 1
+export const SIDECAR_VERSION = 2
 export const DEFAULT_RING_BUFFER_BYTES = 8 * 1024 * 1024 // 8MB
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 
@@ -111,5 +111,4 @@ export interface PingResult {
   pid: number
   uptime: number
   version: number
-  token: string
 }

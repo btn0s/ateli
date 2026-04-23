@@ -66,9 +66,9 @@ export class SidecarClient {
       try {
         process.kill(existing.pid, 0)
         if (existing.version === SIDECAR_VERSION) {
-          await this.connect()
-          const pong = await this.ping()
-          if (pong.token === existing.token) return
+          await this.connect(existing.token)
+          await this.ping()
+          return
         }
       } catch {
         // Dead or wrong version
@@ -90,7 +90,6 @@ export class SidecarClient {
     child.unref()
 
     await this.waitForSidecar(token, 5000)
-    await this.connect()
   }
 
   private readPidFile(): PidFileData | null {
@@ -108,7 +107,7 @@ export class SidecarClient {
       const pid = this.readPidFile()
       if (pid && pid.token === token) {
         try {
-          await this.connect()
+          await this.connect(token)
           return
         } catch {
           this.disconnect()
@@ -119,13 +118,18 @@ export class SidecarClient {
     throw new Error("Sidecar failed to start within timeout")
   }
 
-  private async connect(): Promise<void> {
+  private async connect(token: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.socket = net.createConnection(SIDECAR_SOCKET_PATH, () => {
+      this.socket = net.createConnection(SIDECAR_SOCKET_PATH, async () => {
         this.socket!.removeListener("error", reject)
         this.socket!.on("error", () => this.rejectAllPending())
         this.socket!.on("close", () => this.rejectAllPending())
-        resolve()
+        try {
+          await this.rpc("sidecar.auth", { token })
+          resolve()
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)))
+        }
       })
       this.socket.on("error", reject)
       this.socket.on("data", (chunk) => this.handleData(chunk))

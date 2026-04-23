@@ -72,6 +72,7 @@ function cleanupEndpoint(endpoint: string): void {
 export class SidecarServer {
   private controlServer: net.Server | null = null;
   private controlClients = new Set<net.Socket>();
+  private authenticatedClients = new WeakSet<net.Socket>();
   private sessions = new Map<string, Session>();
   private startTime = Date.now();
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -156,11 +157,13 @@ export class SidecarServer {
 
     sock.on("close", () => {
       this.controlClients.delete(sock);
+      this.authenticatedClients.delete(sock);
       this.resetIdleTimer();
     });
 
     sock.on("error", () => {
       this.controlClients.delete(sock);
+      this.authenticatedClients.delete(sock);
     });
   }
 
@@ -174,6 +177,24 @@ export class SidecarServer {
     }
 
     const { id, method, params } = msg;
+
+    if (method === "sidecar.auth") {
+      const token = (params as { token?: string } | undefined)?.token;
+      if (typeof token === "string" && token === this.opts.token) {
+        this.authenticatedClients.add(sock);
+        sock.write(makeResponse(id, { ok: true }));
+      } else {
+        sock.write(makeError(id, -32005, "Auth failed"));
+        sock.destroy();
+      }
+      return;
+    }
+
+    if (!this.authenticatedClients.has(sock)) {
+      sock.write(makeError(id, -32005, "Auth required"));
+      sock.destroy();
+      return;
+    }
 
     switch (method) {
       case "sidecar.ping":
@@ -220,7 +241,6 @@ export class SidecarServer {
       pid: process.pid,
       uptime: Date.now() - this.startTime,
       version: SIDECAR_VERSION,
-      token: this.opts.token,
     };
     sock.write(makeResponse(id, result));
   }
@@ -310,6 +330,7 @@ export class SidecarServer {
         exitCode,
       });
       for (const client of this.controlClients) {
+        if (!this.authenticatedClients.has(client)) continue;
         client.write(notification);
       }
       this.cleanupSession(sessionId);
