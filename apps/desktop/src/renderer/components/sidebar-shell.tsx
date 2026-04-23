@@ -119,14 +119,16 @@ export function SidebarShell({
             side === "left" ? "border-r" : "border-l",
           )}
         >
-          {/* Safe zone matches the Titlebar drag region (40px). Content
-              is items-center then bumped down 2px via pt to optically
-              line up with the traffic-light vertical center. NOTE: do
-              not use `translate` here — it creates a stacking context
-              and traps z-[1000] on the interactive children, which
-              puts them back below the Titlebar drag overlay. */}
+          {/* Safe zone matches the Titlebar drag region (40px). The
+              direct child is stretched to full width + height so the
+              consumer's header (e.g. Sidebar.SectionHeader with
+              justify-between) can own layout. pt-[2px] nudges content
+              down 2px for optical alignment with the traffic lights.
+              NOTE: do not use `translate` here — it creates a new
+              stacking context and traps z-[1000] on interactive
+              children below the Titlebar drag overlay. */}
           {safeArea != null ? (
-            <div className="flex h-10 min-h-10 shrink-0 items-center px-3 pt-[2px]">
+            <div className="flex h-10 min-h-10 shrink-0 items-stretch pt-[2px] [&>*]:min-w-0 [&>*]:flex-1">
               {safeArea}
             </div>
           ) : (

@@ -24,6 +24,19 @@ export interface GitChangesOverview {
   error: string | null
 }
 
+export interface GitPatchRequest {
+  repoPath: string
+  path: string
+  absPath: string
+  indexStatus: string
+  workTreeStatus: string
+}
+
+export interface GitPatchResult {
+  patch: string | null
+  error: string | null
+}
+
 function normalizeGitPath(p: string): string {
   return p.replace(/\\/g, "/")
 }
@@ -128,6 +141,28 @@ async function readTrunkName(repoPath: string): Promise<string | null> {
   }
 }
 
+async function execDiffAllowExitOne(
+  args: string[],
+  repoPath: string,
+): Promise<string> {
+  try {
+    const { stdout } = await exec("git", args, {
+      cwd: repoPath,
+      maxBuffer: 10 * 1024 * 1024,
+    })
+    return stdout
+  } catch (error) {
+    const diffError = error as Error & {
+      code?: number
+      stdout?: string
+    }
+    if (diffError.code === 1) {
+      return diffError.stdout ?? ""
+    }
+    throw error
+  }
+}
+
 export async function getGitChangesOverview(
   repoPath: string,
 ): Promise<GitChangesOverview> {
@@ -180,6 +215,59 @@ export async function getGitChangesOverview(
       branch: "",
       trunk: null,
       error: message,
+    }
+  }
+}
+
+export async function getGitFilePatch(
+  request: GitPatchRequest,
+): Promise<GitPatchResult> {
+  try {
+    const isUntracked =
+      request.indexStatus === "?" && request.workTreeStatus === "?"
+
+    const patch = isUntracked
+      ? await execDiffAllowExitOne(
+          [
+            "-c",
+            "core.quotepath=false",
+            "diff",
+            "--no-index",
+            "--src-prefix=a/",
+            "--dst-prefix=b/",
+            "--",
+            "/dev/null",
+            request.absPath,
+          ],
+          request.repoPath,
+        )
+      : await execDiffAllowExitOne(
+          [
+            "-c",
+            "core.quotepath=false",
+            "diff",
+            "--src-prefix=a/",
+            "--dst-prefix=b/",
+            "HEAD",
+            "--",
+            request.path,
+          ],
+          request.repoPath,
+        )
+
+    const normalizedAbsPath = normalizeGitPath(request.absPath)
+    const normalizedPatch = patch
+      .replaceAll(request.absPath, request.path)
+      .replaceAll(normalizedAbsPath, request.path)
+
+    return {
+      patch: normalizedPatch || null,
+      error: null,
+    }
+  } catch (error) {
+    return {
+      patch: null,
+      error: error instanceof Error ? error.message : String(error),
     }
   }
 }
