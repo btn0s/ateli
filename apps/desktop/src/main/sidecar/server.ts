@@ -23,6 +23,9 @@ import {
   type PidFileData,
 } from "./protocol";
 
+/** Max bytes to retain in reconnect spill: prevents OOM if PTY floods during client handoff. */
+const RECONNECT_SPILL_BYTES = 1024 * 1024;
+
 export interface ServerOptions {
   controlSocketPath: string;
   sessionSocketDir: string;
@@ -43,8 +46,8 @@ interface Session {
   dataClient: net.Socket | null;
   socketPath: string;
   hasAttachedClient: boolean;
-  /** When non-null, PTY output is queued here instead of sent to client. */
-  reconnectQueue: Buffer[] | null;
+  /** When non-null, PTY output is copied into this cap while the data client is detached. */
+  reconnectSpill: RingBuffer | null;
   killEscalationTimer: NodeJS.Timeout | null;
 }
 
@@ -335,7 +338,7 @@ export class SidecarServer {
       dataClient: null,
       socketPath,
       hasAttachedClient: false,
-      reconnectQueue: null,
+      reconnectSpill: null,
       killEscalationTimer: null,
     };
 
@@ -344,8 +347,8 @@ export class SidecarServer {
       const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
       ringBuffer.write(buf);
 
-      if (session.reconnectQueue) {
-        session.reconnectQueue.push(buf);
+      if (session.reconnectSpill) {
+        session.reconnectSpill.write(buf);
         return;
       }
 
@@ -376,16 +379,17 @@ export class SidecarServer {
       }
       session.dataClient = client;
 
-      // If reconnecting, flush ring buffer snapshot + queued data
-      if (session.reconnectQueue) {
+      // If reconnecting, flush ring buffer snapshot + cap-spilled bytes from disconnect window
+      if (session.reconnectSpill) {
         const snapshot = ringBuffer.snapshot();
         if (snapshot.length > 0) {
           client.write(snapshot);
         }
-        for (const queued of session.reconnectQueue) {
-          client.write(queued);
+        const spill = session.reconnectSpill.snapshot();
+        if (spill.length > 0) {
+          client.write(spill);
         }
-        session.reconnectQueue = null;
+        session.reconnectSpill = null;
       } else if (!session.hasAttachedClient) {
         // First attach — send any data produced before client connected
         const snapshot = ringBuffer.snapshot();
@@ -444,8 +448,8 @@ export class SidecarServer {
       return;
     }
 
-    // Start queuing PTY output
-    session.reconnectQueue = [];
+    // Start capping PTY output copy until the new data client connects
+    session.reconnectSpill = new RingBuffer(RECONNECT_SPILL_BYTES);
 
     // Resize to match new client
     session.pty.resize(params.cols, params.rows);

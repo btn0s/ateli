@@ -22,6 +22,7 @@ import {
   loadWorktreeMetadata,
   saveWorktreeMetadata,
 } from "./worktree"
+import { isPathInside } from "./path-utils"
 import {
   parseManagementPatchRpc,
   rpcFiniteOr,
@@ -38,8 +39,24 @@ const ATELI_DIR = path.join(os.homedir(), ".ateli")
 const SOCKET_PATH_FILE = path.join(ATELI_DIR, "socket-path")
 const TOKEN_PATH = path.join(ATELI_DIR, "server.token")
 const SHAPES_TIMEOUT_MS = 5000
+const RPC_REQUEST_TIMEOUT_MS = 10_000
 
-type RpcHandler = (params: Record<string, unknown>) => unknown | Promise<unknown>
+export type RpcContext = { signal: AbortSignal }
+
+type RpcHandler = (
+  params: Record<string, unknown>,
+  ctx: RpcContext
+) => unknown | Promise<unknown>
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (!signal.aborted) {
+    return
+  }
+  const r = signal.reason
+  const msg =
+    r !== undefined && r !== null && typeof r === "string" ? r : "Aborted"
+  throw new Error(msg)
+}
 
 let server: net.Server | null = null
 let socketPath: string | null = null
@@ -99,13 +116,13 @@ export function startRpcServer(ptyManager: PtyManager) {
   // Method registry
   const methods = new Map<string, RpcHandler>()
 
-  methods.set("rpc.discover", () => ({
+  methods.set("rpc.discover", (_params, _ctx) => ({
     methods: Array.from(methods.keys()),
   }))
 
   // --- Terminal methods ---
 
-  methods.set("terminal.create", async (params) => {
+  methods.set("terminal.create", async (params, ctx) => {
     const p = rpcObj(params)
     const cwd = rpcOptionalString(p, "cwd")
     const name = rpcOptionalString(p, "name")
@@ -113,6 +130,7 @@ export function startRpcServer(ptyManager: PtyManager) {
     if (!cwd && !win) {
       throw new Error("cwd is required when no window is open")
     }
+    throwIfAborted(ctx.signal)
     const result = await ptyManager.createSession({
       cwd: cwd || process.cwd(),
       name,
@@ -121,40 +139,45 @@ export function startRpcServer(ptyManager: PtyManager) {
     return result
   })
 
-  methods.set("terminal.list", () => {
+  methods.set("terminal.list", (_params, _ctx) => {
     return { sessions: ptyManager.listSessions() }
   })
 
-  methods.set("terminal.write", async (params) => {
+  methods.set("terminal.write", async (params, ctx) => {
     const p = rpcObj(params)
     const id = rpcRequireString(p, "id")
     const data = rpcRequireStringData(p, "data")
+    throwIfAborted(ctx.signal)
     await ptyManager.writeSession(id, data)
     return { ok: true }
   })
 
-  methods.set("terminal.resize", async (params) => {
+  methods.set("terminal.resize", async (params, ctx) => {
     const p = rpcObj(params)
     const id = rpcRequireString(p, "id")
     const cols = rpcRequireNumber(p, "cols")
     const rows = rpcRequireNumber(p, "rows")
+    throwIfAborted(ctx.signal)
     await ptyManager.resizeSession(id, cols, rows)
     return { ok: true }
   })
 
-  methods.set("terminal.kill", async (params) => {
+  methods.set("terminal.kill", async (params, ctx) => {
     const p = rpcObj(params)
     const id = rpcRequireString(p, "id")
+    throwIfAborted(ctx.signal)
     await ptyManager.killSession(id)
     return { ok: true }
   })
 
-  methods.set("terminal.rename", async (params) => {
+  methods.set("terminal.rename", async (params, ctx) => {
     ensureManagementAllowed("agent", "renameTerminal")
     const p = rpcObj(params)
     const id = rpcRequireString(p, "id")
     const name = rpcOptionalString(p, "name")
+    throwIfAborted(ctx.signal)
     const updated = ptyManager.renameSession(id, name)
+    throwIfAborted(ctx.signal)
     broadcast("terminal.renamed", {
       id: updated.id,
       sessionKey: updated.sidecarSessionId,
@@ -163,39 +186,51 @@ export function startRpcServer(ptyManager: PtyManager) {
     return updated
   })
 
-  methods.set("terminal.reconnect", async (params) => {
+  methods.set("terminal.reconnect", async (params, ctx) => {
     const p = rpcObj(params)
     const id = rpcRequireString(p, "id")
     const cols = rpcOptionalNumber(p, "cols", 80)
     const rows = rpcOptionalNumber(p, "rows", 24)
+    throwIfAborted(ctx.signal)
     await ptyManager.reconnectSession(id, cols, rows)
     return { ok: true }
   })
 
-  methods.set("terminal.read", async (params) => {
+  methods.set("terminal.read", async (params, ctx) => {
     const p = rpcObj(params)
     const id = rpcRequireString(p, "id")
+    throwIfAborted(ctx.signal)
     const data = await ptyManager.readSession(id)
     return { data }
   })
 
   // --- Canvas methods ---
 
-  methods.set("canvas.getShapes", async () => {
+  methods.set("canvas.getShapes", async (_params, ctx) => {
     const win = getMainWindow()
     if (!win) {
       throw new Error("No window available")
     }
-
+    throwIfAborted(ctx.signal)
     return new Promise((resolve, reject) => {
       const channel = `rpc:shapes-response:${crypto.randomUUID()}`
+      const onAbort = () => {
+        clearTimeout(timer)
+        ipcMain.removeAllListeners(channel)
+        const r = ctx.signal.reason
+        reject(new Error(typeof r === "string" ? r : "Aborted"))
+      }
       const timer = setTimeout(() => {
+        ctx.signal.removeEventListener("abort", onAbort)
         ipcMain.removeAllListeners(channel)
         reject(new Error("Timed out waiting for renderer"))
       }, SHAPES_TIMEOUT_MS)
 
+      ctx.signal.addEventListener("abort", onAbort, { once: true })
+
       ipcMain.once(channel, (_event, shapes) => {
         clearTimeout(timer)
+        ctx.signal.removeEventListener("abort", onAbort)
         resolve(shapes)
       })
 
@@ -203,11 +238,12 @@ export function startRpcServer(ptyManager: PtyManager) {
     })
   })
 
-  methods.set("canvas.createTerminal", async (params) => {
+  methods.set("canvas.createTerminal", async (params, ctx) => {
     const win = getMainWindow()
     if (!win) {
       throw new Error("No window available")
     }
+    throwIfAborted(ctx.signal)
     const p = rpcObj(params)
     const x = rpcFiniteOr(p, "x", 0)
     const y = rpcFiniteOr(p, "y", 0)
@@ -221,7 +257,7 @@ export function startRpcServer(ptyManager: PtyManager) {
 
   // --- Worktree methods ---
 
-  methods.set("worktree.create", async (params) => {
+  methods.set("worktree.create", async (params, ctx) => {
     const p = rpcObj(params)
     const repoPath = rpcRequireString(p, "repoPath")
     const branch = rpcRequireString(p, "branch")
@@ -229,6 +265,7 @@ export function startRpcServer(ptyManager: PtyManager) {
     const startPoint = rpcOptionalString(p, "startPoint")
 
     const wtPath = worktreePath(repoPath, branch)
+    throwIfAborted(ctx.signal)
     await addWorktree({
       repoPath,
       worktreePath: wtPath,
@@ -236,6 +273,7 @@ export function startRpcServer(ptyManager: PtyManager) {
       createBranch,
       startPoint,
     })
+    throwIfAborted(ctx.signal)
 
     const id = crypto.randomUUID().slice(0, 8)
     const metadata = loadWorktreeMetadata()
@@ -245,19 +283,21 @@ export function startRpcServer(ptyManager: PtyManager) {
       createdAt: new Date().toISOString(),
     }
     saveWorktreeMetadata(metadata)
+    throwIfAborted(ctx.signal)
 
     broadcast("worktree.created", { id, path: wtPath, branch })
     return { id, path: wtPath, branch }
   })
 
-  methods.set("worktree.list", async (params) => {
+  methods.set("worktree.list", async (params, ctx) => {
     const p = rpcObj(params)
     const repoPath = rpcRequireString(p, "repoPath")
+    throwIfAborted(ctx.signal)
     const worktrees = await listWorktrees(repoPath)
     return { worktrees }
   })
 
-  methods.set("worktree.remove", async (params) => {
+  methods.set("worktree.remove", async (params, ctx) => {
     const p = rpcObj(params)
     const repoPath = rpcRequireString(p, "repoPath")
     const id = rpcRequireString(p, "id")
@@ -266,14 +306,17 @@ export function startRpcServer(ptyManager: PtyManager) {
     if (!entry) {
       throw new Error(`Worktree not found: ${id}`)
     }
+    throwIfAborted(ctx.signal)
 
     // Kill terminals whose cwd is inside this worktree
     const sessions = ptyManager.listSessions()
     for (const session of sessions) {
-      if (session.cwd.startsWith(entry.path)) {
+      if (isPathInside(session.cwd, entry.path)) {
+        throwIfAborted(ctx.signal)
         await ptyManager.killSession(session.id)
       }
     }
+    throwIfAborted(ctx.signal)
 
     // Remove the git worktree
     try {
@@ -281,17 +324,19 @@ export function startRpcServer(ptyManager: PtyManager) {
     } catch {
       // May already be removed from disk
     }
+    throwIfAborted(ctx.signal)
 
     // Remove metadata
     const metadata = loadWorktreeMetadata()
     delete metadata.entries[entry.path]
     saveWorktreeMetadata(metadata)
+    throwIfAborted(ctx.signal)
 
     broadcast("worktree.removed", { id, path: entry.path, branch: entry.branch })
     return { ok: true }
   })
 
-  methods.set("worktree.renameBranch", async (params) => {
+  methods.set("worktree.renameBranch", async (params, ctx) => {
     ensureManagementAllowed("agent", "renameBranch")
     const p = rpcObj(params)
     const repoPath = rpcRequireString(p, "repoPath")
@@ -307,15 +352,18 @@ export function startRpcServer(ptyManager: PtyManager) {
     if (!entry) {
       throw new Error(`Worktree not found: ${id}`)
     }
+    throwIfAborted(ctx.signal)
 
     const previousBranch = entry.branch
     await renameWorktreeBranch(entry.path, nextBranch)
+    throwIfAborted(ctx.signal)
 
     const worktrees = await listWorktrees(repoPath)
     const updated = worktrees.find((worktree) => worktree.id === id)
     if (!updated) {
       throw new Error(`Worktree not found after rename: ${id}`)
     }
+    throwIfAborted(ctx.signal)
 
     broadcast("worktree.renamed", {
       id: updated.id,
@@ -326,15 +374,17 @@ export function startRpcServer(ptyManager: PtyManager) {
     return updated
   })
 
-  methods.set("management.getPolicy", () => {
+  methods.set("management.getPolicy", (_params, _ctx) => {
     return loadManagementPolicy()
   })
 
-  methods.set("management.updatePolicy", async (params) => {
+  methods.set("management.updatePolicy", async (params, ctx) => {
     ensureManagementAllowed("agent", "updatePolicy")
     const p = rpcObj(params)
     const patch = parseManagementPatchRpc(p)
+    throwIfAborted(ctx.signal)
     const policy = updateManagementPolicy(patch)
+    throwIfAborted(ctx.signal)
     broadcast("management.policy.updated", { policy })
     return policy
   })
@@ -383,15 +433,19 @@ export function startRpcServer(ptyManager: PtyManager) {
             continue
           }
 
+          const ac = new AbortController()
+          const timeoutId = setTimeout(
+            () => ac.abort("Request timeout"),
+            RPC_REQUEST_TIMEOUT_MS
+          )
           try {
-            const result = await Promise.race([
-              handler(rpcObj(body.params)),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Request timeout")), 10_000),
-              ),
-            ])
+            const result = await handler(rpcObj(body.params), {
+              signal: ac.signal,
+            })
+            clearTimeout(timeoutId)
             conn.write(JSON.stringify({ jsonrpc: "2.0", id: bodyId, result }) + "\n")
           } catch (err) {
+            clearTimeout(timeoutId)
             if (isRpcInvalidParams(err)) {
               conn.write(
                 JSON.stringify({

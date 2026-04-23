@@ -19,6 +19,7 @@ import {
   saveWorktreeMetadata,
 } from "./worktree"
 import { readProjectDirectory, startFsWatch, fsWatchKey } from "./file-tree"
+import { isPathInside } from "./path-utils"
 import { getGitChangesOverview, getGitFilePatch } from "./git-status"
 import {
   assertRecord,
@@ -233,7 +234,7 @@ ipcMain.handle("worktree:remove", async (_event, payload) => {
   }
 
   for (const session of ptyManager.listSessions()) {
-    if (session.cwd.startsWith(entry.path)) {
+    if (isPathInside(session.cwd, entry.path)) {
       await ptyManager.killSession(session.id)
     }
   }
