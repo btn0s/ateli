@@ -336,9 +336,20 @@ ipcMain.handle("fs:watch-root", async (event, payload) => {
   }
   const key = fsWatchKey(win.id, rootPath)
   fsWatchByKey.get(key)?.()
-  const cleanup = startFsWatch(key, rootPath, () => {
+  const resolvedRoot = path.resolve(rootPath)
+  const cleanup = startFsWatch(key, rootPath, (changedPath) => {
     if (!win.isDestroyed()) {
-      win.webContents.send("fs:changed", { rootPath: path.resolve(rootPath) })
+      let out: string | undefined
+      if (changedPath) {
+        const abs = path.resolve(changedPath)
+        if (abs === resolvedRoot || isPathInside(abs, resolvedRoot)) {
+          out = abs
+        }
+      }
+      win.webContents.send("fs:changed", {
+        rootPath: resolvedRoot,
+        changedPath: out,
+      })
     }
   })
   fsWatchByKey.set(key, cleanup)

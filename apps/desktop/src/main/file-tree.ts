@@ -150,7 +150,7 @@ const watchStates = new Map<string, WatchState>()
 export function startFsWatch(
   key: string,
   rootPath: string,
-  onChange: () => void,
+  onChange: (changedPath: string | null) => void,
 ): () => void {
   stopFsWatch(key)
   const root = path.resolve(rootPath)
@@ -159,18 +159,28 @@ export function startFsWatch(
     timer: null,
   }
 
-  const schedule = () => {
+  const schedule = (filename: string | Buffer | null) => {
     if (state.timer) clearTimeout(state.timer)
     state.timer = setTimeout(() => {
       state.timer = null
-      onChange()
+      if (filename == null || filename === "") {
+        onChange(null)
+        return
+      }
+      const n = String(filename)
+      const full = path.isAbsolute(n) ? n : path.join(root, n)
+      onChange(path.resolve(full))
     }, 250)
   }
 
   try {
-    state.watcher = fs.watch(root, { recursive: true }, schedule)
+    state.watcher = fs.watch(root, { recursive: true }, (_e, name) => {
+      schedule(name ?? null)
+    })
   } catch {
-    state.watcher = fs.watch(root, schedule)
+    state.watcher = fs.watch(root, (_e, name) => {
+      schedule(name ?? null)
+    })
   }
 
   state.watcher.on("error", () => {})

@@ -177,8 +177,9 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.invoke("fs:watch-root", { rootPath }) as Promise<void>,
     unwatchRoot: (rootPath: string) =>
       ipcRenderer.send("fs:unwatch-root", { rootPath }),
-    onChanged: (callback: (data: { rootPath: string }) => void) =>
-      onIpc("fs:changed", callback),
+    onChanged: (
+      callback: (data: { rootPath: string; changedPath?: string }) => void
+    ) => onIpc("fs:changed", callback),
   },
   rpc: {
     onCreateTerminal: (

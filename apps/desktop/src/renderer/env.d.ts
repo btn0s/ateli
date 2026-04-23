@@ -53,7 +53,9 @@ interface Window {
       openPath: (filePath: string) => Promise<void>
       watchRoot: (rootPath: string) => Promise<void>
       unwatchRoot: (rootPath: string) => void
-      onChanged: (callback: (data: { rootPath: string }) => void) => () => void
+      onChanged: (
+        callback: (data: { rootPath: string; changedPath?: string }) => void
+      ) => () => void
     }
     git: {
       status: (repoPath: string) => Promise<{

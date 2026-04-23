@@ -1,3 +1,4 @@
+import path from "node:path"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   FileTree as PierreFileTreeModel,
@@ -159,6 +160,64 @@ async function collectTreePaths(rootPath: string): Promise<{
 
   await walk(rootPath)
   return { directoryPaths, pathMap, paths }
+}
+
+/** Walk a subtree (same rules as readProjectDirectory / ignore) for targeted FS refresh. */
+async function collectTreeSubtree(
+  treeRoot: string,
+  fromDir: string
+): Promise<{
+  directoryPaths: string[]
+  pathMap: Map<string, string>
+  paths: string[]
+}> {
+  const paths: string[] = []
+  const directoryPaths: string[] = []
+  const pathMap = new Map<string, string>()
+
+  async function walk(dirPath: string): Promise<void> {
+    const { entries } = await window.electron.fs.readdir(dirPath)
+    for (const entry of entries) {
+      const treePath = toTreePath(treeRoot, entry)
+      paths.push(treePath)
+      pathMap.set(treePath, entry.path)
+      if (entry.isDirectory) {
+        directoryPaths.push(treePath)
+        await walk(entry.path)
+      }
+    }
+  }
+
+  await walk(fromDir)
+  return { directoryPaths, pathMap, paths }
+}
+
+function directoryPrefixForAbsTree(
+  treeRoot: string,
+  absDir: string
+): string {
+  const normRoot = normalizeFsRoot(treeRoot)
+  const rel = path.relative(normRoot, path.resolve(absDir))
+  if (!rel || rel === "") {
+    return ""
+  }
+  const posix = rel.split(path.sep).join("/")
+  return posix.endsWith("/") ? posix : `${posix}/`
+}
+
+function isPathUnderStaleSubtree(
+  treePath: string,
+  staleDirPrefix: string
+): boolean {
+  if (!staleDirPrefix) {
+    return false
+  }
+  const p = staleDirPrefix.endsWith("/")
+    ? staleDirPrefix
+    : `${staleDirPrefix}/`
+  return (
+    treePath === staleDirPrefix.replace(/\/$/, "") || treePath.startsWith(p)
+  )
 }
 
 function getClickedFilePath(event: Event): string | null {
@@ -444,6 +503,76 @@ export const FileTree = track(function FileTree() {
     [filesRootPath]
   )
 
+  const runPartialTreeRefresh = useCallback(
+    async (changedAbs: string) => {
+      const norm = normalizeFsRoot(filesRootPath)
+      if (!norm) {
+        return
+      }
+      let anchor = path.resolve(changedAbs)
+      try {
+        await window.electron.fs.readdir(anchor)
+      } catch {
+        anchor = path.dirname(anchor)
+      }
+      const rootResolved = path.resolve(norm)
+      const a = path.resolve(anchor)
+      if (a !== rootResolved && !a.startsWith(rootResolved + path.sep)) {
+        setReloadSeq((s) => s + 1)
+        return
+      }
+      const stale = directoryPrefixForAbsTree(filesRootPath, a)
+      if (stale === "") {
+        setReloadSeq((s) => s + 1)
+        return
+      }
+      setTreeLoading(true)
+      setTreeError(null)
+      try {
+        const sub = await collectTreeSubtree(norm, a)
+        const nextMap = new Map(treePathMapRef.current)
+        for (const k of [...nextMap.keys()]) {
+          if (isPathUnderStaleSubtree(k, stale)) {
+            nextMap.delete(k)
+          }
+        }
+        for (const [k, v] of sub.pathMap) {
+          nextMap.set(k, v)
+        }
+        const nextDirs = new Set<string>()
+        for (const d of treeDirectoryPathsRef.current) {
+          if (!isPathUnderStaleSubtree(d, stale)) {
+            nextDirs.add(d)
+          }
+        }
+        for (const d of sub.directoryPaths) {
+          nextDirs.add(d)
+        }
+        treeDirectoryPathsRef.current = [...nextDirs]
+        treePathMapRef.current = nextMap
+        const allPaths = [...nextMap.keys()].sort((x, y) =>
+          x.localeCompare(y, undefined, { sensitivity: "base" })
+        )
+        const expandedPaths = getExpandedDirectoryPaths(
+          treeModel,
+          treeDirectoryPathsRef.current
+        )
+        treeModel.resetPaths(allPaths, {
+          initialExpandedPaths: expandedPaths.filter((p) => nextMap.has(p)),
+        })
+        setTreePathCount(allPaths.length)
+      } catch (e) {
+        setTreeError(
+          e instanceof Error ? e.message : "Could not refresh files."
+        )
+        setReloadSeq((s) => s + 1)
+      } finally {
+        setTreeLoading(false)
+      }
+    },
+    [filesRootPath, treeModel]
+  )
+
   useEffect(() => {
     gitOverviewLoadedRef.current = false
     void refreshGitOverview({ showLoading: true })
@@ -496,34 +625,36 @@ export const FileTree = track(function FileTree() {
     if (!filesRootPath) return
     const norm = normalizeFsRoot(filesRootPath)
     void window.electron.fs.watchRoot(norm)
-    const remove = window.electron.fs.onChanged(({ rootPath: changed }) => {
-      if (normalizeFsRoot(changed) === norm) {
-        setReloadSeq((s) => s + 1)
+    let treeTimer: ReturnType<typeof setTimeout> | undefined
+    let gitTimer: ReturnType<typeof setTimeout> | undefined
+    const remove = window.electron.fs.onChanged(
+      ({ rootPath: changed, changedPath }) => {
+        if (normalizeFsRoot(changed) !== norm) return
+        if (treeTimer !== undefined) clearTimeout(treeTimer)
+        treeTimer = setTimeout(() => {
+          treeTimer = undefined
+          if (changedPath) {
+            void runPartialTreeRefresh(changedPath).catch(() =>
+              setReloadSeq((s) => s + 1)
+            )
+          } else {
+            setReloadSeq((s) => s + 1)
+          }
+        }, 50)
+        if (gitTimer !== undefined) clearTimeout(gitTimer)
+        gitTimer = setTimeout(() => {
+          gitTimer = undefined
+          void refreshGitOverview({ showLoading: false })
+        }, 200)
       }
-    })
+    )
     return () => {
       remove()
+      if (treeTimer !== undefined) clearTimeout(treeTimer)
+      if (gitTimer !== undefined) clearTimeout(gitTimer)
       window.electron.fs.unwatchRoot(norm)
     }
-  }, [filesRootPath])
-
-  useEffect(() => {
-    if (!filesRootPath) return
-    const norm = normalizeFsRoot(filesRootPath)
-    let debounce: ReturnType<typeof setTimeout> | undefined
-    const remove = window.electron.fs.onChanged(({ rootPath: changed }) => {
-      if (normalizeFsRoot(changed) !== norm) return
-      if (debounce !== undefined) clearTimeout(debounce)
-      debounce = setTimeout(() => {
-        debounce = undefined
-        void refreshGitOverview({ showLoading: false })
-      }, 200)
-    })
-    return () => {
-      if (debounce !== undefined) clearTimeout(debounce)
-      remove()
-    }
-  }, [filesRootPath, refreshGitOverview])
+  }, [filesRootPath, refreshGitOverview, runPartialTreeRefresh])
 
   const changeCount =
     gitOverview && !gitOverview.error ? gitOverview.entries.length : 0
