@@ -243,6 +243,20 @@ ipcMain.on(
 
 // --- App Lifecycle ---
 
+// Single-instance lock: prevents two ateli processes racing on the sidecar
+// PID file and RPC socket. The second invocation exits immediately; we focus
+// the existing window instead.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on("second-instance", () => {
+    const [win] = BrowserWindow.getAllWindows()
+    if (!win) return
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  })
+}
+
 app.whenReady().then(async () => {
   createWindow()
   await ptyManager.init()
