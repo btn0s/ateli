@@ -120,14 +120,14 @@ export function SidebarShell({
           )}
         >
           {/* Safe zone matches the Titlebar drag region (40px). Content
-              sits centered, then nudged up 2px via -translate-y-0.5 to
-              optically center with the traffic lights (which ride slightly
-              higher than the text line's ascender). */}
+              is items-center then bumped down 2px via pt to optically
+              line up with the traffic-light vertical center. NOTE: do
+              not use `translate` here — it creates a stacking context
+              and traps z-[1000] on the interactive children, which
+              puts them back below the Titlebar drag overlay. */}
           {safeArea != null ? (
-            <div className="flex h-10 min-h-10 shrink-0 items-center px-3">
-              <div className="flex w-full -translate-y-0.5 items-center">
-                {safeArea}
-              </div>
+            <div className="flex h-10 min-h-10 shrink-0 items-center px-3 pt-[2px]">
+              {safeArea}
             </div>
           ) : (
             <div className="h-10 min-h-10 shrink-0" aria-hidden />

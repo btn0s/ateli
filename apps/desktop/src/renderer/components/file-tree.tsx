@@ -1,9 +1,12 @@
-import type { MutableRefObject } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { File, MoreHorizontal } from "lucide-react"
+import {
+  FileTree as PierreFileTreeModel,
+  type GitStatusEntry,
+} from "@pierre/trees"
+import { FileTree as PierreFileTree } from "@pierre/trees/react"
+import { MoreHorizontal } from "lucide-react"
 import { track, useEditor } from "tldraw"
 import { cn } from "@workspace/ui/lib/utils"
-import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +15,10 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { getRepoPath } from "@/lib/default-actions"
 import { useWorktrees } from "@/contexts/worktree-index-context"
-import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
+import {
+  normalizeFsRoot,
+  resolveFilesRootFromCwd,
+} from "@/lib/worktree-files-root"
 import { Sidebar } from "@/components/sidebar"
 import { SidebarShell } from "@/components/sidebar-shell"
 import {
@@ -21,16 +27,21 @@ import {
 } from "@/components/sidebar-tab-button"
 import { SidebarTerminalTabs } from "@/components/sidebar-terminal-stack"
 import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
-import {
-  SidebarTreeBranch,
-  SidebarTreeRow,
-} from "@/components/sidebar-tree"
 
 type FilesPanelTab = "files" | "changes"
+type SidebarTerminalId = string
+type SidebarTerminalState = {
+  ids: SidebarTerminalId[]
+  activeId: SidebarTerminalId
+}
 
 type GitChangesOverview = Awaited<ReturnType<typeof window.electron.git.status>>
 
 type GitChangeRow = GitChangesOverview["entries"][number]
+
+type DirEntry = Awaited<
+  ReturnType<typeof window.electron.fs.readdir>
+>["entries"][number]
 
 function splitRepoPath(p: string): { dir: string; name: string } {
   const i = p.lastIndexOf("/")
@@ -52,14 +63,14 @@ type GitStatusBadge = {
 function gitStatusBadge(
   letter: string,
   className: string,
-  label: string,
+  label: string
 ): GitStatusBadge {
   return { letter, className, label }
 }
 
 function statusLetterBadge(
   indexStatus: string,
-  workTreeStatus: string,
+  workTreeStatus: string
 ): GitStatusBadge {
   if (indexStatus === "?" && workTreeStatus === "?") {
     return gitStatusBadge("?", "text-sky-500", "Untracked")
@@ -85,11 +96,83 @@ function statusLetterBadge(
   return gitStatusBadge("M", "text-amber-500", "Modified")
 }
 
+function mapGitStatus(entry: GitChangeRow): GitStatusEntry {
+  if (entry.indexStatus === "?" && entry.workTreeStatus === "?") {
+    return { path: entry.path, status: "untracked" }
+  }
+  if (entry.indexStatus === "D" || entry.workTreeStatus === "D") {
+    return { path: entry.path, status: "deleted" }
+  }
+  if (entry.indexStatus === "R" || entry.workTreeStatus === "R") {
+    return { path: entry.path, status: "renamed" }
+  }
+  if (entry.indexStatus === "A" && entry.workTreeStatus === " ") {
+    return { path: entry.path, status: "added" }
+  }
+  return { path: entry.path, status: "modified" }
+}
+
+function toTreePath(rootPath: string, entry: DirEntry): string {
+  const normalizedRoot = normalizeFsRoot(rootPath).replaceAll("\\", "/")
+  const normalizedPath = entry.path.replaceAll("\\", "/")
+  const relative = normalizedPath.startsWith(`${normalizedRoot}/`)
+    ? normalizedPath.slice(normalizedRoot.length + 1)
+    : entry.name
+  return entry.isDirectory ? `${relative}/` : relative
+}
+
+function getExpandedDirectoryPaths(
+  model: PierreFileTreeModel,
+  directoryPaths: readonly string[]
+): string[] {
+  const expanded: string[] = []
+  for (const path of directoryPaths) {
+    const item = model.getItem(path)
+    if (!item || !("isExpanded" in item)) continue
+    if (item.isExpanded()) expanded.push(path)
+  }
+  return expanded
+}
+
+async function collectTreePaths(rootPath: string): Promise<{
+  directoryPaths: string[]
+  pathMap: Map<string, string>
+  paths: string[]
+}> {
+  const paths: string[] = []
+  const directoryPaths: string[] = []
+  const pathMap = new Map<string, string>()
+
+  async function walk(dirPath: string): Promise<void> {
+    const { entries } = await window.electron.fs.readdir(dirPath)
+    for (const entry of entries) {
+      const treePath = toTreePath(rootPath, entry)
+      paths.push(treePath)
+      pathMap.set(treePath, entry.path)
+      if (entry.isDirectory) {
+        directoryPaths.push(treePath)
+        await walk(entry.path)
+      }
+    }
+  }
+
+  await walk(rootPath)
+  return { directoryPaths, pathMap, paths }
+}
+
+function getClickedFilePath(event: Event): string | null {
+  for (const target of event.composedPath()) {
+    if (!(target instanceof HTMLElement)) continue
+    if (target.dataset.itemType !== "file") continue
+    const path = target.dataset.itemPath
+    if (path) return path
+  }
+  return null
+}
+
 function DiffStat({ added, removed }: { added: number; removed: number }) {
   if (added === 0 && removed === 0) {
-    return (
-      <span className="text-xs text-muted-foreground tabular-nums">—</span>
-    )
+    return <span className="text-xs text-muted-foreground tabular-nums">—</span>
   }
   return (
     <span className="flex shrink-0 items-baseline gap-1 text-xs tabular-nums">
@@ -113,8 +196,8 @@ function ChangeFileRow({ entry }: { entry: GitChangeRow }) {
   return (
     <div
       className={cn(
-        "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-sm py-0 pl-1 pr-0",
-        "hover:bg-accent",
+        "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-sm py-0 pr-0 pl-1",
+        "hover:bg-accent"
       )}
     >
       <button
@@ -122,15 +205,13 @@ function ChangeFileRow({ entry }: { entry: GitChangeRow }) {
         className={cn(
           "min-w-0 rounded-sm px-0 py-0 text-left font-mono text-xs leading-tight transition-colors",
           "text-muted-foreground hover:text-accent-foreground",
-          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
         )}
         title={buttonTitle}
         onClick={() => void window.electron.fs.openPath(entry.absPath)}
       >
         <span className="block min-w-0 truncate">
-          {dir ? (
-            <span className="text-muted-foreground">{dir}</span>
-          ) : null}
+          {dir ? <span className="text-muted-foreground">{dir}</span> : null}
           <span className="text-foreground">{name}</span>
         </span>
       </button>
@@ -140,7 +221,7 @@ function ChangeFileRow({ entry }: { entry: GitChangeRow }) {
       <span
         className={cn(
           "flex size-6 shrink-0 items-center justify-center font-mono text-xs font-semibold tabular-nums",
-          badge.className,
+          badge.className
         )}
         title={badgeDescription}
         aria-label={`${badge.label}. ${statusTitle}`}
@@ -148,83 +229,6 @@ function ChangeFileRow({ entry }: { entry: GitChangeRow }) {
         {badge.letter}
       </span>
     </div>
-  )
-}
-
-type DirEntry = {
-  name: string
-  path: string
-  isDirectory: boolean
-}
-
-function pathDepth(p: string): number {
-  return p.split(/[/\\]/).filter(Boolean).length
-}
-
-function FileTreeRows({
-  rootPath,
-  expanded,
-  toggleDir,
-  cacheRef,
-}: {
-  rootPath: string
-  expanded: Set<string>
-  toggleDir: (path: string) => void
-  cacheRef: MutableRefObject<Map<string, DirEntry[]>>
-}) {
-  const entries = cacheRef.current.get(rootPath)
-  if (!entries) return null
-
-  return (
-    <>
-      {entries.map((entry) => (
-        <div key={entry.path}>
-          {entry.isDirectory ? (
-            <>
-              <SidebarTreeRow>
-                <SidebarTreeRow.Trigger
-                  onClick={() => toggleDir(entry.path)}
-                  title={entry.path}
-                >
-                  <SidebarTreeRow.Disclosure
-                    expanded={expanded.has(entry.path)}
-                  />
-                  <SidebarTreeRow.Label>{entry.name}</SidebarTreeRow.Label>
-                </SidebarTreeRow.Trigger>
-                <SidebarTreeRow.AlignedEnd />
-              </SidebarTreeRow>
-              {expanded.has(entry.path) && (
-                <SidebarTreeBranch>
-                  <SidebarTreeBranch.Ruler />
-                  <SidebarTreeBranch.Content>
-                    <FileTreeRows
-                      rootPath={entry.path}
-                      expanded={expanded}
-                      toggleDir={toggleDir}
-                      cacheRef={cacheRef}
-                    />
-                  </SidebarTreeBranch.Content>
-                </SidebarTreeBranch>
-              )}
-            </>
-          ) : (
-            <SidebarTreeRow>
-              <SidebarTreeRow.Trigger
-                className="text-muted-foreground hover:text-accent-foreground"
-                onClick={() => void window.electron.fs.openPath(entry.path)}
-                title={entry.path}
-              >
-                <SidebarTreeRow.Icon>
-                  <File className="size-3 shrink-0 opacity-70" />
-                </SidebarTreeRow.Icon>
-                <SidebarTreeRow.Label>{entry.name}</SidebarTreeRow.Label>
-              </SidebarTreeRow.Trigger>
-              <SidebarTreeRow.AlignedEnd />
-            </SidebarTreeRow>
-          )}
-        </div>
-      ))}
-    </>
   )
 }
 
@@ -272,22 +276,33 @@ export const FileTree = track(function FileTree() {
   const repoPath = getRepoPath()
   const worktrees = useWorktrees()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
-  const [sidebarTerminalState, setSidebarTerminalState] = useState(() => {
-    const id = crypto.randomUUID()
-    return { ids: [id], activeId: id }
-  })
-  const [gitOverview, setGitOverview] = useState<GitChangesOverview | null>(null)
-  const [gitOverviewLoading, setGitOverviewLoading] = useState(false)
-  const [expanded, setExpanded] = useState<Set<string>>(() =>
-    repoPath ? new Set([normalizeFsRoot(repoPath)]) : new Set(),
+  const [sidebarTerminalState, setSidebarTerminalState] =
+    useState<SidebarTerminalState>(() => {
+      const id = crypto.randomUUID()
+      return { ids: [id], activeId: id }
+    })
+  const [gitOverview, setGitOverview] = useState<GitChangesOverview | null>(
+    null
   )
+  const [gitOverviewLoading, setGitOverviewLoading] = useState(false)
   const [reloadSeq, setReloadSeq] = useState(0)
-  const [, setRenderVersion] = useState(0)
-  const cacheRef = useRef<Map<string, DirEntry[]>>(new Map())
+  const [treeError, setTreeError] = useState<string | null>(null)
+  const [treeLoading, setTreeLoading] = useState(false)
+  const [treePathCount, setTreePathCount] = useState(0)
+  const treeWrapperRef = useRef<HTMLDivElement | null>(null)
+  const treeDirectoryPathsRef = useRef<string[]>([])
+  const treePathMapRef = useRef<Map<string, string>>(new Map())
+  const treeModelRef = useRef<PierreFileTreeModel | null>(null)
 
-  const bump = useCallback(() => {
-    setRenderVersion((v) => v + 1)
-  }, [])
+  if (treeModelRef.current === null) {
+    treeModelRef.current = new PierreFileTreeModel({
+      initialExpansion: "closed",
+      paths: [],
+      search: false,
+    })
+  }
+
+  const treeModel = treeModelRef.current
 
   let filesRootPath = ""
   if (repoPath) {
@@ -305,55 +320,88 @@ export const FileTree = track(function FileTree() {
 
   useEffect(() => {
     if (!filesRootPath) {
-      setExpanded(new Set())
-      cacheRef.current = new Map()
+      treeDirectoryPathsRef.current = []
+      treePathMapRef.current = new Map()
+      treeModel.resetPaths([])
+      treeModel.setGitStatus(undefined)
+      setTreeError(null)
+      setTreeLoading(false)
+      setTreePathCount(0)
       return
     }
-    const norm = normalizeFsRoot(filesRootPath)
-    setExpanded(new Set([norm]))
-    cacheRef.current = new Map()
-    setReloadSeq((s) => s + 1)
-  }, [filesRootPath])
 
-  useEffect(() => {
-    if (!filesRootPath) return
-    const norm = normalizeFsRoot(filesRootPath)
-    void window.electron.fs.watchRoot(norm)
-    const remove = window.electron.fs.onChanged(({ rootPath: changed }) => {
-      if (normalizeFsRoot(changed) === norm) {
-        setReloadSeq((s) => s + 1)
-      }
-    })
-    return () => {
-      remove()
-      window.electron.fs.unwatchRoot(norm)
-    }
-  }, [filesRootPath])
-
-  useEffect(() => {
-    if (!filesRootPath) return
     let cancelled = false
     const norm = normalizeFsRoot(filesRootPath)
-    const dirs = [...expanded].sort((a, b) => pathDepth(a) - pathDepth(b))
 
     ;(async () => {
-      for (const dir of dirs) {
-        try {
-          const { entries } = await window.electron.fs.readdir(dir)
-          if (cancelled) return
-          cacheRef.current.set(dir, entries)
-        } catch {
-          if (cancelled) return
-          cacheRef.current.set(dir, [])
-        }
+      setTreeLoading(true)
+      setTreeError(null)
+
+      try {
+        const expandedPaths = getExpandedDirectoryPaths(
+          treeModel,
+          treeDirectoryPathsRef.current
+        )
+        const nextTree = await collectTreePaths(norm)
+        if (cancelled) return
+
+        treeDirectoryPathsRef.current = nextTree.directoryPaths
+        treePathMapRef.current = nextTree.pathMap
+        treeModel.resetPaths(nextTree.paths, {
+          initialExpandedPaths: expandedPaths.filter((path) =>
+            nextTree.pathMap.has(path)
+          ),
+        })
+        setTreePathCount(nextTree.paths.length)
+      } catch (error) {
+        if (cancelled) return
+        treeDirectoryPathsRef.current = []
+        treePathMapRef.current = new Map()
+        treeModel.resetPaths([])
+        setTreePathCount(0)
+        setTreeError(
+          error instanceof Error ? error.message : "Could not read files."
+        )
+      } finally {
+        if (!cancelled) setTreeLoading(false)
       }
-      if (!cancelled) bump()
     })()
 
     return () => {
       cancelled = true
     }
-  }, [filesRootPath, expanded, reloadSeq, bump])
+  }, [filesRootPath, reloadSeq, treeModel])
+
+  useEffect(() => {
+    const wrapper = treeWrapperRef.current
+    const host = wrapper?.querySelector("file-tree-container")
+    if (!(host instanceof HTMLElement)) return
+
+    const openTreePath = (treePath: string | null) => {
+      if (!treePath) return
+      const absPath = treePathMapRef.current.get(treePath)
+      if (!absPath) return
+      void window.electron.fs.openPath(absPath)
+    }
+
+    const handleClick = (event: Event) => {
+      openTreePath(getClickedFilePath(event))
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter") return
+      const focused = treeModel.getFocusedItem()
+      if (!focused || focused.isDirectory()) return
+      openTreePath(focused.getPath())
+    }
+
+    host.addEventListener("click", handleClick)
+    host.addEventListener("keydown", handleKeyDown)
+    return () => {
+      host.removeEventListener("click", handleClick)
+      host.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [filesRootPath, treeModel, treePathCount])
 
   const gitOverviewLoadedRef = useRef(false)
 
@@ -373,13 +421,36 @@ export const FileTree = track(function FileTree() {
       gitOverviewLoadedRef.current = true
       if (showLoading) setGitOverviewLoading(false)
     },
-    [filesRootPath],
+    [filesRootPath]
   )
 
   useEffect(() => {
     gitOverviewLoadedRef.current = false
     void refreshGitOverview({ showLoading: true })
   }, [refreshGitOverview])
+
+  useEffect(() => {
+    treeModel.setGitStatus(
+      gitOverview && !gitOverview.error
+        ? gitOverview.entries.map(mapGitStatus)
+        : undefined
+    )
+  }, [gitOverview, treeModel])
+
+  useEffect(() => {
+    if (!filesRootPath) return
+    const norm = normalizeFsRoot(filesRootPath)
+    void window.electron.fs.watchRoot(norm)
+    const remove = window.electron.fs.onChanged(({ rootPath: changed }) => {
+      if (normalizeFsRoot(changed) === norm) {
+        setReloadSeq((s) => s + 1)
+      }
+    })
+    return () => {
+      remove()
+      window.electron.fs.unwatchRoot(norm)
+    }
+  }, [filesRootPath])
 
   useEffect(() => {
     if (!filesRootPath) return
@@ -401,15 +472,6 @@ export const FileTree = track(function FileTree() {
 
   const changeCount =
     gitOverview && !gitOverview.error ? gitOverview.entries.length : 0
-
-  const toggleDir = useCallback((dirPath: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(dirPath)) next.delete(dirPath)
-      else next.add(dirPath)
-      return next
-    })
-  }, [])
 
   const refreshPanel = useCallback(() => {
     void refreshGitOverview({ showLoading: true })
@@ -433,22 +495,18 @@ export const FileTree = track(function FileTree() {
       if (idx < 0) return t
       const ids = t.ids.filter((x) => x !== id)
       const activeId =
-        t.activeId === id
-          ? ids[Math.min(idx, ids.length - 1)]!
-          : t.activeId
+        t.activeId === id ? ids[Math.min(idx, ids.length - 1)]! : t.activeId
       return { ids, activeId }
     })
   }, [])
 
   const selectSidebarTerminalTab = useCallback((id: string) => {
     setSidebarTerminalState((t) =>
-      t.ids.includes(id) ? { ...t, activeId: id } : t,
+      t.ids.includes(id) ? { ...t, activeId: id } : t
     )
   }, [])
 
   if (!repoPath) return null
-
-  const norm = normalizeFsRoot(filesRootPath)
 
   const workingTitle =
     gitOverview && !gitOverview.error && gitOverview.branch
@@ -458,21 +516,28 @@ export const FileTree = track(function FileTree() {
         : "Working…"
 
   const branchLabelPending = Boolean(
-    gitOverviewLoading && !(gitOverview && !gitOverview.error && gitOverview.branch),
+    gitOverviewLoading &&
+    !(gitOverview && !gitOverview.error && gitOverview.branch)
   )
 
-  // NOTE: the outer safe-zone wrapper (SidebarShell) provides height +
-  // padding that aligns with the macOS traffic lights. This inner content
-  // just fills the available space.
+  const treeStyle = {
+    height: "100%",
+    width: "100%",
+    "--trees-bg-override": "transparent",
+    "--trees-border-color-override": "transparent",
+    "--trees-fg-override": "hsl(var(--foreground))",
+    "--trees-selected-bg-override": "hsl(var(--accent))",
+  } as React.CSSProperties
+
   const safeArea = (
-    <div className="flex h-full items-center justify-between gap-2">
-      {/* The Titlebar (z-[999]) is the drag region; interactive elements
-          in the safe zone must sit above it AND be marked no-drag, or
-          clicks fall through to the drag handler. */}
+    <Sidebar.SectionHeader className="h-full">
+      {/* The outer titlebar (z-[999]) is the drag region. Interactive
+          elements in the safe zone must sit above it AND be marked
+          no-drag, otherwise clicks fall through to the drag handler. */}
       <span
         className={cn(
           "relative z-[1000] min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",
-          branchLabelPending && "animate-pulse text-muted-foreground",
+          branchLabelPending && "animate-pulse text-muted-foreground"
         )}
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         title={workingTitle}
@@ -498,11 +563,16 @@ export const FileTree = track(function FileTree() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </Sidebar.SectionHeader>
   )
 
   return (
-    <SidebarShell side="right" defaultWidth={240} minWidth={120} safeArea={safeArea}>
+    <SidebarShell
+      side="right"
+      defaultWidth={240}
+      minWidth={120}
+      safeArea={safeArea}
+    >
       <Sidebar.Root>
         <SidebarTabStrip ariaLabel="Workspace panel">
           <SidebarTabButton
@@ -522,7 +592,7 @@ export const FileTree = track(function FileTree() {
                   "font-mono text-[11px] tabular-nums",
                   panelTab === "changes"
                     ? "text-accent-foreground/80"
-                    : "text-muted-foreground/60",
+                    : "text-muted-foreground/60"
                 )}
               >
                 {changeCount}
@@ -532,14 +602,23 @@ export const FileTree = track(function FileTree() {
         </SidebarTabStrip>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <Sidebar.Section className="min-h-0 flex-[2] overflow-y-auto overflow-x-hidden px-1.5 py-1 [scrollbar-gutter:stable]">
+          <Sidebar.Section className="min-h-0 flex-[2] overflow-x-hidden overflow-y-auto px-1.5 py-1 [scrollbar-gutter:stable]">
             {panelTab === "files" ? (
-              <FileTreeRows
-                rootPath={norm}
-                expanded={expanded}
-                toggleDir={toggleDir}
-                cacheRef={cacheRef}
-              />
+              treeError ? (
+                <p className={changesPanelHintClass}>Could not read files.</p>
+              ) : treeLoading && treePathCount === 0 ? (
+                <p className={changesPanelHintClass}>Loading files…</p>
+              ) : treePathCount === 0 ? (
+                <p className={changesPanelHintClass}>No visible files.</p>
+              ) : (
+                <div ref={treeWrapperRef} className="h-full min-h-0">
+                  <PierreFileTree
+                    aria-label="Repository files"
+                    model={treeModel}
+                    style={treeStyle}
+                  />
+                </div>
+              )
             ) : (
               <ChangesList
                 overview={gitOverview}
