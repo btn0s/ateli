@@ -5,7 +5,8 @@ import { PtyManager } from "./pty"
 import { startRpcServer, stopRpcServer, onBroadcast, broadcast } from "./rpc"
 import {
   addWorktree,
-  listGitWorktrees,
+  listWorktrees,
+  findWorktreeById,
   removeWorktree as removeGitWorktree,
   worktreePath,
   loadWorktreeMetadata,
@@ -133,7 +134,7 @@ ipcMain.on("terminal:detach", (_event, { sessionKey }: { sessionKey: string }) =
 ipcMain.handle(
   "worktree:list",
   async (_event, { repoPath }: { repoPath: string }) => {
-    return listGitWorktrees(repoPath)
+    return listWorktrees(repoPath)
   },
 )
 
@@ -166,6 +167,33 @@ ipcMain.handle(
 
     broadcast("worktree.created", { id, path: wtPath, branch })
     return { id, path: wtPath, branch }
+  },
+)
+
+ipcMain.handle(
+  "worktree:remove",
+  async (_event, { repoPath, id }: { repoPath: string; id: string }) => {
+    const entry = await findWorktreeById(repoPath, id)
+    if (!entry) throw new Error(`Worktree not found: ${id}`)
+
+    for (const session of ptyManager.listSessions()) {
+      if (session.cwd.startsWith(entry.path)) {
+        await ptyManager.killSession(session.id)
+      }
+    }
+
+    try {
+      await removeGitWorktree(repoPath, entry.path)
+    } catch {
+      // Already removed on disk.
+    }
+
+    const metadata = loadWorktreeMetadata()
+    delete metadata.entries[entry.path]
+    saveWorktreeMetadata(metadata)
+
+    broadcast("worktree.removed", { id, path: entry.path, branch: entry.branch })
+    return { ok: true }
   },
 )
 
