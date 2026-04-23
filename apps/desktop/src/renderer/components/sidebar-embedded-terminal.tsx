@@ -148,10 +148,11 @@ export function SidebarEmbeddedTerminal({
   }, [cwd, instanceKey])
 
   return (
-    <div
-      ref={containerRef}
-      className="min-h-32 w-full overflow-hidden border border-border bg-[#1a1a1a]"
-      style={{ minHeight: "8rem" }}
-    />
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-[#1a1a1a] p-2">
+      <div
+        ref={containerRef}
+        className="min-h-0 w-full flex-1 overflow-hidden"
+      />
+    </div>
   )
 }

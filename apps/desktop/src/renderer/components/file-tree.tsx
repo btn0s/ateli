@@ -15,7 +15,7 @@ import { useWorktrees } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
 import { Sidebar } from "@/components/sidebar"
 import { SidebarShell } from "@/components/sidebar-shell"
-import { SidebarTerminalDock } from "@/components/sidebar-terminal-dock"
+import { SidebarTerminalTabs } from "@/components/sidebar-terminal-stack"
 import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
 import {
   SidebarTreeBranch,
@@ -278,6 +278,10 @@ export const FileTree = track(function FileTree() {
   const repoPath = getRepoPath()
   const worktrees = useWorktrees()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
+  const [sidebarTerminalState, setSidebarTerminalState] = useState(() => {
+    const id = crypto.randomUUID()
+    return { ids: [id], activeId: id }
+  })
   const [gitOverview, setGitOverview] = useState<GitChangesOverview | null>(null)
   const [gitOverviewLoading, setGitOverviewLoading] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(() =>
@@ -418,6 +422,36 @@ export const FileTree = track(function FileTree() {
     setReloadSeq((s) => s + 1)
   }, [refreshGitOverview])
 
+  const addSidebarTerminal = useCallback(() => {
+    setSidebarTerminalState((t) => {
+      const id = crypto.randomUUID()
+      return { ids: [...t.ids, id], activeId: id }
+    })
+  }, [])
+
+  const removeSidebarTerminal = useCallback((id: string) => {
+    setSidebarTerminalState((t) => {
+      if (t.ids.length === 1 && t.ids[0] === id) {
+        const newId = crypto.randomUUID()
+        return { ids: [newId], activeId: newId }
+      }
+      const idx = t.ids.indexOf(id)
+      if (idx < 0) return t
+      const ids = t.ids.filter((x) => x !== id)
+      const activeId =
+        t.activeId === id
+          ? ids[Math.min(idx, ids.length - 1)]!
+          : t.activeId
+      return { ids, activeId }
+    })
+  }, [])
+
+  const selectSidebarTerminalTab = useCallback((id: string) => {
+    setSidebarTerminalState((t) =>
+      t.ids.includes(id) ? { ...t, activeId: id } : t,
+    )
+  }, [])
+
   if (!repoPath) return null
 
   const norm = normalizeFsRoot(filesRootPath)
@@ -521,7 +555,7 @@ export const FileTree = track(function FileTree() {
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <Sidebar.Section className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-1 [scrollbar-gutter:stable]">
+          <Sidebar.Section className="min-h-0 flex-[2] overflow-y-auto overflow-x-hidden px-1.5 py-1 [scrollbar-gutter:stable]">
             {panelTab === "files" ? (
               <FileTreeRows
                 rootPath={norm}
@@ -536,7 +570,17 @@ export const FileTree = track(function FileTree() {
               />
             )}
           </Sidebar.Section>
-          <SidebarTerminalDock cwd={normalizeFsRoot(repoPath)} />
+          <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden border-t border-border">
+            <SidebarTerminalTabs
+              cwd={normalizeFsRoot(repoPath)}
+              tabIds={sidebarTerminalState.ids}
+              activeTabId={sidebarTerminalState.activeId}
+              onSelectTab={selectSidebarTerminalTab}
+              onCloseTab={removeSidebarTerminal}
+              onSessionEnded={removeSidebarTerminal}
+              onAddTab={addSidebarTerminal}
+            />
+          </div>
         </div>
       </Sidebar.Root>
     </SidebarShell>

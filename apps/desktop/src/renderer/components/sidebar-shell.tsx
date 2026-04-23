@@ -101,7 +101,7 @@ export function SidebarShell({
   return (
     <div
       className={cn(
-        "pointer-events-auto relative flex h-full shrink-0 overflow-hidden transition-[width] duration-150",
+        "pointer-events-auto relative flex h-full shrink-0 overflow-hidden",
         className,
       )}
       style={{ width: displayWidth }}
