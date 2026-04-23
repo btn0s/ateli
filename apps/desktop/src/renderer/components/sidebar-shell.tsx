@@ -119,14 +119,14 @@ export function SidebarShell({
             side === "left" ? "border-r" : "border-l",
           )}
         >
-          {/* Safe zone height matches the macOS hiddenInset titlebar (44px).
-              Inside, content top-aligns with pt-4 so baseline sits at y~20 —
-              matching the BrowserWindow trafficLightPosition.y (16) plus
-              the traffic-light height's overhang past the text line. */}
+          {/* Safe zone height matches the Titlebar drag region (48px).
+              Inside, content top-aligns with pt-5 (20px) so the branch
+              text baseline sits near the vertical center of the traffic
+              lights (y≈25 for trafficLightPosition.y=18 + 7 radius). */}
           {safeArea != null ? (
-            <div className="h-11 min-h-11 shrink-0 px-3 pt-4 pb-1">{safeArea}</div>
+            <div className="h-12 min-h-12 shrink-0 px-3 pt-5 pb-1">{safeArea}</div>
           ) : (
-            <div className="h-11 min-h-11 shrink-0" aria-hidden />
+            <div className="h-12 min-h-12 shrink-0" aria-hidden />
           )}
           {children}
         </div>

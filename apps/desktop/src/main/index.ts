@@ -33,7 +33,7 @@ function createWindow() {
     height: 800,
     show: false,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 14, y: 16 },
+    trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
       sandbox: true,
