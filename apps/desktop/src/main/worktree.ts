@@ -19,12 +19,17 @@ export interface WorktreeInfo {
   isMain: boolean
 }
 
-export interface WorktreeMetadata {
+export const WORKTREE_METADATA_VERSION = 1
+
+export interface WorktreeEntry {
   id: string
-  repoPath: string
-  worktreePath: string
   branch: string
   createdAt: string
+}
+
+export interface WorktreeMetadataFile {
+  version: typeof WORKTREE_METADATA_VERSION
+  entries: Record<string, WorktreeEntry>
 }
 
 function repoHash(repoPath: string): string {
@@ -118,19 +123,73 @@ export async function getCurrentBranch(repoPath: string): Promise<string> {
 
 // --- Metadata persistence ---
 
-export function loadWorktreeMetadata(): WorktreeMetadata[] {
-  try {
-    const raw = fs.readFileSync(WORKTREES_PATH, "utf-8")
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as WorktreeMetadata[]) : []
-  } catch {
-    return []
-  }
+function emptyMetadata(): WorktreeMetadataFile {
+  return { version: WORKTREE_METADATA_VERSION, entries: {} }
 }
 
-export function saveWorktreeMetadata(worktrees: WorktreeMetadata[]): void {
-  fs.mkdirSync(ATELI_DIR, { recursive: true })
+export function loadWorktreeMetadata(): WorktreeMetadataFile {
+  let raw: string
+  try {
+    raw = fs.readFileSync(WORKTREES_PATH, "utf-8")
+  } catch {
+    return emptyMetadata()
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return emptyMetadata()
+  }
+
+  if (Array.isArray(parsed)) {
+    const entries: Record<string, WorktreeEntry> = {}
+    for (const item of parsed) {
+      if (
+        item &&
+        typeof item === "object" &&
+        typeof (item as Record<string, unknown>).worktreePath === "string" &&
+        typeof (item as Record<string, unknown>).id === "string" &&
+        typeof (item as Record<string, unknown>).branch === "string" &&
+        typeof (item as Record<string, unknown>).createdAt === "string"
+      ) {
+        const m = item as {
+          worktreePath: string
+          id: string
+          branch: string
+          createdAt: string
+        }
+        entries[m.worktreePath] = {
+          id: m.id,
+          branch: m.branch,
+          createdAt: m.createdAt,
+        }
+      }
+    }
+    const migrated: WorktreeMetadataFile = {
+      version: WORKTREE_METADATA_VERSION,
+      entries,
+    }
+    saveWorktreeMetadata(migrated)
+    return migrated
+  }
+
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    (parsed as Record<string, unknown>).version === WORKTREE_METADATA_VERSION &&
+    typeof (parsed as Record<string, unknown>).entries === "object" &&
+    (parsed as Record<string, unknown>).entries !== null
+  ) {
+    return parsed as WorktreeMetadataFile
+  }
+
+  return emptyMetadata()
+}
+
+export function saveWorktreeMetadata(data: WorktreeMetadataFile): void {
+  fs.mkdirSync(ATELI_DIR, { recursive: true, mode: 0o700 })
   const tmp = WORKTREES_PATH + "." + crypto.randomUUID().slice(0, 8)
-  fs.writeFileSync(tmp, JSON.stringify(worktrees, null, 2))
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
   fs.renameSync(tmp, WORKTREES_PATH)
 }

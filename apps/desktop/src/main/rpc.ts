@@ -13,7 +13,6 @@ import {
   worktreePath,
   loadWorktreeMetadata,
   saveWorktreeMetadata,
-  type WorktreeMetadata,
 } from "./worktree"
 
 const ATELI_DIR = path.join(os.homedir(), ".ateli")
@@ -196,61 +195,59 @@ export function startRpcServer(ptyManager: PtyManager) {
     })
 
     const id = crypto.randomUUID().slice(0, 8)
-    const metadata: WorktreeMetadata = {
+    const metadata = loadWorktreeMetadata()
+    metadata.entries[wtPath] = {
       id,
-      repoPath,
-      worktreePath: wtPath,
       branch,
       createdAt: new Date().toISOString(),
     }
-
-    const all = loadWorktreeMetadata()
-    all.push(metadata)
-    saveWorktreeMetadata(all)
+    saveWorktreeMetadata(metadata)
 
     broadcast("worktree.created", { id, path: wtPath, branch })
     return { id, path: wtPath, branch }
   })
 
   methods.set("worktree.list", async (params) => {
-    const repoPath = params.repoPath as string | undefined
     const metadata = loadWorktreeMetadata()
-    if (repoPath) {
-      return { worktrees: metadata.filter((w) => w.repoPath === repoPath) }
+    return {
+      worktrees: Object.entries(metadata.entries).map(([worktreePath, entry]) => ({
+        ...entry,
+        worktreePath,
+      })),
     }
-    return { worktrees: metadata }
   })
 
   methods.set("worktree.remove", async (params) => {
+    const repoPath = params.repoPath as string
+    if (!repoPath) throw new Error("repoPath is required")
     const id = params.id as string
     if (!id) throw new Error("id is required")
 
-    const all = loadWorktreeMetadata()
-    const idx = all.findIndex((w) => w.id === id)
-    if (idx === -1) throw new Error(`Worktree not found: ${id}`)
-
-    const wt = all[idx]
+    const metadata = loadWorktreeMetadata()
+    const match = Object.entries(metadata.entries).find(([, entry]) => entry.id === id)
+    if (!match) throw new Error(`Worktree not found: ${id}`)
+    const [worktreePath, entry] = match
 
     // Kill terminals whose cwd is inside this worktree
     const sessions = ptyManager.listSessions()
     for (const session of sessions) {
-      if (session.cwd.startsWith(wt.worktreePath)) {
+      if (session.cwd.startsWith(worktreePath)) {
         await ptyManager.killSession(session.id)
       }
     }
 
     // Remove the git worktree
     try {
-      await removeWorktree(wt.repoPath, wt.worktreePath)
+      await removeWorktree(repoPath, worktreePath)
     } catch {
       // May already be removed from disk
     }
 
     // Remove metadata
-    all.splice(idx, 1)
-    saveWorktreeMetadata(all)
+    delete metadata.entries[worktreePath]
+    saveWorktreeMetadata(metadata)
 
-    broadcast("worktree.removed", { id, path: wt.worktreePath, branch: wt.branch })
+    broadcast("worktree.removed", { id, path: worktreePath, branch: entry.branch })
     return { ok: true }
   })
 

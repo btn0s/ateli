@@ -11,7 +11,6 @@ import {
   loadWorktreeMetadata,
   saveWorktreeMetadata,
 } from "./worktree"
-import type { WorktreeMetadata } from "./worktree"
 import {
   readProjectDirectory,
   startFsWatch,
@@ -157,17 +156,13 @@ ipcMain.handle(
     })
 
     const id = crypto.randomUUID().slice(0, 8)
-    const metadata: WorktreeMetadata = {
+    const metadata = loadWorktreeMetadata()
+    metadata.entries[wtPath] = {
       id,
-      repoPath,
-      worktreePath: wtPath,
       branch,
       createdAt: new Date().toISOString(),
     }
-
-    const all = loadWorktreeMetadata()
-    all.push(metadata)
-    saveWorktreeMetadata(all)
+    saveWorktreeMetadata(metadata)
 
     broadcast("worktree.created", { id, path: wtPath, branch })
     return { id, path: wtPath, branch }
