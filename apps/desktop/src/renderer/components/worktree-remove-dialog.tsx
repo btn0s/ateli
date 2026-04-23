@@ -68,9 +68,11 @@ export function useWorktreeRemoveConfirmation(): {
         <DialogFooter>
           <Button variant="outline" onClick={cancel} disabled={removing}>
             Cancel
+            <span className="ml-1 text-[11px] opacity-60 tabular-nums">Esc</span>
           </Button>
           <Button variant="destructive" onClick={confirm} disabled={removing}>
             Remove worktree
+            <span className="ml-1 text-[11px] opacity-60 tabular-nums">⌘ ↩</span>
           </Button>
         </DialogFooter>
       </DialogContent>

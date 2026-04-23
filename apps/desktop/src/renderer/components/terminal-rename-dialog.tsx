@@ -108,9 +108,11 @@ export function useTerminalRenameDialog(): {
               disabled={submitting}
             >
               Cancel
+              <span className="ml-1 text-[11px] opacity-60 tabular-nums">Esc</span>
             </Button>
             <Button type="submit" disabled={submitting}>
               Rename
+              <span className="ml-1 text-[11px] opacity-60 tabular-nums">⌘ ↩</span>
             </Button>
           </DialogFooter>
         </form>
