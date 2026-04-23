@@ -1,4 +1,4 @@
-import type { ManagementPolicy } from "./management"
+import type { ManagementPermissions } from "./management"
 
 export function assertRecord(
   x: unknown,
@@ -69,7 +69,7 @@ const PERM_KEYS = new Set(["renameTerminal", "renameBranch", "updatePolicy"])
 function parsePermissionsBlock(
   value: unknown,
   role: "user" | "agent"
-): Partial<ManagementPolicy[typeof role]> {
+): Partial<ManagementPermissions> {
   if (value === undefined) return {}
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid management patch: ${role} must be an object`)
@@ -86,14 +86,18 @@ function parsePermissionsBlock(
     }
     out[k] = b
   }
-  return out as Partial<ManagementPolicy[typeof role]>
+  return out
 }
 
-export function parseManagementPolicyPatch(
-  x: unknown
-): Partial<Pick<ManagementPolicy, "user" | "agent">> {
+export function parseManagementPolicyPatch(x: unknown): {
+  user?: Partial<ManagementPermissions>
+  agent?: Partial<ManagementPermissions>
+} {
   const r = assertRecord(x, "management:update-policy")
-  const out: Partial<Pick<ManagementPolicy, "user" | "agent">> = {}
+  const out: {
+    user?: Partial<ManagementPermissions>
+    agent?: Partial<ManagementPermissions>
+  } = {}
   if (r["user"] !== undefined) {
     out.user = parsePermissionsBlock(r["user"], "user")
   }

@@ -1,5 +1,5 @@
 import { RpcInvalidParamsError } from "./jsonrpc-error"
-import type { ManagementPolicy } from "./management"
+import type { ManagementPermissions } from "./management"
 
 export function rpcObj(params: unknown): Record<string, unknown> {
   if (params === undefined || params === null) {
@@ -109,7 +109,7 @@ const PERM_KEYS = new Set(["renameTerminal", "renameBranch", "updatePolicy"])
 function parsePermissionsBlockRpc(
   value: unknown,
   role: "user" | "agent"
-): Partial<ManagementPolicy[typeof role]> {
+): Partial<ManagementPermissions> {
   if (value === undefined) {
     return {}
   }
@@ -128,13 +128,17 @@ function parsePermissionsBlockRpc(
     }
     out[k] = b
   }
-  return out as Partial<ManagementPolicy[typeof role]>
+  return out
 }
 
-export function parseManagementPatchRpc(
-  p: Record<string, unknown>
-): Partial<Pick<ManagementPolicy, "user" | "agent">> {
-  const out: Partial<Pick<ManagementPolicy, "user" | "agent">> = {}
+export function parseManagementPatchRpc(p: Record<string, unknown>): {
+  user?: Partial<ManagementPermissions>
+  agent?: Partial<ManagementPermissions>
+} {
+  const out: {
+    user?: Partial<ManagementPermissions>
+    agent?: Partial<ManagementPermissions>
+  } = {}
   if (p["user"] !== undefined) {
     out.user = parsePermissionsBlockRpc(p["user"], "user")
   }

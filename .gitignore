@@ -27,6 +27,9 @@ out/
 build
 dist
 
+# TypeScript build info (apps/desktop `tsc -b`)
+apps/desktop/*.tsbuildinfo
+
 
 # Debug
 npm-debug.log*

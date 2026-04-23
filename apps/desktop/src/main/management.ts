@@ -85,9 +85,10 @@ export function saveManagementPolicy(policy: ManagementPolicy): void {
   fs.renameSync(tmp, MANAGEMENT_POLICY_PATH)
 }
 
-export function updateManagementPolicy(
-  patch: Partial<Pick<ManagementPolicy, "user" | "agent">>
-): ManagementPolicy {
+export function updateManagementPolicy(patch: {
+  user?: Partial<ManagementPermissions>
+  agent?: Partial<ManagementPermissions>
+}): ManagementPolicy {
   const current = loadManagementPolicy()
   const next: ManagementPolicy = {
     version: MANAGEMENT_POLICY_VERSION,

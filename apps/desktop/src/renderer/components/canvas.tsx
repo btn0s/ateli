@@ -235,7 +235,11 @@ const CustomToolbar = track(() => {
                 onClick={() => tool.onSelect("toolbar")}
                 title={`${id}${tool.kbd ? ` (${tool.kbd.split(",")[0]})` : ""}`}
               >
-                <TldrawUiIcon icon={tool.icon as TLUiIconType} small />
+                <TldrawUiIcon
+                  icon={tool.icon as TLUiIconType}
+                  small
+                  label={id}
+                />
               </button>
             )
           })}
@@ -630,7 +634,7 @@ export function Canvas({ folderPath }: { folderPath: string }) {
             persistenceKey={`ateli:canvas:${folderPath}`}
             components={components}
             shapeUtils={customShapeUtils}
-            options={{ gridSteps: [{ min: 1, step: 20 }] }}
+            options={{ gridSteps: [{ min: 1, mid: 1, step: 20 }] }}
             onMount={(editor) => {
               editor.user.updateUserPreferences({ colorScheme: "dark" })
               editor.updateInstanceState({ isGridMode: true })

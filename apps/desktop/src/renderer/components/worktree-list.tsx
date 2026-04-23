@@ -143,7 +143,7 @@ export const WorktreeList = track(function WorktreeList({
         return (
           <div key={rowKey}>
             <ContextMenu>
-              <ContextMenuTrigger asChild>
+              <ContextMenuTrigger>
                 <div>
                   <SidebarTreeRow active={isExpanded}>
                     <SidebarTreeRow.Trigger
@@ -224,7 +224,7 @@ export const WorktreeList = track(function WorktreeList({
 
                     return (
                       <ContextMenu key={shape.id}>
-                        <ContextMenuTrigger asChild>
+                        <ContextMenuTrigger>
                           <div>
                             <SidebarTreeRow>
                               <SidebarTreeRow.Trigger
