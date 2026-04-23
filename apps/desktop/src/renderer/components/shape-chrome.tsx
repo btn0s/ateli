@@ -9,15 +9,10 @@ export interface ShapeChromeAction {
 }
 
 interface ShapeChromeProps {
-  /** Title shown in the top bar */
   title: string
-  /** Optional icon before the title */
   icon?: LucideIcon
-  /** Action buttons in the top-right */
   actions?: ShapeChromeAction[]
-  /** The shape content */
   children: ReactNode
-  /** Whether the shape is interactive (focused/editing) */
   isInteractive?: boolean
 }
 
@@ -30,11 +25,11 @@ export function ShapeChrome({
 }: ShapeChromeProps) {
   return (
     <div
-      className="flex h-full w-full flex-col overflow-hidden border border-border bg-card transition-colors duration-150 ease-out"
+      className="flex h-full w-full flex-col overflow-hidden border border-border/60 bg-card"
       style={{ borderRadius: "var(--radius)" }}
     >
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-muted/50 px-2">
-        <div className="flex items-center gap-1.5 overflow-hidden">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
+        <div className="flex min-w-0 items-center gap-2">
           {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}
           <span className="truncate font-mono text-xs text-muted-foreground">
             {title}
@@ -45,7 +40,7 @@ export function ShapeChrome({
             {actions.map((action) => (
               <button
                 key={action.id}
-                className="flex size-5 items-center justify-center text-muted-foreground transition-colors duration-100 ease-out hover:text-foreground"
+                className="flex size-6 items-center justify-center rounded-[3px] text-muted-foreground transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground"
                 onClick={(e) => {
                   e.stopPropagation()
                   action.onClick()
@@ -53,7 +48,7 @@ export function ShapeChrome({
                 title={action.label}
                 style={{ pointerEvents: isInteractive ? "auto" : "none" }}
               >
-                <action.icon className="size-3" />
+                <action.icon className="size-3.5" />
               </button>
             ))}
           </div>
