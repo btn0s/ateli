@@ -37,3 +37,4 @@ npm-debug.log*
 .idea/
 .cursor/
 .claude/scheduled_tasks.lock
+.worktrees/
