@@ -23,7 +23,7 @@ function Root({
 function Title({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-1 items-center px-0.5 py-0.5">
-      <span className="truncate pl-0.5 text-xs font-medium uppercase text-muted-foreground">
+      <span className="truncate pl-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
         {children}
       </span>
     </div>
@@ -94,7 +94,7 @@ function Tab({
       role="tab"
       aria-selected={selected}
       className={cn(
-        "flex min-w-0 shrink-0 items-center border-0 bg-transparent p-0 shadow-none outline-none",
+        "relative flex min-w-0 shrink-0 items-center border-0 bg-transparent p-0 shadow-none outline-none",
         "px-0.5 py-0.5",
         "focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0",
         className,
@@ -103,13 +103,19 @@ function Tab({
     >
       <span
         className={cn(
-          "truncate pl-0.5 text-left text-xs font-medium uppercase transition-colors",
+          "relative truncate pl-0.5 text-left text-[10px] font-medium uppercase tracking-[0.16em] transition-colors duration-150 ease-out",
           selected
-            ? "text-muted-foreground"
-            : "text-muted-foreground/70 hover:text-muted-foreground",
+            ? "text-foreground"
+            : "text-muted-foreground/60 hover:text-muted-foreground",
         )}
       >
         {children}
+        {selected && (
+          <span
+            aria-hidden
+            className="absolute -bottom-[3px] left-[2px] right-0 h-px bg-signal"
+          />
+        )}
       </span>
     </button>
   )

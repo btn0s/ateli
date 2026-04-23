@@ -32,16 +32,18 @@ export const CommandMenu = track(function CommandMenu() {
     .filter((s) => s.type === "frame")
 
   const mainWt = worktrees.find((w) => w.isMain)
-  const wtEntries =
+  const wtEntries: WorktreeIndexEntry[] =
     repoPath && worktrees.length > 0
       ? [
-          mainWt ??
-            ({
-              path: repoPath,
-              branch: "main",
-              head: "",
-              isMain: true,
-            } as const),
+          mainWt ?? {
+            id: "",
+            path: repoPath,
+            branch: "main",
+            head: "",
+            isMain: true,
+            createdAt: "",
+            repoPath,
+          },
           ...worktrees.filter((w) => !w.isMain),
         ]
       : []
