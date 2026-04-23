@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import "@xterm/xterm/css/xterm.css"
+import { useTerminalSessionStore } from "@/contexts/terminal-session-store"
 
 function getTerminalSize(term: Terminal): { cols: number; rows: number } {
   return {
@@ -24,6 +25,7 @@ export function SidebarEmbeddedTerminal({
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const onEndedRef = useRef(onSessionEnded)
+  const sessions = useTerminalSessionStore()
   onEndedRef.current = onSessionEnded
 
   useEffect(() => {
@@ -32,9 +34,8 @@ export function SidebarEmbeddedTerminal({
 
     const state = {
       disposed: false,
-      sessionKey: null as string | null,
-      removeData: null as null | (() => void),
-      removeExit: null as null | (() => void),
+      sessionId: null as string | null,
+      unsubscribeSession: null as null | (() => void),
       disposeTermData: null as null | (() => void),
       disposeTermResize: null as null | (() => void),
     }
@@ -68,54 +69,57 @@ export function SidebarEmbeddedTerminal({
     el.addEventListener("keyup", stopBubble)
     el.addEventListener("pointerdown", stopBubble)
 
-    function attachSession(sessionKey: string) {
-      state.sessionKey = sessionKey
-      state.removeData?.()
-      state.removeExit?.()
+    function attachSession(sessionId: string) {
+      state.sessionId = sessionId
+      state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
 
-      state.removeData = window.electron.terminal.onData(sessionKey, (data) => {
-        term.write(data)
-      })
-
-      state.removeExit = window.electron.terminal.onExit(sessionKey, () => {
-        state.disposed = true
-        state.sessionKey = null
-        term.write("\r\n[Session ended]\r\n")
-        onEndedRef.current?.()
+      state.unsubscribeSession = sessions.subscribe(sessionId, {
+        onData: (data: string) => {
+          term.write(data)
+        },
+        onExit: () => {
+          state.disposed = true
+          state.sessionId = null
+          term.write("\r\n[Session ended]\r\n")
+          onEndedRef.current?.()
+        },
       })
 
       const onResizeDisposable = term.onResize(({ cols, rows }) => {
-        if (!state.disposed && state.sessionKey) {
-          window.electron.terminal.resize(state.sessionKey, cols, rows)
+        if (!state.disposed && state.sessionId) {
+          sessions.resize(state.sessionId, cols, rows)
         }
       })
       state.disposeTermResize = () => onResizeDisposable.dispose()
 
       const onDataDisposable = term.onData((data) => {
-        if (!state.disposed && state.sessionKey) {
-          window.electron.terminal.write(state.sessionKey, data)
+        if (!state.disposed && state.sessionId) {
+          sessions.write(state.sessionId, data)
         }
       })
       state.disposeTermData = () => onDataDisposable.dispose()
 
       fitAddon.fit()
       const { cols, rows } = getTerminalSize(term)
-      window.electron.terminal.resize(sessionKey, cols, rows)
+      sessions.resize(sessionId, cols, rows)
     }
 
     void (async () => {
       try {
-        const { sessionKey } = await window.electron.terminal.create(
-          `sidebar:${instanceKey}`,
+        const { cols, rows } = getTerminalSize(term)
+        const { sessionId } = await sessions.attach({
+          ownerId: `sidebar:${instanceKey}`,
           cwd,
-        )
+          cols,
+          rows,
+        })
         if (state.disposed) {
-          window.electron.terminal.dispose(sessionKey)
+          sessions.detach(sessionId)
           return
         }
-        attachSession(sessionKey)
+        attachSession(sessionId)
       } catch (err: unknown) {
         term.write(`\r\nFailed to start terminal: ${err}\r\n`)
       }
@@ -123,9 +127,9 @@ export function SidebarEmbeddedTerminal({
 
     const observer = new ResizeObserver(() => {
       fitAddon.fit()
-      if (!state.disposed && state.sessionKey) {
+      if (!state.disposed && state.sessionId) {
         const { cols, rows } = getTerminalSize(term)
-        window.electron.terminal.resize(state.sessionKey, cols, rows)
+        sessions.resize(state.sessionId, cols, rows)
       }
     })
     observer.observe(el)
@@ -136,16 +140,15 @@ export function SidebarEmbeddedTerminal({
       el.removeEventListener("keyup", stopBubble)
       el.removeEventListener("pointerdown", stopBubble)
       observer.disconnect()
-      state.removeData?.()
-      state.removeExit?.()
+      state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
-      if (state.sessionKey) {
-        window.electron.terminal.dispose(state.sessionKey)
+      if (state.sessionId) {
+        sessions.detach(state.sessionId)
       }
       term.dispose()
     }
-  }, [cwd, instanceKey])
+  }, [cwd, instanceKey, sessions])
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-[#1a1a1a] p-2">
