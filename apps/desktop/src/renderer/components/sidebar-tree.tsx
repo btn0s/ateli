@@ -5,17 +5,26 @@ import { cn } from "@workspace/ui/lib/utils"
 function RowRoot({
   className,
   children,
+  active = false,
 }: {
   className?: string
   children: ReactNode
+  /** Render a 2px amber left-edge indicator. */
+  active?: boolean
 }) {
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 hover:bg-accent",
+        "relative flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 transition-colors duration-100 ease-out hover:bg-accent",
         className,
       )}
     >
+      {active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-px left-0 w-[2px] bg-signal"
+        />
+      )}
       {children}
     </div>
   )

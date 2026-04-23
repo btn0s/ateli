@@ -30,13 +30,27 @@ export function ShapeChrome({
 }: ShapeChromeProps) {
   return (
     <div
-      className="flex h-full w-full flex-col overflow-hidden border border-border bg-card"
-      style={{ borderRadius: "var(--radius)" }}
+      className="flex h-full w-full flex-col overflow-hidden border border-border bg-card transition-colors duration-150 ease-out"
+      style={{
+        borderRadius: "var(--radius)",
+        borderColor: isInteractive ? "var(--accent-signal)" : undefined,
+      }}
     >
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-muted/50 px-2">
         <div className="flex items-center gap-1.5 overflow-hidden">
+          {/* Live dot — amber when interactive, muted when not. */}
+          <span
+            aria-hidden
+            className="size-1.5 shrink-0 transition-colors duration-150 ease-out"
+            style={{
+              backgroundColor: isInteractive
+                ? "var(--accent-signal)"
+                : "var(--muted-foreground)",
+              opacity: isInteractive ? 1 : 0.4,
+            }}
+          />
           {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}
-          <span className="truncate text-xs text-muted-foreground">
+          <span className="truncate text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
             {title}
           </span>
         </div>
@@ -45,7 +59,7 @@ export function ShapeChrome({
             {actions.map((action) => (
               <button
                 key={action.id}
-                className="flex size-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                className="flex size-5 items-center justify-center text-muted-foreground transition-colors duration-100 ease-out hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation()
                   action.onClick()

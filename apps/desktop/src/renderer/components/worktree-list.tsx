@@ -141,7 +141,7 @@ export const WorktreeList = track(function WorktreeList({
             <ContextMenu>
               <ContextMenuTrigger asChild>
                 <div>
-                  <SidebarTreeRow>
+                  <SidebarTreeRow active={isExpanded}>
                     <SidebarTreeRow.Trigger
                       onClick={() => toggleExpanded(rowKey)}
                       title={wt.path}
