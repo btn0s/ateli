@@ -174,31 +174,6 @@ export function startRpcServer(ptyManager: PtyManager) {
     return { shapeId }
   })
 
-  // --- Workspace methods ---
-
-  methods.set("workspace.context", async (params) => {
-    const win = getMainWindow()
-    if (!win) throw new Error("No window available")
-
-    const sessionKey = params.sessionKey as string
-    if (!sessionKey) throw new Error("sessionKey is required")
-
-    return new Promise((resolve, reject) => {
-      const channel = `rpc:context-response:${crypto.randomUUID()}`
-      const timer = setTimeout(() => {
-        ipcMain.removeAllListeners(channel)
-        reject(new Error("Timed out waiting for renderer"))
-      }, SHAPES_TIMEOUT_MS)
-
-      ipcMain.once(channel, (_event, context) => {
-        clearTimeout(timer)
-        resolve(context)
-      })
-
-      win.webContents.send("rpc:get-context", { sessionKey, responseChannel: channel })
-    })
-  })
-
   // --- Worktree methods ---
 
   methods.set("worktree.create", async (params) => {
