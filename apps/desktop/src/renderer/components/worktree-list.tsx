@@ -8,6 +8,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@workspace/ui/components/context-menu"
 import { addTerminalAtCenter } from "@/lib/default-actions"
@@ -264,6 +265,7 @@ export const WorktreeList = track(function WorktreeList({
                             }}
                           >
                             Kill session
+                            <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
                           </ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>

@@ -16,10 +16,10 @@ type TerminalKillRequest = {
 
 export function isTerminalKillShortcut(event: KeyboardEvent): boolean {
   return (
-    event.key.toLowerCase() === "k" &&
-    event.shiftKey &&
+    event.key === "Backspace" &&
     (event.metaKey || event.ctrlKey) &&
-    !event.altKey
+    !event.altKey &&
+    !event.shiftKey
   )
 }
 

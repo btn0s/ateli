@@ -197,7 +197,7 @@ export function SidebarTerminalTabs({
                       }}
                     >
                       Kill session
-                      <ContextMenuShortcut>⌘⇧K</ContextMenuShortcut>
+                      <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
