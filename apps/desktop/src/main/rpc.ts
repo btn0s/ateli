@@ -8,7 +8,8 @@ import { BrowserWindow, ipcMain } from "electron"
 import type { PtyManager } from "./pty"
 import {
   addWorktree,
-  listGitWorktrees,
+  listWorktrees,
+  findWorktreeById,
   removeWorktree,
   worktreePath,
   loadWorktreeMetadata,
@@ -208,13 +209,10 @@ export function startRpcServer(ptyManager: PtyManager) {
   })
 
   methods.set("worktree.list", async (params) => {
-    const metadata = loadWorktreeMetadata()
-    return {
-      worktrees: Object.entries(metadata.entries).map(([worktreePath, entry]) => ({
-        ...entry,
-        worktreePath,
-      })),
-    }
+    const repoPath = params.repoPath as string | undefined
+    if (!repoPath) throw new Error("repoPath is required")
+    const worktrees = await listWorktrees(repoPath)
+    return { worktrees }
   })
 
   methods.set("worktree.remove", async (params) => {
@@ -223,31 +221,30 @@ export function startRpcServer(ptyManager: PtyManager) {
     const id = params.id as string
     if (!id) throw new Error("id is required")
 
-    const metadata = loadWorktreeMetadata()
-    const match = Object.entries(metadata.entries).find(([, entry]) => entry.id === id)
-    if (!match) throw new Error(`Worktree not found: ${id}`)
-    const [worktreePath, entry] = match
+    const entry = await findWorktreeById(repoPath, id)
+    if (!entry) throw new Error(`Worktree not found: ${id}`)
 
     // Kill terminals whose cwd is inside this worktree
     const sessions = ptyManager.listSessions()
     for (const session of sessions) {
-      if (session.cwd.startsWith(worktreePath)) {
+      if (session.cwd.startsWith(entry.path)) {
         await ptyManager.killSession(session.id)
       }
     }
 
     // Remove the git worktree
     try {
-      await removeWorktree(repoPath, worktreePath)
+      await removeWorktree(entry.repoPath, entry.path)
     } catch {
       // May already be removed from disk
     }
 
     // Remove metadata
-    delete metadata.entries[worktreePath]
+    const metadata = loadWorktreeMetadata()
+    delete metadata.entries[entry.path]
     saveWorktreeMetadata(metadata)
 
-    broadcast("worktree.removed", { id, path: worktreePath, branch: entry.branch })
+    broadcast("worktree.removed", { id, path: entry.path, branch: entry.branch })
     return { ok: true }
   })
 
