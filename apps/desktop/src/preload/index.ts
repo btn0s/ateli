@@ -49,7 +49,15 @@ contextBridge.exposeInMainWorld("electron", {
   worktree: {
     list: (repoPath: string) =>
       ipcRenderer.invoke("worktree:list", { repoPath }) as Promise<
-        { path: string; branch: string; head: string; isMain: boolean }[]
+        {
+          id: string
+          path: string
+          branch: string
+          head: string
+          isMain: boolean
+          createdAt: string
+          repoPath: string
+        }[]
       >,
     create: (repoPath: string, branch: string) =>
       ipcRenderer.invoke("worktree:create", { repoPath, branch }) as Promise<{
@@ -57,6 +65,8 @@ contextBridge.exposeInMainWorld("electron", {
         path: string
         branch: string
       }>,
+    remove: (repoPath: string, id: string) =>
+      ipcRenderer.invoke("worktree:remove", { repoPath, id }) as Promise<{ ok: true }>,
   },
   fs: {
     readdir: (dirPath: string) =>

@@ -50,7 +50,10 @@ function branchSlug(branch: string): string {
   return branch.replace(/[^a-zA-Z0-9_-]/g, "-")
 }
 
-export function worktreePath(repoPath: string, branch: string): string {
+export function worktreePath(
+  repoPath: string,
+  branch: string,
+): string {
   return path.join(WORKTREES_DIR, repoHash(repoPath), branchSlug(branch))
 }
 

@@ -42,13 +42,22 @@ interface Window {
     }
     worktree: {
       list: (repoPath: string) => Promise<
-        { path: string; branch: string; head: string; isMain: boolean }[]
+        {
+          id: string
+          path: string
+          branch: string
+          head: string
+          isMain: boolean
+          createdAt: string
+          repoPath: string
+        }[]
       >
       create: (repoPath: string, branch: string) => Promise<{
         id: string
         path: string
         branch: string
       }>
+      remove: (repoPath: string, id: string) => Promise<{ ok: true }>
     }
     rpc: {
       onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) => () => void
