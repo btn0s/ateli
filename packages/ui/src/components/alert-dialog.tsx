@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 
 import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
+import { submitDialogPrimaryAction } from "@workspace/ui/components/dialog"
 
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
@@ -41,6 +42,7 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   size = "default",
+  onKeyDown,
   ...props
 }: AlertDialogPrimitive.Popup.Props & {
   size?: "default" | "sm"
@@ -56,6 +58,14 @@ function AlertDialogContent({
           className
         )}
         {...props}
+        onKeyDown={(event) => {
+          onKeyDown?.(event)
+          if (event.defaultPrevented) return
+          if (event.key !== "Enter") return
+          if (!event.metaKey && !event.ctrlKey) return
+          submitDialogPrimaryAction(event.currentTarget, "alert-dialog-footer")
+          event.preventDefault()
+        }}
       />
     </AlertDialogPortal>
   )

@@ -39,10 +39,30 @@ function DialogOverlay({
   )
 }
 
+export function submitDialogPrimaryAction(
+  root: HTMLElement,
+  footerSlot: "dialog-footer" | "alert-dialog-footer",
+): boolean {
+  const form = root.querySelector("form")
+  if (form) {
+    form.requestSubmit()
+    return true
+  }
+  const primary = root.querySelector<HTMLButtonElement>(
+    `[data-slot="${footerSlot}"] button:last-of-type`,
+  )
+  if (primary) {
+    primary.click()
+    return true
+  }
+  return false
+}
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onKeyDown,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
@@ -57,6 +77,14 @@ function DialogContent({
           className,
         )}
         {...props}
+        onKeyDown={(event) => {
+          onKeyDown?.(event)
+          if (event.defaultPrevented) return
+          if (event.key !== "Enter") return
+          if (!event.metaKey && !event.ctrlKey) return
+          submitDialogPrimaryAction(event.currentTarget, "dialog-footer")
+          event.preventDefault()
+        }}
       >
         {children}
         {showCloseButton && (
