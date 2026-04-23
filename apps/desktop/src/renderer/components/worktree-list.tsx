@@ -23,6 +23,8 @@ import {
 import { terminalsBelongingToWorktree } from "@/lib/worktree-terminals"
 import { useTerminalKillConfirmation } from "@/components/terminal-kill-dialog"
 import { useWorktreeRemoveConfirmation } from "@/components/worktree-remove-dialog"
+import { useWorktreeRenameConfirmation } from "@/components/worktree-rename-dialog"
+import { useManagementPolicy } from "@/contexts/management-policy-context"
 
 export const WorktreeList = track(function WorktreeList({
   repoPath,
@@ -33,6 +35,8 @@ export const WorktreeList = track(function WorktreeList({
   const worktrees = useWorktrees()
   const { requestKill, dialog: killDialog } = useTerminalKillConfirmation()
   const { requestRemove, dialog: removeDialog } = useWorktreeRemoveConfirmation()
+  const { requestRename, dialog: renameDialog } = useWorktreeRenameConfirmation()
+  const { policy } = useManagementPolicy()
   const [expanded, setExpanded] = useState(
     () => new Set<string>([repoPath]),
   )
@@ -84,6 +88,15 @@ export const WorktreeList = track(function WorktreeList({
       id: wt.id,
       branch: wt.branch,
       path: wt.path,
+    })
+  }
+
+  function renameBranch(wt: WorktreeIndexEntry) {
+    if (!wt.id || wt.isMain) return
+    requestRename({
+      repoPath,
+      id: wt.id,
+      currentBranch: wt.branch,
     })
   }
 
@@ -169,6 +182,12 @@ export const WorktreeList = track(function WorktreeList({
                 {!wt.isMain && (
                   <>
                     <ContextMenuSeparator />
+                    <ContextMenuItem
+                      disabled={!wt.id || !policy.user.renameBranch}
+                      onClick={() => renameBranch(wt)}
+                    >
+                      Rename branch…
+                    </ContextMenuItem>
                     <ContextMenuItem
                       variant="destructive"
                       disabled={!wt.id}
@@ -259,6 +278,7 @@ export const WorktreeList = track(function WorktreeList({
       </Sidebar.Section>
       {killDialog}
       {removeDialog}
+      {renameDialog}
     </div>
   )
 })

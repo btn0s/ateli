@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Plus, X } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
@@ -11,6 +11,8 @@ import {
 } from "@workspace/ui/components/context-menu"
 import { SidebarEmbeddedTerminal } from "@/components/sidebar-embedded-terminal"
 import { useTerminalKillConfirmation } from "@/components/terminal-kill-dialog"
+import { useTerminalRenameDialog } from "@/components/terminal-rename-dialog"
+import { useManagementPolicy } from "@/contexts/management-policy-context"
 
 function terminalTabSurfaceClass(selected: boolean) {
   return cn(
@@ -46,7 +48,47 @@ export function SidebarTerminalTabs({
   const [sessionIdsByTab, setSessionIdsByTab] = useState<
     Record<string, string | undefined>
   >({})
-  const { requestKill, dialog } = useTerminalKillConfirmation()
+  const [namesBySessionKey, setNamesBySessionKey] = useState<
+    Record<string, string | undefined>
+  >({})
+  const { requestKill, dialog: killDialog } = useTerminalKillConfirmation()
+  const { requestRename, dialog: renameDialog } = useTerminalRenameDialog()
+  const { policy } = useManagementPolicy()
+
+  useEffect(() => {
+    let cancelled = false
+    void window.electron.terminal.list().then((sessions) => {
+      if (cancelled) return
+      setNamesBySessionKey((prev) => {
+        const next = { ...prev }
+        for (const s of sessions) {
+          if (s.name) next[s.sidecarSessionId] = s.name
+        }
+        return next
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    return window.electron.rpc.onNotification(({ method, params }) => {
+      if (method !== "terminal.renamed") return
+      const sessionKey = params.sessionKey
+      if (typeof sessionKey !== "string") return
+      const name = params.name
+      setNamesBySessionKey((prev) => {
+        const next = { ...prev }
+        if (typeof name === "string" && name.length > 0) {
+          next[sessionKey] = name
+        } else {
+          delete next[sessionKey]
+        }
+        return next
+      })
+    })
+  }, [])
 
   const setTabSessionId = useCallback(
     (tabId: string, sessionId: string | null) => {
@@ -91,9 +133,13 @@ export function SidebarTerminalTabs({
           >
             {tabIds.map((id, i) => {
               const selected = activeTabId === id
-              const label = i === 0 ? "Terminal" : `T${i}`
+              const fallbackLabel = i === 0 ? "Terminal" : `T${i}`
               const canClose = i > 0
               const sessionId = sessionIdsByTab[id]
+              const customName = sessionId
+                ? namesBySessionKey[sessionId]
+                : undefined
+              const label = customName ?? fallbackLabel
               return (
                 <ContextMenu key={id}>
                   <ContextMenuTrigger
@@ -129,6 +175,19 @@ export function SidebarTerminalTabs({
                     ) : null}
                   </ContextMenuTrigger>
                   <ContextMenuContent className="min-w-44">
+                    <ContextMenuItem
+                      disabled={!sessionId || !policy.user.renameTerminal}
+                      onClick={() => {
+                        if (!sessionId) return
+                        requestRename({
+                          sessionKey: sessionId,
+                          currentName: customName,
+                          fallbackLabel,
+                        })
+                      }}
+                    >
+                      Rename…
+                    </ContextMenuItem>
                     <ContextMenuItem
                       variant="destructive"
                       disabled={!sessionId}
@@ -186,7 +245,8 @@ export function SidebarTerminalTabs({
           ))}
         </div>
       )}
-      {dialog}
+      {killDialog}
+      {renameDialog}
     </div>
   )
 }

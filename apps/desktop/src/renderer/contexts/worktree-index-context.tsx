@@ -42,7 +42,11 @@ export function WorktreeIndexProvider({
 
   useEffect(() => {
     return window.electron.rpc.onNotification(({ method }) => {
-      if (method === "worktree.created" || method === "worktree.removed") {
+      if (
+        method === "worktree.created" ||
+        method === "worktree.removed" ||
+        method === "worktree.renamed"
+      ) {
         refresh()
       }
     })
