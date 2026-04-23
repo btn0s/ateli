@@ -38,10 +38,10 @@ export function ShapeChrome({
     >
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-muted/50 px-2">
         <div className="flex items-center gap-1.5 overflow-hidden">
-          {/* Live dot — amber when interactive (pulses), muted when not. */}
+          {/* Live dot — amber when interactive (pulses with soft glow), muted when not. */}
           <span
             aria-hidden
-            className={`size-1.5 shrink-0 transition-colors duration-150 ease-out ${
+            className={`size-1.5 shrink-0 transition-all duration-150 ease-out ${
               isInteractive ? "signal-dot" : ""
             }`}
             style={{
@@ -49,6 +49,9 @@ export function ShapeChrome({
                 ? "var(--accent-signal)"
                 : "var(--muted-foreground)",
               opacity: isInteractive ? 1 : 0.4,
+              filter: isInteractive
+                ? "drop-shadow(0 0 3px oklch(0.82 0.16 80 / 60%))"
+                : "none",
             }}
           />
           {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}

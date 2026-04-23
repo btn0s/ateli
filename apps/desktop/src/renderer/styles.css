@@ -37,6 +37,25 @@ body {
     var(--background);
 }
 
+/* Crisp mono at small sizes — sub-pixel smoothing settings. */
+html,
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv01"; /* Geist Mono alternates where present */
+}
+
+/* Focus ring: hard 1px + soft outer halo. */
+:where(*:focus-visible) {
+  outline: none;
+}
+.dark :where(button, [role="tab"], [role="menuitem"], a):focus-visible {
+  box-shadow:
+    0 0 0 1px var(--accent-signal),
+    0 0 0 4px oklch(0.82 0.16 80 / 18%);
+}
+
 /* Film-grain overlay. SVG fractal noise at very low opacity — adds texture
    to flat dark panes without reading as decoration. */
 body::before {

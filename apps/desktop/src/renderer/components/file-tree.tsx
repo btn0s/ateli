@@ -26,11 +26,11 @@ type FilesPanelTab = "files" | "changes"
 
 function filePanelTabClass(selected: boolean) {
   return cn(
-    "h-8 min-h-8 px-1 text-center text-xs font-medium transition-colors",
-    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
+    "relative h-8 min-h-8 px-1 text-center text-[10px] font-medium uppercase tracking-[0.16em] transition-colors duration-150 ease-out",
+    "focus-visible:outline-none",
     selected
-      ? "bg-muted text-foreground"
-      : "text-muted-foreground hover:bg-muted",
+      ? "text-foreground"
+      : "text-muted-foreground/60 hover:text-muted-foreground",
   )
 }
 
@@ -516,6 +516,13 @@ export const FileTree = track(function FileTree() {
               onClick={() => setPanelTab("files")}
             >
               Files
+              {panelTab === "files" && (
+                <span
+                  aria-hidden
+                  key="files-underline"
+                  className="tab-underline pointer-events-none absolute bottom-0 left-2 right-2 h-px bg-signal"
+                />
+              )}
             </button>
             <button
               type="button"
@@ -529,10 +536,24 @@ export const FileTree = track(function FileTree() {
             >
               <span>Changes</span>
               {changeCount > 0 ? (
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                <span
+                  className={cn(
+                    "font-mono text-[10px] tabular-nums",
+                    panelTab === "changes"
+                      ? "text-signal"
+                      : "text-muted-foreground/60",
+                  )}
+                >
                   {changeCount}
                 </span>
               ) : null}
+              {panelTab === "changes" && (
+                <span
+                  aria-hidden
+                  key="changes-underline"
+                  className="tab-underline pointer-events-none absolute bottom-0 left-2 right-2 h-px bg-signal"
+                />
+              )}
             </button>
           </div>
           <div className="flex shrink-0 items-stretch border-l border-border">
