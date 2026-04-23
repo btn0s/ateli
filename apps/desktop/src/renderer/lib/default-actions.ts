@@ -58,7 +58,9 @@ registerAction({
   showInCommandMenu: true,
   showInContextMenu: true,
   execute: async () => {
-    if (!_repoPath) return
+    if (!_repoPath) {
+      throw new Error("No repository is open for this action.")
+    }
     const branch = generateBranchName()
     await window.electron.worktree.create(_repoPath, branch)
   },

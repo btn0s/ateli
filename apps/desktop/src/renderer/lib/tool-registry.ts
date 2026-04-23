@@ -11,7 +11,7 @@ export interface ToolAction {
   showInToolbar?: boolean
   showInCommandMenu?: boolean
   showInContextMenu?: boolean
-  execute: (editor: Editor) => void
+  execute: (editor: Editor) => void | Promise<void>
 }
 
 const registry: ToolAction[] = []

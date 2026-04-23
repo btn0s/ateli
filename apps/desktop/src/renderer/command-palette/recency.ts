@@ -1,42 +1,80 @@
 import type { CommandDefinition } from "./types"
 
 const STORAGE_KEY = "ateli.commandPalette.recency"
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const MAX_ENTRIES = 50
 
-type RecencyFile = {
-  v: number
-  /** Workspace folder or repo path this list is scoped to. */
+type RecencyFileV2 = {
+  v: 2
+  byScope: Record<string, string[]>
+}
+
+type RecencyFileV1 = {
+  v: 1
   scope: string
-  /** Most recent first: command `id` strings. */
   ids: string[]
 }
 
-function load(scope: string): string[] {
-  if (typeof localStorage === "undefined") return []
+function readStore(): { byScope: Record<string, string[]> } {
+  if (typeof localStorage === "undefined") {
+    return { byScope: {} }
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const data = JSON.parse(raw) as RecencyFile
-    if (data.v !== SCHEMA_VERSION || data.scope !== scope) return []
-    return Array.isArray(data.ids) ? data.ids.slice(0, MAX_ENTRIES) : []
+    if (!raw) {
+      return { byScope: {} }
+    }
+    const data = JSON.parse(raw) as unknown
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const o = data as Record<string, unknown>
+      if (o.v === SCHEMA_VERSION && o.byScope && typeof o.byScope === "object" && o.byScope !== null && !Array.isArray(o.byScope)) {
+        return { byScope: { ...((o.byScope as Record<string, string[]>)) } }
+      }
+      if (o.v === 1) {
+        const v1 = data as RecencyFileV1
+        if (typeof v1.scope === "string" && Array.isArray(v1.ids)) {
+          return {
+            byScope: v1.scope
+              ? { [v1.scope]: v1.ids.slice(0, MAX_ENTRIES) }
+              : {},
+          }
+        }
+      }
+    }
   } catch {
-    return []
+    // ignore
   }
+  return { byScope: {} }
 }
 
-function save(scope: string, ids: string[]) {
-  if (typeof localStorage === "undefined") return
-  const payload: RecencyFile = {
+function writeStore(byScope: Record<string, string[]>) {
+  if (typeof localStorage === "undefined") {
+    return
+  }
+  const payload: RecencyFileV2 = {
     v: SCHEMA_VERSION,
-    scope,
-    ids: ids.slice(0, MAX_ENTRIES),
+    byScope,
   }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
   } catch {
     // ignore quota
   }
+}
+
+function load(scope: string): string[] {
+  const { byScope } = readStore()
+  const ids = byScope[scope]
+  if (!Array.isArray(ids)) {
+    return []
+  }
+  return ids.slice(0, MAX_ENTRIES)
+}
+
+function saveScope(scope: string, ids: string[]) {
+  const { byScope } = readStore()
+  const next: Record<string, string[]> = { ...byScope, [scope]: ids.slice(0, MAX_ENTRIES) }
+  writeStore(next)
 }
 
 /**
@@ -49,20 +87,26 @@ export function getRecencyScore(
   order: string[],
 ): number {
   const idx = order.indexOf(id)
-  if (idx === -1) return 0
+  if (idx === -1) {
+    return 0
+  }
   return 1 - idx / Math.max(1, order.length)
 }
 
 export function getRecencyOrder(scope: string | null): string[] {
-  if (!scope) return []
+  if (!scope) {
+    return []
+  }
   return load(scope)
 }
 
 export function recordCommandUse(scope: string | null, id: string) {
-  if (!scope) return
+  if (!scope) {
+    return
+  }
   const prev = load(scope)
   const next = [id, ...prev.filter((x) => x !== id)].slice(0, MAX_ENTRIES)
-  save(scope, next)
+  saveScope(scope, next)
 }
 
 /** Recent commands in execution order, intersected with known definitions. */
@@ -71,14 +115,18 @@ export function resolveRecentCommands(
   defs: Map<string, CommandDefinition>,
   limit: number,
 ): CommandDefinition[] {
-  if (!scope) return []
+  if (!scope) {
+    return []
+  }
   const order = load(scope)
   const out: CommandDefinition[] = []
   for (const rid of order) {
     const d = defs.get(rid)
     if (d) {
       out.push(d)
-      if (out.length >= limit) break
+      if (out.length >= limit) {
+        break
+      }
     }
   }
   return out

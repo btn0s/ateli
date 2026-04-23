@@ -16,12 +16,14 @@ const MODEL_GROUP_BAND: Record<CommandDefinition["group"], number> = {
   action: 3,
 }
 
-const STOP = " \n\t\r,./-_:;"
+/** Splits on runs of delimiter chars (avoids string.split treating the whole literal as a single token). */
+const TOKEN_SEP = /[\s,./\-_:;]+/
 
-function tokenize(s: string): string[] {
+/** Exported for unit tests. */
+export function tokenize(s: string): string[] {
   return s
     .toLowerCase()
-    .split(STOP)
+    .split(TOKEN_SEP)
     .map((t) => t.trim())
     .filter(Boolean)
 }

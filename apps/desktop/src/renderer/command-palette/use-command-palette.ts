@@ -68,8 +68,11 @@ export function useCommandPalette(
   )
 
   const recent = useMemo(
-    () => resolveRecentCommands(palette.repoPath, defMap, 8),
-    [palette.repoPath, defMap],
+    () =>
+      resolveRecentCommands(palette.repoPath, defMap, 8).filter((d) =>
+        d.when(exec)
+      ),
+    [palette.repoPath, defMap, exec],
   )
 
   const emptySections = useMemo(

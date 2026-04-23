@@ -15,5 +15,5 @@
     }
   },
   "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"],
-  "exclude": ["node_modules", "out", "dist"]
+  "exclude": ["node_modules", "out", "dist", "src/renderer/**/*.test.ts", "src/renderer/**/*.test.tsx"]
 }
