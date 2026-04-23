@@ -462,7 +462,7 @@ export const FileTree = track(function FileTree() {
   )
 
   const safeArea = (
-    <Sidebar.SectionHeader className="h-9 min-h-9">
+    <Sidebar.SectionHeader className="h-full">
       <span
         className={cn(
           "min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",

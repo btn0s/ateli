@@ -120,9 +120,9 @@ export function SidebarShell({
           )}
         >
           {safeArea != null ? (
-            <div className="shrink-0">{safeArea}</div>
+            <div className="h-9 min-h-9 shrink-0">{safeArea}</div>
           ) : (
-            <div className="h-9 shrink-0 border-b border-border" aria-hidden />
+            <div className="h-9 min-h-9 shrink-0" aria-hidden />
           )}
           {children}
         </div>
