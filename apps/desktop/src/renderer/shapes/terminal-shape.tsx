@@ -14,6 +14,10 @@ import { FitAddon } from "@xterm/addon-fit"
 import { TerminalSquare } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { ShapeChrome } from "@/components/shape-chrome"
+import {
+  isTerminalKillShortcut,
+  useTerminalKillConfirmation,
+} from "@/components/terminal-kill-dialog"
 import { useTerminalSessionStore } from "@/contexts/terminal-session-store"
 import { useWorktrees } from "@/contexts/worktree-index-context"
 import { terminalTitleFromCwd } from "@/lib/terminal-worktree-title"
@@ -80,8 +84,12 @@ function TerminalComponent({
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const activeSessionIdRef = useRef<string | null>(
+    shape.props.sessionId ?? null
+  )
   const editor = useEditor()
   const sessions = useTerminalSessionStore()
+  const { requestKill, dialog } = useTerminalKillConfirmation()
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -94,6 +102,7 @@ function TerminalComponent({
       unsubscribeSession: null as null | (() => void),
       disposeTermData: null as null | (() => void),
       disposeTermResize: null as null | (() => void),
+      closeTimer: null as number | null,
     }
 
     const term = new Terminal({
@@ -123,6 +132,7 @@ function TerminalComponent({
 
     function attachSession(sessionId: string) {
       state.sessionId = sessionId
+      activeSessionIdRef.current = sessionId
       state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
@@ -131,15 +141,25 @@ function TerminalComponent({
         onData: (data: string) => {
           term.write(data)
         },
-        onExit: () => {
+        onExit: ({ killed }) => {
           state.disposed = true
           state.sessionId = null
-          editor.updateShape<TerminalShape>({
-            id: shapeId,
-            type: TERMINAL_SHAPE_TYPE,
-            props: { sessionId: undefined },
-          })
-          editor.deleteShape(shapeId)
+          activeSessionIdRef.current = null
+
+          const closeShape = () => {
+            editor.updateShape<TerminalShape>({
+              id: shapeId,
+              type: TERMINAL_SHAPE_TYPE,
+              props: { sessionId: undefined },
+            })
+            editor.deleteShape(shapeId)
+          }
+
+          if (killed) {
+            state.closeTimer = window.setTimeout(closeShape, 450)
+          } else {
+            closeShape()
+          }
         },
       })
 
@@ -236,9 +256,13 @@ function TerminalComponent({
       state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
+      if (state.closeTimer !== null) {
+        window.clearTimeout(state.closeTimer)
+      }
       if (state.sessionId) {
         sessions.detach(state.sessionId)
       }
+      activeSessionIdRef.current = null
       term.dispose()
     }
   }, [cwd, shape.id, sessions])
@@ -281,25 +305,54 @@ function TerminalComponent({
     }
   }, [isInteractive])
 
+  useEffect(() => {
+    if (!isInteractive) return
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isTerminalKillShortcut(event)) return
+
+      const el = containerRef.current
+      if (!el) return
+
+      const target = event.target
+      if (target instanceof Node && !el.contains(target)) return
+
+      const sessionId = activeSessionIdRef.current
+      if (!sessionId) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      requestKill({ sessionId })
+    }
+
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true })
+    }
+  }, [isInteractive, requestKill])
+
   const titleText = terminalTitleFromCwd(shape.props.cwd, cwd, worktrees)
 
   return (
-    <ShapeChrome
-      title={titleText}
-      icon={TerminalSquare}
-      isInteractive={isInteractive}
-    >
-      <div
-        ref={containerRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          padding: 8,
-          background: "#1a1a1a",
-          overflow: "hidden",
-        }}
-      />
-    </ShapeChrome>
+    <>
+      <ShapeChrome
+        title={titleText}
+        icon={TerminalSquare}
+        isInteractive={isInteractive}
+      >
+        <div
+          ref={containerRef}
+          style={{
+            width: "100%",
+            height: "100%",
+            padding: 8,
+            background: "#1a1a1a",
+            overflow: "hidden",
+          }}
+        />
+      </ShapeChrome>
+      {dialog}
+    </>
   )
 }
 

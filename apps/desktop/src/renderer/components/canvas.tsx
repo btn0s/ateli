@@ -38,6 +38,7 @@ import { CommandMenu } from "./command-menu"
 import { SidebarHud } from "./sidebar-hud"
 import { FileTree } from "./file-tree"
 import { WorktreeList } from "./worktree-list"
+import { useTerminalKillConfirmation } from "./terminal-kill-dialog"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -125,25 +126,55 @@ const CustomToolbar = track(() => {
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
   const customActions = getContextMenuActions()
+  const { requestKill, dialog } = useTerminalKillConfirmation()
+  const selectedTerminal = useValue(
+    "terminal-context-menu-kill-action",
+    () => {
+      const shape = editor.getOnlySelectedShape()
+      if (shape?.type !== "terminal") return null
+      return {
+        sessionId: (shape.props as { sessionId?: string }).sessionId,
+      }
+    },
+    [editor]
+  )
 
   return (
-    <DefaultContextMenu {...props}>
-      {customActions.length > 0 && (
-        <TldrawUiMenuGroup id="ateli-actions">
-          {customActions.map((action) => (
+    <>
+      <DefaultContextMenu {...props}>
+        {selectedTerminal ? (
+          <TldrawUiMenuGroup id="terminal-session-actions">
             <TldrawUiMenuItem
-              key={action.id}
-              id={action.id}
-              label={action.label as any}
-              icon={action.tldrawIcon as any}
+              id="kill-terminal-session"
+              label={"Kill session" as any}
+              kbd="Cmd/Ctrl+Shift+K"
               readonlyOk
-              onSelect={() => action.execute(editor)}
+              disabled={!selectedTerminal.sessionId}
+              onSelect={() => {
+                if (!selectedTerminal.sessionId) return
+                requestKill({ sessionId: selectedTerminal.sessionId })
+              }}
             />
-          ))}
-        </TldrawUiMenuGroup>
-      )}
-      <DefaultContextMenuContent />
-    </DefaultContextMenu>
+          </TldrawUiMenuGroup>
+        ) : null}
+        {customActions.length > 0 && (
+          <TldrawUiMenuGroup id="ateli-actions">
+            {customActions.map((action) => (
+              <TldrawUiMenuItem
+                key={action.id}
+                id={action.id}
+                label={action.label as any}
+                icon={action.tldrawIcon as any}
+                readonlyOk
+                onSelect={() => action.execute(editor)}
+              />
+            ))}
+          </TldrawUiMenuGroup>
+        )}
+        <DefaultContextMenuContent />
+      </DefaultContextMenu>
+      {dialog}
+    </>
   )
 }
 
