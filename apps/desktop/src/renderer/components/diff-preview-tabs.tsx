@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { PatchDiff } from "@pierre/diffs/react"
+import { parsePatchFiles } from "@pierre/diffs"
 import { Compass, ExternalLink, FileCode2, X } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
@@ -12,6 +13,35 @@ import {
 } from "@/contexts/diff-preview-tabs-context"
 
 type GitDiffResult = Awaited<ReturnType<typeof window.electron.git.diff>>
+
+function getPatchPreviewState(patch: string | null): {
+  renderable: boolean
+  reason: string | null
+} {
+  if (!patch) return { renderable: false, reason: null }
+  try {
+    const parsed = parsePatchFiles(patch)
+    if (parsed.length !== 1) {
+      return {
+        renderable: false,
+        reason: "Diff preview unavailable for multi-file patch output.",
+      }
+    }
+    const files = parsed[0]?.files ?? []
+    if (files.length !== 1) {
+      return {
+        renderable: false,
+        reason: "Diff preview unavailable for this patch format.",
+      }
+    }
+    return { renderable: true, reason: null }
+  } catch {
+    return {
+      renderable: false,
+      reason: "Diff preview unavailable for this patch format.",
+    }
+  }
+}
 
 function splitPath(path: string) {
   const index = path.lastIndexOf("/")
@@ -27,6 +57,7 @@ function DiffPreviewPane({ tab }: { tab: DiffPreviewTab }) {
   const [patch, setPatch] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const patchPreview = useMemo(() => getPatchPreviewState(patch), [patch])
 
   useEffect(() => {
     if (!repoPath) return
@@ -71,6 +102,14 @@ function DiffPreviewPane({ tab }: { tab: DiffPreviewTab }) {
     return (
       <p className="px-4 py-3 text-xs text-muted-foreground">
         No patch available.
+      </p>
+    )
+  }
+
+  if (!patchPreview.renderable) {
+    return (
+      <p className="px-4 py-3 text-xs text-muted-foreground">
+        {patchPreview.reason ?? "Diff preview unavailable."}
       </p>
     )
   }

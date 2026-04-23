@@ -12,6 +12,10 @@ import {
   ContextMenuTrigger,
 } from "@workspace/ui/components/context-menu"
 import { addTerminalAtCenter } from "@/lib/default-actions"
+import {
+  getCenterLaneScreenRect,
+  zoomToSelectionInViewport,
+} from "@/lib/canvas-camera"
 import { Sidebar } from "@/components/sidebar"
 import {
   SidebarTreeBranch,
@@ -112,7 +116,11 @@ export const WorktreeList = track(function WorktreeList({
 
   function navigateToShape(shapeId: TLShapeId) {
     editor.select(shapeId)
-    editor.zoomToSelection({ animation: { duration: 200 } })
+    zoomToSelectionInViewport(editor, {
+      maxTargetZoom: 1,
+      zoomOutFactor: 0.9,
+      screenRect: getCenterLaneScreenRect(editor),
+    })
   }
 
   return (

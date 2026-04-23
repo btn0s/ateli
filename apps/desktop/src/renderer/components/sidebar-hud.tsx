@@ -20,7 +20,7 @@ export function SidebarHud({
     <div className="pointer-events-none absolute inset-0 z-[1000] flex font-sans">
       <SidebarShell side="left">{left}</SidebarShell>
 
-      <div className="relative min-w-0 flex-1 overflow-hidden">
+      <div data-center-lane className="relative min-w-0 flex-1 overflow-hidden">
         {center}
         {centerOverlay ? (
           <div className="pointer-events-none absolute inset-0">

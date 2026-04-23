@@ -35,13 +35,17 @@ import {
   addTerminalAtCenter,
 } from "@/lib/default-actions"
 import "@/lib/default-actions"
-import { CommandMenu } from "./command-menu"
+import { CommandPalette } from "../command-palette/CommandPalette"
 import { DiffPreviewTabs } from "./diff-preview-tabs"
 import { SidebarHud } from "./sidebar-hud"
 import { FileTree } from "./file-tree"
 import { LeftSidebarTabs } from "./left-sidebar-tabs"
 import { useTerminalKillConfirmation } from "./terminal-kill-dialog"
 import { Button } from "@workspace/ui/components/button"
+import {
+  ZOOM_ANIMATION,
+  fitPageBoundsInViewport,
+} from "@/lib/canvas-camera"
 import {
   Dialog,
   DialogContent,
@@ -74,9 +78,6 @@ const TOOLBAR_TOOL_IDS = [
   "frame",
   "note",
 ]
-
-const ZOOM_ANIMATION = { duration: 120 }
-const ZOOM_FIT_INSET_PX = 32
 
 const ZoomControls = track(() => {
   const editor = useEditor()
@@ -127,35 +128,11 @@ const ZoomControls = track(() => {
 
   function fitBoundsToLane(
     bounds: { x: number; y: number; w: number; h: number },
-    opts?: { maxTargetZoom?: number; zoomOutFactor?: number }
+    fitOpts?: { maxTargetZoom?: number; zoomOutFactor?: number },
   ) {
-    const rect = getLaneScreenRect()
-    const laneCenter = getLaneScreenCenter()
-    const availableW = Math.max(1, rect.width - ZOOM_FIT_INSET_PX * 2)
-    const availableH = Math.max(1, rect.height - ZOOM_FIT_INSET_PX * 2)
-    const boundsW = Math.max(1, bounds.w)
-    const boundsH = Math.max(1, bounds.h)
-    const fitZoom = Math.min(
-      maxZoom,
-      Math.max(minZoom, Math.min(availableW / boundsW, availableH / boundsH))
-    )
-    const zoomOutFactor = opts?.zoomOutFactor ?? 1
-    const maxTargetZoom = opts?.maxTargetZoom ?? maxZoom
-    const targetZoom = Math.max(
-      minZoom,
-      Math.min(maxZoom, Math.min(maxTargetZoom, fitZoom * zoomOutFactor))
-    )
-
-    const centerX = bounds.x + bounds.w / 2
-    const centerY = bounds.y + bounds.h / 2
-    editor.setCamera(
-      {
-        x: laneCenter.x / targetZoom - centerX,
-        y: laneCenter.y / targetZoom - centerY,
-        z: targetZoom,
-      },
-      { animation: ZOOM_ANIMATION }
-    )
+    const r = getLaneScreenRect()
+    const screenRect = { x: r.left, y: r.top, w: r.width, h: r.height }
+    fitPageBoundsInViewport(editor, bounds, { ...fitOpts, screenRect })
   }
 
   return (
@@ -424,7 +401,7 @@ function CanvasOverlay() {
   return (
     <>
       <SidebarHudWithSelection />
-      <CommandMenu />
+      <CommandPalette />
       <TerminalDeleteDialog />
     </>
   )
