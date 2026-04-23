@@ -4,9 +4,9 @@ import {
   HTMLContainer,
   RecordProps,
   T,
-  type Editor,
   TLShape,
-  type TLShapeId,
+  createShapePropsMigrationIds,
+  createShapePropsMigrationSequence,
   useEditor,
 } from "tldraw"
 import { Terminal } from "@xterm/xterm"
@@ -14,54 +14,51 @@ import { FitAddon } from "@xterm/addon-fit"
 import { TerminalSquare } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { ShapeChrome } from "@/components/shape-chrome"
+import { useTerminalSessionStore } from "@/contexts/terminal-session-store"
 import { useWorktrees } from "@/contexts/worktree-index-context"
 import { terminalTitleFromCwd } from "@/lib/terminal-worktree-title"
 
 const TERMINAL_SHAPE_TYPE = "terminal" as const
 
-/** Bypass confirm dialog when deleting terminals programmatically (e.g. worktree removed). */
-const terminalDeleteBypassIds = new Set<string>()
-
-export function consumeTerminalDeleteBypass(shapeId: string): boolean {
-  if (!terminalDeleteBypassIds.has(shapeId)) return false
-  terminalDeleteBypassIds.delete(shapeId)
-  return true
-}
-
-function markTerminalDeleteBypass(ids: readonly TLShapeId[]) {
-  for (const id of ids) terminalDeleteBypassIds.add(id)
-}
-
-export function deleteTerminalShapesSilently(
-  editor: Editor,
-  ids: TLShapeId[],
-): void {
-  if (ids.length === 0) return
-  const sessionKeys: string[] = []
-  for (const id of ids) {
-    const s = editor.getShape(id)
-    if (s?.type === "terminal" && s.props.sidecarSessionId) {
-      sessionKeys.push(s.props.sidecarSessionId)
-    }
-  }
-  markTerminalDeleteBypass(ids)
-  try {
-    editor.deleteShapes(ids)
-  } finally {
-    for (const id of ids) terminalDeleteBypassIds.delete(id)
-  }
-  for (const key of sessionKeys) {
-    window.electron.terminal.dispose(key)
-  }
-}
-
 declare module "tldraw" {
   interface TLGlobalShapePropsMap {
-    [TERMINAL_SHAPE_TYPE]: { w: number; h: number; sidecarSessionId?: string; cwd?: string }
+    [TERMINAL_SHAPE_TYPE]: {
+      w: number
+      h: number
+      sessionId?: string
+      cwd?: string
+    }
   }
 }
 
 type TerminalShape = TLShape<typeof TERMINAL_SHAPE_TYPE>
+
+const terminalShapeVersions = createShapePropsMigrationIds(
+  TERMINAL_SHAPE_TYPE,
+  {
+    RenameSidecarSessionId: 1,
+  }
+)
+
+const terminalShapeMigrations = createShapePropsMigrationSequence({
+  sequence: [
+    {
+      id: terminalShapeVersions.RenameSidecarSessionId,
+      up: (props: { sessionId?: string; sidecarSessionId?: string }) => {
+        if (!props.sessionId && props.sidecarSessionId) {
+          props.sessionId = props.sidecarSessionId
+        }
+        delete props.sidecarSessionId
+      },
+      down: (props: { sessionId?: string; sidecarSessionId?: string }) => {
+        if (!props.sidecarSessionId && props.sessionId) {
+          props.sidecarSessionId = props.sessionId
+        }
+        delete props.sessionId
+      },
+    },
+  ],
+})
 
 function getTerminalSize(term: Terminal): { cols: number; rows: number } {
   return {
@@ -83,19 +80,18 @@ function TerminalComponent({
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
-  const sessionKeyRef = useRef<string | null>(shape.props.sidecarSessionId ?? null)
   const editor = useEditor()
+  const sessions = useTerminalSessionStore()
 
   useEffect(() => {
     if (!containerRef.current) return
 
     const shapeId = shape.id
-    const existingSessionId = shape.props.sidecarSessionId
+    const existingSessionId = shape.props.sessionId
     const state = {
       disposed: false,
-      sessionKey: existingSessionId ?? (null as string | null),
-      removeData: null as null | (() => void),
-      removeExit: null as null | (() => void),
+      sessionId: existingSessionId ?? (null as string | null),
+      unsubscribeSession: null as null | (() => void),
       disposeTermData: null as null | (() => void),
       disposeTermResize: null as null | (() => void),
     }
@@ -125,83 +121,101 @@ function TerminalComponent({
     termRef.current = term
     fitRef.current = fitAddon
 
-    function attachSession(sessionKey: string) {
-      state.sessionKey = sessionKey
-      sessionKeyRef.current = sessionKey
-      state.removeData?.()
-      state.removeExit?.()
+    function attachSession(sessionId: string) {
+      state.sessionId = sessionId
+      state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
 
-      state.removeData = window.electron.terminal.onData(sessionKey, (data) => {
-        term.write(data)
-      })
-
-      state.removeExit = window.electron.terminal.onExit(sessionKey, () => {
-        state.disposed = true
-        sessionKeyRef.current = null
-        editor.updateShape<TerminalShape>({
-          id: shapeId,
-          type: TERMINAL_SHAPE_TYPE,
-          props: { sidecarSessionId: undefined },
-        })
-        editor.deleteShape(shapeId)
+      state.unsubscribeSession = sessions.subscribe(sessionId, {
+        onData: (data: string) => {
+          term.write(data)
+        },
+        onExit: () => {
+          state.disposed = true
+          state.sessionId = null
+          editor.updateShape<TerminalShape>({
+            id: shapeId,
+            type: TERMINAL_SHAPE_TYPE,
+            props: { sessionId: undefined },
+          })
+          editor.deleteShape(shapeId)
+        },
       })
 
       const onResizeDisposable = term.onResize(({ cols, rows }) => {
-        if (!state.disposed && state.sessionKey) {
-          window.electron.terminal.resize(state.sessionKey, cols, rows)
+        if (!state.disposed && state.sessionId) {
+          sessions.resize(state.sessionId, cols, rows)
         }
       })
       state.disposeTermResize = () => onResizeDisposable.dispose()
 
       const onDataDisposable = term.onData((data) => {
-        if (!state.disposed && state.sessionKey) {
-          window.electron.terminal.write(state.sessionKey, data)
+        if (!state.disposed && state.sessionId) {
+          sessions.write(state.sessionId, data)
         }
       })
       state.disposeTermData = () => onDataDisposable.dispose()
 
       fitAddon.fit()
       const { cols, rows } = getTerminalSize(term)
-      window.electron.terminal.resize(sessionKey, cols, rows)
+      sessions.resize(sessionId, cols, rows)
     }
 
     ;(async () => {
       try {
+        let sessionId: string | null = null
         if (existingSessionId) {
           try {
             const { cols, rows } = getTerminalSize(term)
-            await window.electron.terminal.reconnect(
+            const session = await sessions.attach({
               existingSessionId,
+              ownerId: shapeId,
+              cwd,
               cols,
               rows,
-            )
-            if (state.disposed) return
-            attachSession(existingSessionId)
-            return
-          } catch {
-            editor.updateShape<TerminalShape>({
-              id: shapeId,
-              type: TERMINAL_SHAPE_TYPE,
-              props: { sidecarSessionId: undefined },
             })
+            sessionId = session.sessionId
+          } catch {
+            if (!state.disposed) {
+              editor.updateShape<TerminalShape>({
+                id: shapeId,
+                type: TERMINAL_SHAPE_TYPE,
+                props: { sessionId: undefined },
+              })
+            }
           }
         }
 
-        const { sessionKey } = await window.electron.terminal.create(shapeId, cwd)
+        if (state.disposed) return
+
+        if (!sessionId) {
+          const { cols, rows } = getTerminalSize(term)
+          const session = await sessions.attach({
+            ownerId: shapeId,
+            cwd,
+            cols,
+            rows,
+          })
+          sessionId = session.sessionId
+        }
+
+        if (!sessionId) return
+
         if (state.disposed) {
-          window.electron.terminal.dispose(sessionKey)
+          sessions.detach(sessionId)
           return
         }
 
-        editor.updateShape<TerminalShape>({
-          id: shapeId,
-          type: TERMINAL_SHAPE_TYPE,
-          props: { sidecarSessionId: sessionKey },
-        })
+        if (shape.props.sessionId !== sessionId) {
+          editor.updateShape<TerminalShape>({
+            id: shapeId,
+            type: TERMINAL_SHAPE_TYPE,
+            props: { sessionId },
+          })
+        }
 
-        attachSession(sessionKey)
+        attachSession(sessionId)
       } catch (err: unknown) {
         term.write(`\r\nFailed to create terminal: ${err}\r\n`)
       }
@@ -209,9 +223,9 @@ function TerminalComponent({
 
     const observer = new ResizeObserver(() => {
       fitAddon.fit()
-      if (!state.disposed && state.sessionKey) {
+      if (!state.disposed && state.sessionId) {
         const { cols, rows } = getTerminalSize(term)
-        window.electron.terminal.resize(state.sessionKey, cols, rows)
+        sessions.resize(state.sessionId, cols, rows)
       }
     })
     observer.observe(containerRef.current)
@@ -219,16 +233,15 @@ function TerminalComponent({
     return () => {
       state.disposed = true
       observer.disconnect()
-      state.removeData?.()
-      state.removeExit?.()
+      state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
-      if (state.sessionKey) {
-        window.electron.terminal.detach(state.sessionKey)
+      if (state.sessionId) {
+        sessions.detach(state.sessionId)
       }
       term.dispose()
     }
-  }, [cwd, shape.id])
+  }, [cwd, shape.id, sessions])
 
   useEffect(() => {
     fitRef.current?.fit()
@@ -301,9 +314,10 @@ export class TerminalShapeUtil extends BaseBoxShapeUtil<TerminalShape> {
   static override props: RecordProps<TerminalShape> = {
     w: T.number,
     h: T.number,
-    sidecarSessionId: T.string.optional(),
+    sessionId: T.string.optional(),
     cwd: T.string.optional(),
   }
+  static override migrations = terminalShapeMigrations
 
   override canEdit() {
     return true
@@ -329,7 +343,11 @@ export class TerminalShapeUtil extends BaseBoxShapeUtil<TerminalShape> {
         id={shape.id}
         style={{ pointerEvents: isInteractive ? "all" : "none" }}
       >
-        <TerminalComponent shape={shape} isInteractive={isInteractive} cwd={shape.props.cwd || _cwd} />
+        <TerminalComponent
+          shape={shape}
+          isInteractive={isInteractive}
+          cwd={shape.props.cwd || _cwd}
+        />
       </HTMLContainer>
     )
   }
