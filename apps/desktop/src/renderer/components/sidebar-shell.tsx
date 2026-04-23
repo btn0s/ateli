@@ -83,14 +83,19 @@ export function SidebarShell({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!e.metaKey && !e.ctrlKey) return
-      // Cmd/Ctrl+B toggles left; Cmd/Ctrl+Alt+B toggles right.
-      // (VSCode/Cursor-style bindings, avoids Cmd+[ conflicts with
-      // browser-history shortcuts and non-US keyboard layouts.)
-      const key = e.key.toLowerCase()
-      if (key !== "b") return
-      const wantRight = e.altKey
-      if (side === "left" && wantRight) return
-      if (side === "right" && !wantRight) return
+      // Diagnostic: log every Cmd/Ctrl keydown the capture-phase listener sees.
+      // eslint-disable-next-line no-console
+      console.log("[sidebar]", side, {
+        key: e.key,
+        code: e.code,
+        meta: e.metaKey,
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        shift: e.shiftKey,
+        target: (e.target as Element | null)?.tagName,
+      })
+      const key = side === "left" ? "[" : "]"
+      if (e.key !== key) return
       e.preventDefault()
       e.stopPropagation()
       setCollapsed((c) => {
