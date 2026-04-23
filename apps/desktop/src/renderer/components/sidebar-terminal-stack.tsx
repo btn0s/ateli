@@ -1,7 +1,16 @@
+import { useCallback, useState } from "react"
 import { Plus, X } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@workspace/ui/components/context-menu"
 import { SidebarEmbeddedTerminal } from "@/components/sidebar-embedded-terminal"
+import { useTerminalKillConfirmation } from "@/components/terminal-kill-dialog"
 
 function terminalTabSurfaceClass(selected: boolean) {
   return cn(
@@ -34,6 +43,43 @@ export function SidebarTerminalTabs({
   onSessionEnded: (id: string) => void
   onAddTab: () => void
 }) {
+  const [sessionIdsByTab, setSessionIdsByTab] = useState<
+    Record<string, string | undefined>
+  >({})
+  const { requestKill, dialog } = useTerminalKillConfirmation()
+
+  const setTabSessionId = useCallback(
+    (tabId: string, sessionId: string | null) => {
+      setSessionIdsByTab((prev) => {
+        if (prev[tabId] === sessionId) return prev
+        const next = { ...prev }
+        if (sessionId) {
+          next[tabId] = sessionId
+        } else {
+          delete next[tabId]
+        }
+        return next
+      })
+    },
+    [],
+  )
+
+  const closeTab = useCallback(
+    (tabId: string) => {
+      setTabSessionId(tabId, null)
+      onCloseTab(tabId)
+    },
+    [onCloseTab, setTabSessionId],
+  )
+
+  const endSession = useCallback(
+    (tabId: string) => {
+      setTabSessionId(tabId, null)
+      onSessionEnded(tabId)
+    },
+    [onSessionEnded, setTabSessionId],
+  )
+
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden border-b border-border bg-muted px-0 py-0">
       <div className="flex h-8 min-h-8 shrink-0 items-stretch border-b border-border bg-background">
@@ -47,41 +93,60 @@ export function SidebarTerminalTabs({
               const selected = activeTabId === id
               const label = i === 0 ? "Terminal" : `T${i}`
               const canClose = i > 0
+              const sessionId = sessionIdsByTab[id]
               return (
-                <div
-                  key={id}
-                  role="tab"
-                  aria-selected={selected}
-                  tabIndex={selected ? 0 : -1}
-                  className={cn(
-                    "flex shrink-0 items-stretch border-r border-border last:border-r-0",
-                    terminalTabSurfaceClass(selected),
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="flex min-w-0 max-w-[9rem] flex-1 items-center px-2 text-left text-xs font-medium uppercase tracking-wide"
-                    onClick={() => onSelectTab(id)}
+                <ContextMenu key={id}>
+                  <ContextMenuTrigger
+                    role="tab"
+                    aria-selected={selected}
+                    tabIndex={selected ? 0 : -1}
+                    className={cn(
+                      "flex shrink-0 items-stretch border-r border-border last:border-r-0",
+                      terminalTabSurfaceClass(selected),
+                    )}
                   >
-                    <span className={cn("truncate", i === 0 && "normal-case")}>
-                      {label}
-                    </span>
-                  </button>
-                  {canClose ? (
                     <button
                       type="button"
-                      className="flex h-8 w-7 shrink-0 items-center justify-center border-l border-border text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                      title={`Close ${label}`}
-                      aria-label={`Close ${label}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onCloseTab(id)
+                      className="flex min-w-0 max-w-[9rem] flex-1 items-center px-2 text-left text-xs font-medium uppercase tracking-wide"
+                      onClick={() => onSelectTab(id)}
+                    >
+                      <span
+                        className={cn("truncate", i === 0 && "normal-case")}
+                      >
+                        {label}
+                      </span>
+                    </button>
+                    {canClose ? (
+                      <button
+                        type="button"
+                        className="flex h-8 w-7 shrink-0 items-center justify-center border-l border-border text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                        title={`Close ${label}`}
+                        aria-label={`Close ${label}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTab(id)
+                        }}
+                      >
+                        <X className="size-3.5 shrink-0 opacity-70 hover:opacity-100" />
+                      </button>
+                    ) : null}
+                  </ContextMenuTrigger>
+                  <ContextMenuContent className="min-w-44">
+                    <ContextMenuItem
+                      variant="destructive"
+                      disabled={!sessionId}
+                      onClick={() => {
+                        if (!sessionId) return
+                        requestKill({ sessionId })
                       }}
                     >
-                      <X className="size-3.5 shrink-0 opacity-70 hover:opacity-100" />
-                    </button>
-                  ) : null}
-                </div>
+                      Kill session
+                      <ContextMenuShortcut>
+                        Cmd/Ctrl+Shift+K
+                      </ContextMenuShortcut>
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               )
             })}
           </div>
@@ -121,12 +186,14 @@ export function SidebarTerminalTabs({
               <SidebarEmbeddedTerminal
                 instanceKey={id}
                 cwd={cwd}
-                onSessionEnded={() => onSessionEnded(id)}
+                onSessionAttached={(sessionId) => setTabSessionId(id, sessionId)}
+                onSessionEnded={() => endSession(id)}
               />
             </div>
           ))}
         </div>
       )}
+      {dialog}
     </div>
   )
 }

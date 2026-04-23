@@ -2,6 +2,10 @@ import { useEffect, useRef } from "react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import "@xterm/xterm/css/xterm.css"
+import {
+  isTerminalKillShortcut,
+  useTerminalKillConfirmation,
+} from "@/components/terminal-kill-dialog"
 import { useTerminalSessionStore } from "@/contexts/terminal-session-store"
 
 function getTerminalSize(term: Terminal): { cols: number; rows: number } {
@@ -17,15 +21,21 @@ function getTerminalSize(term: Terminal): { cols: number; rows: number } {
 export function SidebarEmbeddedTerminal({
   instanceKey,
   cwd,
+  onSessionAttached,
   onSessionEnded,
 }: {
   instanceKey: string
   cwd: string
+  onSessionAttached?: (sessionId: string | null) => void
   onSessionEnded?: () => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const activeSessionIdRef = useRef<string | null>(null)
+  const onAttachedRef = useRef(onSessionAttached)
   const onEndedRef = useRef(onSessionEnded)
   const sessions = useTerminalSessionStore()
+  const { requestKill, dialog } = useTerminalKillConfirmation()
+  onAttachedRef.current = onSessionAttached
   onEndedRef.current = onSessionEnded
 
   useEffect(() => {
@@ -38,6 +48,7 @@ export function SidebarEmbeddedTerminal({
       unsubscribeSession: null as null | (() => void),
       disposeTermData: null as null | (() => void),
       disposeTermResize: null as null | (() => void),
+      closeTimer: null as number | null,
     }
 
     const term = new Terminal({
@@ -71,6 +82,8 @@ export function SidebarEmbeddedTerminal({
 
     function attachSession(sessionId: string) {
       state.sessionId = sessionId
+      activeSessionIdRef.current = sessionId
+      onAttachedRef.current?.(sessionId)
       state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
@@ -79,11 +92,19 @@ export function SidebarEmbeddedTerminal({
         onData: (data: string) => {
           term.write(data)
         },
-        onExit: () => {
+        onExit: ({ killed }) => {
           state.disposed = true
           state.sessionId = null
-          term.write("\r\n[Session ended]\r\n")
-          onEndedRef.current?.()
+          activeSessionIdRef.current = null
+          onAttachedRef.current?.(null)
+
+          const finish = () => onEndedRef.current?.()
+          if (killed) {
+            state.closeTimer = window.setTimeout(finish, 450)
+          } else {
+            term.write("\r\n[Session ended]\r\n")
+            finish()
+          }
         },
       })
 
@@ -143,19 +164,51 @@ export function SidebarEmbeddedTerminal({
       state.unsubscribeSession?.()
       state.disposeTermData?.()
       state.disposeTermResize?.()
+      if (state.closeTimer !== null) {
+        window.clearTimeout(state.closeTimer)
+      }
       if (state.sessionId) {
         sessions.detach(state.sessionId)
       }
+      activeSessionIdRef.current = null
+      onAttachedRef.current?.(null)
       term.dispose()
     }
   }, [cwd, instanceKey, sessions])
 
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isTerminalKillShortcut(event)) return
+
+      const el = containerRef.current
+      if (!el) return
+
+      const target = event.target
+      if (target instanceof Node && !el.contains(target)) return
+
+      const sessionId = activeSessionIdRef.current
+      if (!sessionId) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      requestKill({ sessionId })
+    }
+
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true })
+    }
+  }, [requestKill])
+
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-[#1a1a1a] p-2">
-      <div
-        ref={containerRef}
-        className="min-h-0 w-full flex-1 overflow-hidden"
-      />
-    </div>
+    <>
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-[#1a1a1a] p-2">
+        <div
+          ref={containerRef}
+          className="min-h-0 w-full flex-1 overflow-hidden"
+        />
+      </div>
+      {dialog}
+    </>
   )
 }
