@@ -16,12 +16,34 @@ contextBridge.exposeInMainWorld("electron", {
         pid: number | null
         sessionKey: string
       }>,
+    list: () =>
+      ipcRenderer.invoke("terminal:list") as Promise<
+        {
+          id: string
+          name?: string
+          sidecarSessionId: string
+          shell: string
+          cwd: string
+          pid: number | null
+          createdAt: string
+        }[]
+      >,
     reconnect: (sessionKey: string, cols: number, rows: number) =>
       ipcRenderer.invoke("terminal:reconnect", {
         sessionKey,
         cols,
         rows,
       }) as Promise<void>,
+    rename: (sessionKey: string, name?: string) =>
+      ipcRenderer.invoke("terminal:rename", { sessionKey, name }) as Promise<{
+        id: string
+        name?: string
+        sidecarSessionId: string
+        shell: string
+        cwd: string
+        pid: number | null
+        createdAt: string
+      }>,
     write: (sessionKey: string, data: string) =>
       ipcRenderer.send("terminal:input", { sessionKey, data }),
     resize: (sessionKey: string, cols: number, rows: number) =>
@@ -84,6 +106,57 @@ contextBridge.exposeInMainWorld("electron", {
     remove: (repoPath: string, id: string) =>
       ipcRenderer.invoke("worktree:remove", { repoPath, id }) as Promise<{
         ok: true
+      }>,
+    renameBranch: (repoPath: string, id: string, branch: string) =>
+      ipcRenderer.invoke("worktree:rename-branch", {
+        repoPath,
+        id,
+        branch,
+      }) as Promise<{
+        id: string
+        path: string
+        branch: string
+        head: string
+        isMain: boolean
+        createdAt: string
+        repoPath: string
+      }>,
+  },
+  management: {
+    getPolicy: () =>
+      ipcRenderer.invoke("management:get-policy") as Promise<{
+        version: number
+        user: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
+        agent: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
+      }>,
+    updatePolicy: (
+      patch: Partial<{
+        user: Partial<{
+          renameTerminal: boolean
+          renameBranch: boolean
+        }>
+        agent: Partial<{
+          renameTerminal: boolean
+          renameBranch: boolean
+        }>
+      }>
+    ) =>
+      ipcRenderer.invoke("management:update-policy", patch) as Promise<{
+        version: number
+        user: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
+        agent: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
       }>,
   },
   fs: {

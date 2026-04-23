@@ -4,10 +4,17 @@ import crypto from "node:crypto"
 import { PtyManager } from "./pty"
 import { startRpcServer, stopRpcServer, onBroadcast, broadcast } from "./rpc"
 import {
+  ensureManagementAllowed,
+  loadManagementPolicy,
+  updateManagementPolicy,
+  type ManagementPolicy,
+} from "./management"
+import {
   addWorktree,
   listWorktrees,
   findWorktreeById,
   removeWorktree as removeGitWorktree,
+  renameWorktreeBranch,
   worktreePath,
   loadWorktreeMetadata,
   saveWorktreeMetadata,
@@ -103,8 +110,7 @@ ipcMain.handle(
 )
 
 function findSessionByKey(sessionKey: string) {
-  const sessions = ptyManager.listSessions()
-  return sessions.find((s) => s.sidecarSessionId === sessionKey)
+  return ptyManager.getSessionByKey(sessionKey)
 }
 
 ipcMain.on(
@@ -156,6 +162,26 @@ ipcMain.on(
     const meta = findSessionByKey(sessionKey)
     if (!meta) return
     ptyManager.detachSession(meta.id)
+  }
+)
+
+ipcMain.handle("terminal:list", async () => {
+  return ptyManager.listSessions()
+})
+
+ipcMain.handle(
+  "terminal:rename",
+  async (_event, { sessionKey, name }: { sessionKey: string; name?: string }) => {
+    ensureManagementAllowed("user", "renameTerminal")
+    const meta = findSessionByKey(sessionKey)
+    if (!meta) throw new Error(`Unknown session: ${sessionKey}`)
+    const updated = ptyManager.renameSession(meta.id, name)
+    broadcast("terminal.renamed", {
+      id: updated.id,
+      sessionKey: updated.sidecarSessionId,
+      name: updated.name ?? null,
+    })
+    return updated
   }
 )
 
@@ -235,6 +261,36 @@ ipcMain.handle(
 )
 
 ipcMain.handle(
+  "worktree:rename-branch",
+  async (
+    _event,
+    { repoPath, id, branch }: { repoPath: string; id: string; branch: string }
+  ) => {
+    ensureManagementAllowed("user", "renameBranch")
+    const nextBranch = branch.trim()
+    if (!nextBranch) throw new Error("branch is required")
+
+    const entry = await findWorktreeById(repoPath, id)
+    if (!entry) throw new Error(`Worktree not found: ${id}`)
+
+    const previousBranch = entry.branch
+    await renameWorktreeBranch(entry.path, nextBranch)
+
+    const worktrees = await listWorktrees(repoPath)
+    const updated = worktrees.find((worktree) => worktree.id === id)
+    if (!updated) throw new Error(`Worktree not found after rename: ${id}`)
+
+    broadcast("worktree.renamed", {
+      id: updated.id,
+      path: updated.path,
+      branch: updated.branch,
+      previousBranch,
+    })
+    return updated
+  }
+)
+
+ipcMain.handle(
   "git:diff",
   async (
     _event,
@@ -246,6 +302,19 @@ ipcMain.handle(
       workTreeStatus: string
     }
   ) => getGitFilePatch(request)
+)
+
+ipcMain.handle("management:get-policy", async () => {
+  return loadManagementPolicy()
+})
+
+ipcMain.handle(
+  "management:update-policy",
+  async (_event, patch: Partial<Pick<ManagementPolicy, "user" | "agent">>) => {
+    const policy = updateManagementPolicy(patch)
+    broadcast("management.policy.updated", { policy })
+    return policy
+  }
 )
 
 // --- File tree / FS IPC ---

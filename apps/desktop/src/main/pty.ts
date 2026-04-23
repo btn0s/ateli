@@ -155,6 +155,28 @@ export class PtyManager {
     return [...this.sessions.values()].map((s) => s.metadata)
   }
 
+  getSessionById(id: string): TerminalMetadata | null {
+    return this.sessions.get(id)?.metadata ?? null
+  }
+
+  getSessionByKey(sessionKey: string): TerminalMetadata | null {
+    for (const session of this.sessions.values()) {
+      if (session.metadata.sidecarSessionId === sessionKey) {
+        return session.metadata
+      }
+    }
+    return null
+  }
+
+  renameSession(id: string, name: string | undefined): TerminalMetadata {
+    const session = this.sessions.get(id)
+    if (!session) throw new Error(`Unknown session: ${id}`)
+    const trimmed = name?.trim()
+    session.metadata.name = trimmed ? trimmed : undefined
+    this.saveSessionsImmediate()
+    return session.metadata
+  }
+
   async shutdown(): Promise<void> {
     for (const session of this.sessions.values()) {
       if (session.dataSocket && !session.dataSocket.destroyed) {

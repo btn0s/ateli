@@ -125,6 +125,13 @@ export async function removeWorktree(
   await exec("git", ["worktree", "prune"], { cwd: repoPath })
 }
 
+export async function renameWorktreeBranch(
+  worktreePath: string,
+  nextBranch: string,
+): Promise<void> {
+  await exec("git", ["branch", "-m", nextBranch], { cwd: worktreePath })
+}
+
 export async function getCurrentBranch(repoPath: string): Promise<string> {
   const { stdout } = await exec(
     "git",

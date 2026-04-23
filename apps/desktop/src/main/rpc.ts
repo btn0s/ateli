@@ -7,10 +7,17 @@ import crypto from "node:crypto"
 import { BrowserWindow, ipcMain } from "electron"
 import type { PtyManager } from "./pty"
 import {
+  ensureManagementAllowed,
+  loadManagementPolicy,
+  updateManagementPolicy,
+  type ManagementPolicy,
+} from "./management"
+import {
   addWorktree,
   listWorktrees,
   findWorktreeById,
   removeWorktree,
+  renameWorktreeBranch,
   worktreePath,
   loadWorktreeMetadata,
   saveWorktreeMetadata,
@@ -124,6 +131,20 @@ export function startRpcServer(ptyManager: PtyManager) {
     if (!id) throw new Error("id is required")
     await ptyManager.killSession(id)
     return { ok: true }
+  })
+
+  methods.set("terminal.rename", async (params) => {
+    ensureManagementAllowed("agent", "renameTerminal")
+    const id = params.id as string
+    if (!id) throw new Error("id is required")
+    const name = typeof params.name === "string" ? params.name : undefined
+    const updated = ptyManager.renameSession(id, name)
+    broadcast("terminal.renamed", {
+      id: updated.id,
+      sessionKey: updated.sidecarSessionId,
+      name: updated.name ?? null,
+    })
+    return updated
   })
 
   methods.set("terminal.reconnect", async (params) => {
@@ -246,6 +267,46 @@ export function startRpcServer(ptyManager: PtyManager) {
 
     broadcast("worktree.removed", { id, path: entry.path, branch: entry.branch })
     return { ok: true }
+  })
+
+  methods.set("worktree.renameBranch", async (params) => {
+    ensureManagementAllowed("agent", "renameBranch")
+    const repoPath = params.repoPath as string
+    if (!repoPath) throw new Error("repoPath is required")
+    const id = params.id as string
+    if (!id) throw new Error("id is required")
+    const nextBranch =
+      typeof params.branch === "string" ? params.branch.trim() : ""
+    if (!nextBranch) throw new Error("branch is required")
+
+    const entry = await findWorktreeById(repoPath, id)
+    if (!entry) throw new Error(`Worktree not found: ${id}`)
+
+    const previousBranch = entry.branch
+    await renameWorktreeBranch(entry.path, nextBranch)
+
+    const worktrees = await listWorktrees(repoPath)
+    const updated = worktrees.find((worktree) => worktree.id === id)
+    if (!updated) throw new Error(`Worktree not found after rename: ${id}`)
+
+    broadcast("worktree.renamed", {
+      id: updated.id,
+      path: updated.path,
+      branch: updated.branch,
+      previousBranch,
+    })
+    return updated
+  })
+
+  methods.set("management.getPolicy", () => {
+    return loadManagementPolicy()
+  })
+
+  methods.set("management.updatePolicy", async (params) => {
+    const patch = params as Partial<Pick<ManagementPolicy, "user" | "agent">>
+    const policy = updateManagementPolicy(patch)
+    broadcast("management.policy.updated", { policy })
+    return policy
   })
 
   // --- Server ---

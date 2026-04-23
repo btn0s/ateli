@@ -7,11 +7,34 @@ interface Window {
         shapeId: string,
         cwd: string
       ) => Promise<{ pid: number | null; sessionKey: string }>
+      list: () => Promise<
+        {
+          id: string
+          name?: string
+          sidecarSessionId: string
+          shell: string
+          cwd: string
+          pid: number | null
+          createdAt: string
+        }[]
+      >
       reconnect: (
         sessionKey: string,
         cols: number,
         rows: number
       ) => Promise<void>
+      rename: (
+        sessionKey: string,
+        name?: string
+      ) => Promise<{
+        id: string
+        name?: string
+        sidecarSessionId: string
+        shell: string
+        cwd: string
+        pid: number | null
+        createdAt: string
+      }>
       write: (sessionKey: string, data: string) => void
       resize: (sessionKey: string, cols: number, rows: number) => void
       dispose: (sessionKey: string) => void
@@ -78,6 +101,52 @@ interface Window {
         branch: string
       }>
       remove: (repoPath: string, id: string) => Promise<{ ok: true }>
+      renameBranch: (
+        repoPath: string,
+        id: string,
+        branch: string
+      ) => Promise<{
+        id: string
+        path: string
+        branch: string
+        head: string
+        isMain: boolean
+        createdAt: string
+        repoPath: string
+      }>
+    }
+    management: {
+      getPolicy: () => Promise<{
+        version: number
+        user: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
+        agent: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
+      }>
+      updatePolicy: (patch: {
+        user?: {
+          renameTerminal?: boolean
+          renameBranch?: boolean
+        }
+        agent?: {
+          renameTerminal?: boolean
+          renameBranch?: boolean
+        }
+      }) => Promise<{
+        version: number
+        user: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
+        agent: {
+          renameTerminal: boolean
+          renameBranch: boolean
+        }
+      }>
     }
     rpc: {
       onCreateTerminal: (

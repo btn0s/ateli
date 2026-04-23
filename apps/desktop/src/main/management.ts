@@ -1,0 +1,108 @@
+import fs from "node:fs"
+import path from "node:path"
+import os from "node:os"
+import crypto from "node:crypto"
+
+const ATELI_DIR = path.join(os.homedir(), ".ateli")
+const MANAGEMENT_POLICY_PATH = path.join(ATELI_DIR, "management-policy.json")
+
+export const MANAGEMENT_POLICY_VERSION = 1
+
+export type ManagementActor = "user" | "agent"
+
+export interface ManagementPermissions {
+  renameTerminal: boolean
+  renameBranch: boolean
+}
+
+export interface ManagementPolicy {
+  version: typeof MANAGEMENT_POLICY_VERSION
+  user: ManagementPermissions
+  agent: ManagementPermissions
+}
+
+export function defaultManagementPolicy(): ManagementPolicy {
+  return {
+    version: MANAGEMENT_POLICY_VERSION,
+    user: {
+      renameTerminal: true,
+      renameBranch: true,
+    },
+    agent: {
+      renameTerminal: true,
+      renameBranch: true,
+    },
+  }
+}
+
+export function loadManagementPolicy(): ManagementPolicy {
+  let raw: string
+  try {
+    raw = fs.readFileSync(MANAGEMENT_POLICY_PATH, "utf-8")
+  } catch {
+    return defaultManagementPolicy()
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return defaultManagementPolicy()
+  }
+
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    (parsed as Record<string, unknown>).version === MANAGEMENT_POLICY_VERSION &&
+    isPermissions((parsed as Record<string, unknown>).user) &&
+    isPermissions((parsed as Record<string, unknown>).agent)
+  ) {
+    return parsed as ManagementPolicy
+  }
+
+  return defaultManagementPolicy()
+}
+
+export function saveManagementPolicy(policy: ManagementPolicy): void {
+  fs.mkdirSync(ATELI_DIR, { recursive: true, mode: 0o700 })
+  const tmp = MANAGEMENT_POLICY_PATH + "." + crypto.randomUUID().slice(0, 8)
+  fs.writeFileSync(tmp, JSON.stringify(policy, null, 2), { mode: 0o600 })
+  fs.renameSync(tmp, MANAGEMENT_POLICY_PATH)
+}
+
+export function updateManagementPolicy(
+  patch: Partial<Pick<ManagementPolicy, "user" | "agent">>
+): ManagementPolicy {
+  const current = loadManagementPolicy()
+  const next: ManagementPolicy = {
+    version: MANAGEMENT_POLICY_VERSION,
+    user: {
+      ...current.user,
+      ...(patch.user ?? {}),
+    },
+    agent: {
+      ...current.agent,
+      ...(patch.agent ?? {}),
+    },
+  }
+  saveManagementPolicy(next)
+  return next
+}
+
+export function ensureManagementAllowed(
+  actor: ManagementActor,
+  permission: keyof ManagementPermissions
+): void {
+  const policy = loadManagementPolicy()
+  if (policy[actor][permission]) return
+  throw new Error(`${actor} is not allowed to ${permission}`)
+}
+
+function isPermissions(value: unknown): value is ManagementPermissions {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).renameTerminal === "boolean" &&
+    typeof (value as Record<string, unknown>).renameBranch === "boolean"
+  )
+}
