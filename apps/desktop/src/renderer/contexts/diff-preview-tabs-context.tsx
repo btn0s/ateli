@@ -26,11 +26,7 @@ interface DiffPreviewTabsContextValue {
 const DiffPreviewTabsContext =
   createContext<DiffPreviewTabsContextValue | null>(null)
 
-export function DiffPreviewTabsProvider({
-  children,
-}: {
-  children: ReactNode
-}) {
+export function DiffPreviewTabsProvider({ children }: { children: ReactNode }) {
   const [tabs, setTabs] = useState<DiffPreviewTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
 
@@ -71,7 +67,7 @@ export function DiffPreviewTabsProvider({
       selectTab,
       tabs,
     }),
-    [activeTabId, closeTab, openDiffTab, selectTab, tabs],
+    [activeTabId, closeTab, openDiffTab, selectTab, tabs]
   )
 
   return (
@@ -84,7 +80,9 @@ export function DiffPreviewTabsProvider({
 export function useDiffPreviewTabs() {
   const value = useContext(DiffPreviewTabsContext)
   if (!value) {
-    throw new Error("useDiffPreviewTabs must be used within DiffPreviewTabsProvider")
+    throw new Error(
+      "useDiffPreviewTabs must be used within DiffPreviewTabsProvider"
+    )
   }
   return value
 }

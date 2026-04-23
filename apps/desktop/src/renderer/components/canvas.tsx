@@ -24,6 +24,7 @@ import type {
   TLUiIconType,
 } from "tldraw"
 import "tldraw/tldraw.css"
+import { DiffPreviewTabsProvider } from "@/contexts/diff-preview-tabs-context"
 import { WorktreeIndexProvider } from "@/contexts/worktree-index-context"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { cwdUnderRemovedWorktree } from "@/lib/terminal-worktree-title"
@@ -35,6 +36,7 @@ import {
 } from "@/lib/default-actions"
 import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
+import { DiffPreviewTabs } from "./diff-preview-tabs"
 import { SidebarHud } from "./sidebar-hud"
 import { FileTree } from "./file-tree"
 import { LeftSidebarTabs } from "./left-sidebar-tabs"
@@ -257,6 +259,7 @@ const SidebarHudWithSelection = track(function SidebarHudWithSelection() {
   return (
     <SidebarHud
       left={<LeftSidebarTabs repoPath={getRepoPath()} />}
+      center={<DiffPreviewTabs />}
       right={hasCanvasSelection ? <FileTree /> : undefined}
     />
   )
@@ -583,18 +586,20 @@ export function Canvas({ folderPath }: { folderPath: string }) {
   return (
     <div className="h-screen w-screen">
       <WorktreeIndexProvider repoPath={folderPath}>
-        <Tldraw
-          persistenceKey={`ateli:canvas:${folderPath}`}
-          components={components}
-          shapeUtils={customShapeUtils}
-          options={{ gridSteps: [{ min: 1, step: 20 }] }}
-          onMount={(editor) => {
-            editor.user.updateUserPreferences({ colorScheme: "dark" })
-            editor.updateInstanceState({ isGridMode: true })
-          }}
-        >
-          <RpcBridge />
-        </Tldraw>
+        <DiffPreviewTabsProvider>
+          <Tldraw
+            persistenceKey={`ateli:canvas:${folderPath}`}
+            components={components}
+            shapeUtils={customShapeUtils}
+            options={{ gridSteps: [{ min: 1, step: 20 }] }}
+            onMount={(editor) => {
+              editor.user.updateUserPreferences({ colorScheme: "dark" })
+              editor.updateInstanceState({ isGridMode: true })
+            }}
+          >
+            <RpcBridge />
+          </Tldraw>
+        </DiffPreviewTabsProvider>
       </WorktreeIndexProvider>
     </div>
   )

@@ -53,18 +53,24 @@ function DiffPreviewPane({ tab }: { tab: DiffPreviewTab }) {
   }, [repoPath, tab])
 
   if (loading && !patch) {
-    return <p className="px-4 py-3 text-xs text-muted-foreground">Loading diff…</p>
+    return (
+      <p className="px-4 py-3 text-xs text-muted-foreground">Loading diff…</p>
+    )
   }
 
   if (error) {
     return (
-      <p className="px-4 py-3 text-xs text-muted-foreground">Could not read diff.</p>
+      <p className="px-4 py-3 text-xs text-muted-foreground">
+        Could not read diff.
+      </p>
     )
   }
 
   if (!patch) {
     return (
-      <p className="px-4 py-3 text-xs text-muted-foreground">No patch available.</p>
+      <p className="px-4 py-3 text-xs text-muted-foreground">
+        No patch available.
+      </p>
     )
   }
 
@@ -79,10 +85,12 @@ function DiffPreviewPane({ tab }: { tab: DiffPreviewTab }) {
         hunkSeparators: "line-info-basic",
         overflow: "wrap",
       }}
-      style={{
-        height: "100%",
-        "--diffs-bg": "transparent",
-      } as React.CSSProperties}
+      style={
+        {
+          height: "100%",
+          "--diffs-bg": "transparent",
+        } as React.CSSProperties
+      }
     />
   )
 }
@@ -92,13 +100,13 @@ export function DiffPreviewTabs() {
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? null,
-    [activeTabId, tabs],
+    [activeTabId, tabs]
   )
 
   if (tabs.length === 0) return null
 
   return (
-    <div className="pointer-events-auto flex h-full min-h-0 flex-1 flex-col overflow-hidden border-l border-r border-border bg-card/96 text-card-foreground backdrop-blur-md">
+    <div className="pointer-events-auto flex h-full min-h-0 flex-1 flex-col overflow-hidden border-r border-l border-border bg-card/96 text-card-foreground backdrop-blur-md">
       <div
         role="tablist"
         aria-label="Diff previews"
@@ -111,15 +119,15 @@ export function DiffPreviewTabs() {
             <div
               key={tab.id}
               className={cn(
-                "group/tab flex min-w-0 max-w-[20rem] items-center gap-1 rounded-[3px] pr-1",
+                "group/tab flex max-w-[20rem] min-w-0 items-center gap-1 rounded-[3px] pr-1",
                 selected
                   ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
               )}
             >
               <SidebarTabButton
                 selected={selected}
-                className="min-w-0 max-w-full flex-1 rounded-r-none pr-1"
+                className="max-w-full min-w-0 flex-1 rounded-r-none pr-1"
                 onClick={() => selectTab(tab.id)}
                 title={tab.path}
               >

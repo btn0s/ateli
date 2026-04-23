@@ -3,7 +3,6 @@ import {
   FileTree as PierreFileTreeModel,
   type GitStatusEntry,
 } from "@pierre/trees"
-import { PatchDiff } from "@pierre/diffs/react"
 import { FileTree as PierreFileTree } from "@pierre/trees/react"
 import { MoreHorizontal } from "lucide-react"
 import { track, useEditor } from "tldraw"
@@ -20,6 +19,7 @@ import {
   normalizeFsRoot,
   resolveFilesRootFromCwd,
 } from "@/lib/worktree-files-root"
+import { useDiffPreviewTabs } from "@/contexts/diff-preview-tabs-context"
 import { Sidebar } from "@/components/sidebar"
 import { SidebarShell } from "@/components/sidebar-shell"
 import {
@@ -39,7 +39,6 @@ type SidebarTerminalState = {
 type GitChangesOverview = Awaited<ReturnType<typeof window.electron.git.status>>
 
 type GitChangeRow = GitChangesOverview["entries"][number]
-type GitDiffResult = Awaited<ReturnType<typeof window.electron.git.diff>>
 
 type DirEntry = Awaited<
   ReturnType<typeof window.electron.fs.readdir>
@@ -191,11 +190,11 @@ function DiffStat({ added, removed }: { added: number; removed: number }) {
 function ChangeFileRow({
   entry,
   selected,
-  onSelect,
+  onOpenDiff,
 }: {
   entry: GitChangeRow
   selected: boolean
-  onSelect: (entry: GitChangeRow) => void
+  onOpenDiff: (entry: GitChangeRow) => void
 }) {
   const { dir, name } = splitRepoPath(entry.path)
   const badge = statusLetterBadge(entry.indexStatus, entry.workTreeStatus)
@@ -218,7 +217,7 @@ function ChangeFileRow({
           "focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
         )}
         title={buttonTitle}
-        onClick={() => onSelect(entry)}
+        onClick={() => onOpenDiff(entry)}
         onDoubleClick={() => void window.electron.fs.openPath(entry.absPath)}
       >
         <span className="block min-w-0 truncate">
@@ -249,12 +248,12 @@ function ChangesList({
   overview,
   loading,
   selectedPath,
-  onSelectPath,
+  onOpenDiff,
 }: {
   overview: GitChangesOverview | null
   loading: boolean
   selectedPath: string | null
-  onSelectPath: (path: string | null) => void
+  onOpenDiff: (entry: GitChangeRow) => void
 }) {
   if (loading && !overview) {
     return <p className={changesPanelHintClass}>Loading changes…</p>
@@ -281,58 +280,10 @@ function ChangesList({
           key={`${e.path}:${e.indexStatus}${e.workTreeStatus}`}
           entry={e}
           selected={selectedPath === e.path}
-          onSelect={(entry) => onSelectPath(entry.path)}
+          onOpenDiff={onOpenDiff}
         />
       ))}
     </div>
-  )
-}
-
-function ChangeDiffPreview({
-  error,
-  loading,
-  patch,
-  selectedEntry,
-}: {
-  error: string | null
-  loading: boolean
-  patch: string | null
-  selectedEntry: GitChangeRow | null
-}) {
-  if (!selectedEntry) {
-    return <p className={changesPanelHintClass}>Select a changed file.</p>
-  }
-
-  if (loading && !patch) {
-    return <p className={changesPanelHintClass}>Loading diff…</p>
-  }
-
-  if (error) {
-    return <p className={changesPanelHintClass}>Could not read diff.</p>
-  }
-
-  if (!patch) {
-    return <p className={changesPanelHintClass}>No patch available.</p>
-  }
-
-  return (
-    <PatchDiff
-      patch={patch}
-      disableWorkerPool
-      className="h-full min-h-0"
-      options={{
-        diffStyle: "unified",
-        disableLineNumbers: true,
-        hunkSeparators: "line-info-basic",
-        overflow: "wrap",
-      }}
-      style={
-        {
-          height: "100%",
-          "--diffs-bg": "transparent",
-        } as React.CSSProperties
-      }
-    />
   )
 }
 
@@ -340,6 +291,7 @@ export const FileTree = track(function FileTree() {
   const editor = useEditor()
   const repoPath = getRepoPath()
   const worktrees = useWorktrees()
+  const { activeTabId, openDiffTab } = useDiffPreviewTabs()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
   const [sidebarTerminalState, setSidebarTerminalState] =
     useState<SidebarTerminalState>(() => {
@@ -357,11 +309,6 @@ export const FileTree = track(function FileTree() {
   const [selectedChangePath, setSelectedChangePath] = useState<string | null>(
     null
   )
-  const [selectedPatch, setSelectedPatch] = useState<string | null>(null)
-  const [selectedPatchError, setSelectedPatchError] = useState<string | null>(
-    null
-  )
-  const [selectedPatchLoading, setSelectedPatchLoading] = useState(false)
   const treeWrapperRef = useRef<HTMLDivElement | null>(null)
   const treeDirectoryPathsRef = useRef<string[]>([])
   const treePathMapRef = useRef<Map<string, string>>(new Map())
@@ -518,6 +465,20 @@ export const FileTree = track(function FileTree() {
     })
   }, [gitOverview])
 
+  const openDiffPreview = useCallback(
+    (entry: GitChangeRow) => {
+      setSelectedChangePath(entry.path)
+      openDiffTab({
+        absPath: entry.absPath,
+        id: `${entry.path}:${entry.indexStatus}${entry.workTreeStatus}`,
+        indexStatus: entry.indexStatus,
+        path: entry.path,
+        workTreeStatus: entry.workTreeStatus,
+      })
+    },
+    [openDiffTab]
+  )
+
   useEffect(() => {
     treeModel.setGitStatus(
       gitOverview && !gitOverview.error
@@ -558,44 +519,6 @@ export const FileTree = track(function FileTree() {
       remove()
     }
   }, [filesRootPath, refreshGitOverview])
-
-  const selectedChangeEntry =
-    gitOverview && !gitOverview.error
-      ? (gitOverview.entries.find(
-          (entry) => entry.path === selectedChangePath
-        ) ?? null)
-      : null
-
-  useEffect(() => {
-    if (!filesRootPath || !selectedChangeEntry) {
-      setSelectedPatch(null)
-      setSelectedPatchError(null)
-      setSelectedPatchLoading(false)
-      return
-    }
-
-    let cancelled = false
-
-    ;(async () => {
-      setSelectedPatchLoading(true)
-      setSelectedPatchError(null)
-      const result: GitDiffResult = await window.electron.git.diff({
-        repoPath: normalizeFsRoot(filesRootPath),
-        path: selectedChangeEntry.path,
-        absPath: selectedChangeEntry.absPath,
-        indexStatus: selectedChangeEntry.indexStatus,
-        workTreeStatus: selectedChangeEntry.workTreeStatus,
-      })
-      if (cancelled) return
-      setSelectedPatch(result.patch)
-      setSelectedPatchError(result.error)
-      setSelectedPatchLoading(false)
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [filesRootPath, selectedChangeEntry])
 
   const changeCount =
     gitOverview && !gitOverview.error ? gitOverview.entries.length : 0
@@ -729,7 +652,10 @@ export const FileTree = track(function FileTree() {
         </SidebarTabStrip>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <Sidebar.Section className="min-h-0 flex-[2] overflow-hidden [scrollbar-gutter:stable]">
+          {/* px-0 here — Pierre's file tree has its own 14px internal
+              horizontal padding, so the Sidebar.Section's default px-2
+              was doubling it. Changes panel adds its own px-1.5 below. */}
+          <Sidebar.Section className="min-h-0 flex-[2] overflow-hidden px-0 [scrollbar-gutter:stable]">
             {panelTab === "files" ? (
               treeError ? (
                 <p className={cn(changesPanelHintClass, "px-1.5 py-1")}>
@@ -754,22 +680,19 @@ export const FileTree = track(function FileTree() {
               )
             ) : (
               <div className="flex h-full min-h-0 flex-col overflow-hidden px-1.5 py-1">
-                <div className="min-h-0 flex-[0.8] overflow-x-hidden overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
                   <ChangesList
                     overview={gitOverview}
                     loading={gitOverviewLoading}
                     selectedPath={selectedChangePath}
-                    onSelectPath={setSelectedChangePath}
+                    onOpenDiff={openDiffPreview}
                   />
                 </div>
-                <div className="mt-2 min-h-0 flex-[1.2] overflow-hidden border-t border-border/70 pt-2">
-                  <ChangeDiffPreview
-                    error={selectedPatchError}
-                    loading={selectedPatchLoading}
-                    patch={selectedPatch}
-                    selectedEntry={selectedChangeEntry}
-                  />
-                </div>
+                {!activeTabId ? (
+                  <p className="border-t border-border/70 pt-2 pl-1 text-xs text-muted-foreground">
+                    Select a changed file to open its diff in a canvas tab.
+                  </p>
+                ) : null}
               </div>
             )}
           </Sidebar.Section>
