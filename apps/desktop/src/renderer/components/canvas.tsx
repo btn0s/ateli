@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  useState,
+} from "react"
 import {
   DefaultContextMenu,
   DefaultContextMenuContent,
@@ -11,18 +17,22 @@ import {
   useTools,
   useValue,
 } from "tldraw"
-import type { TLComponents, TLShapeId, TLUiContextMenuProps, TLUiIconType } from "tldraw"
+import type {
+  TLComponents,
+  TLShapeId,
+  TLUiContextMenuProps,
+  TLUiIconType,
+} from "tldraw"
 import "tldraw/tldraw.css"
 import { WorktreeIndexProvider } from "@/contexts/worktree-index-context"
-import {
-  TerminalShapeUtil,
-  setTerminalCwd,
-  consumeTerminalDeleteBypass,
-  deleteTerminalShapesSilently,
-} from "@/shapes/terminal-shape"
+import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { cwdUnderRemovedWorktree } from "@/lib/terminal-worktree-title"
 import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
-import { setRepoPath, getRepoPath, addTerminalAtCenter } from "@/lib/default-actions"
+import {
+  setRepoPath,
+  getRepoPath,
+  addTerminalAtCenter,
+} from "@/lib/default-actions"
 import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
 import { SidebarHud } from "./sidebar-hud"
@@ -56,7 +66,14 @@ const GRID_LOD_MAX_PX = 28
 
 // tldraw tools to show in our toolbar, in order
 const TOOLBAR_TOOL_IDS = [
-  "select", "hand", "draw", "eraser", "arrow", "text", "frame", "note",
+  "select",
+  "hand",
+  "draw",
+  "eraser",
+  "arrow",
+  "text",
+  "frame",
+  "note",
 ]
 
 const CustomToolbar = track(() => {
@@ -88,7 +105,7 @@ const CustomToolbar = track(() => {
               </button>
             )
           })}
-          <div className="bg-border mx-0.5 h-5 w-px" />
+          <div className="mx-0.5 h-5 w-px bg-border" />
           {customActions.map((action) => (
             <button
               key={action.id}
@@ -136,21 +153,24 @@ function TerminalDeleteDialog() {
   const allowDeleteRef = useRef<Set<TLShapeId>>(new Set())
 
   useEffect(() => {
-    return editor.sideEffects.registerBeforeDeleteHandler("shape", (shape) => {
-      if (shape.type !== "terminal") return
-      if (!shape.props.sidecarSessionId) return
-      const shapeId = shape.id as TLShapeId
-      if (consumeTerminalDeleteBypass(shapeId)) return
-      if (allowDeleteRef.current.has(shapeId)) {
-        allowDeleteRef.current.delete(shapeId)
-        return
-      }
+    return editor.sideEffects.registerBeforeDeleteHandler(
+      "shape",
+      (shape, source) => {
+        if (shape.type !== "terminal") return
+        if (source !== "user") return
+        if (!shape.props.sessionId) return
+        const shapeId = shape.id as TLShapeId
+        if (allowDeleteRef.current.has(shapeId)) {
+          allowDeleteRef.current.delete(shapeId)
+          return
+        }
 
-      setPendingTerminalIds((prev) => (
-        prev.includes(shapeId) ? prev : [...prev, shapeId]
-      ))
-      return false
-    })
+        setPendingTerminalIds((prev) =>
+          prev.includes(shapeId) ? prev : [...prev, shapeId]
+        )
+        return false
+      }
+    )
   }, [editor])
 
   const open = pendingTerminalIds.length > 0
@@ -163,24 +183,12 @@ function TerminalDeleteDialog() {
     const ids = pendingTerminalIds
     if (ids.length === 0) return
 
-    const sessionKeys = ids
-      .map((id) => editor.getShape(id))
-      .flatMap((shape) => (
-        shape?.type === "terminal" && shape.props.sidecarSessionId
-          ? [shape.props.sidecarSessionId]
-          : []
-      ))
-
     for (const id of ids) {
       allowDeleteRef.current.add(id)
     }
 
     editor.deleteShapes(ids)
     setPendingTerminalIds([])
-
-    for (const sessionKey of sessionKeys) {
-      window.electron.terminal.dispose(sessionKey)
-    }
   }
 
   return (
@@ -212,7 +220,7 @@ const SidebarHudWithSelection = track(function SidebarHudWithSelection() {
   const hasCanvasSelection = useValue(
     "right-sidebar-selection",
     () => editor.getSelectedShapeIds().length > 0,
-    [editor],
+    [editor]
   )
 
   return (
@@ -242,12 +250,12 @@ const components: TLComponents = {
     const screenBounds = useValue(
       "screenBounds",
       () => editor.getViewportScreenBounds(),
-      [],
+      []
     )
     const devicePixelRatio = useValue(
       "dpr",
       () => editor.getInstanceState().devicePixelRatio,
-      [],
+      []
     )
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -288,8 +296,10 @@ const components: TLComponents = {
         if (!smoothMouseRef.current) {
           smoothMouseRef.current = { x: tm.x, y: tm.y }
         } else {
-          smoothMouseRef.current.x += (tm.x - smoothMouseRef.current.x) * SMOOTHING
-          smoothMouseRef.current.y += (tm.y - smoothMouseRef.current.y) * SMOOTHING
+          smoothMouseRef.current.x +=
+            (tm.x - smoothMouseRef.current.x) * SMOOTHING
+          smoothMouseRef.current.y +=
+            (tm.y - smoothMouseRef.current.y) * SMOOTHING
         }
       }
 
@@ -318,10 +328,18 @@ const components: TLComponents = {
       const quantizedStepSize = size * lodStepRef.current
 
       const pageViewportBounds = editor.getViewportPageBounds()
-      const startPageX = Math.ceil(pageViewportBounds.minX / quantizedStepSize) * quantizedStepSize
-      const startPageY = Math.ceil(pageViewportBounds.minY / quantizedStepSize) * quantizedStepSize
-      const endPageX = Math.floor(pageViewportBounds.maxX / quantizedStepSize) * quantizedStepSize
-      const endPageY = Math.floor(pageViewportBounds.maxY / quantizedStepSize) * quantizedStepSize
+      const startPageX =
+        Math.ceil(pageViewportBounds.minX / quantizedStepSize) *
+        quantizedStepSize
+      const startPageY =
+        Math.ceil(pageViewportBounds.minY / quantizedStepSize) *
+        quantizedStepSize
+      const endPageX =
+        Math.floor(pageViewportBounds.maxX / quantizedStepSize) *
+        quantizedStepSize
+      const endPageY =
+        Math.floor(pageViewportBounds.maxY / quantizedStepSize) *
+        quantizedStepSize
       const numRows = Math.round((endPageY - startPageY) / quantizedStepSize)
       const numCols = Math.round((endPageX - startPageX) / quantizedStepSize)
 
@@ -336,7 +354,13 @@ const components: TLComponents = {
       const [br, bg, bb] = BASE_DOT_COLOR
       const baseFill = `rgba(${br},${bg},${bb},${DOT_BASE_ALPHA})`
 
-      const glowDots: { x: number; y: number; r: number; alpha: number; glow: number }[] = []
+      const glowDots: {
+        x: number
+        y: number
+        r: number
+        alpha: number
+        glow: number
+      }[] = []
 
       ctx.fillStyle = baseFill
       ctx.shadowColor = "transparent"
@@ -452,56 +476,64 @@ const components: TLComponents = {
   SharePanel: null,
 }
 
-
-
 function RpcBridge() {
   const editor = useEditor()
 
   useEffect(() => {
     if (!window.electron?.rpc) return
 
-    const removeCreateTerminal = window.electron.rpc.onCreateTerminal(({ shapeId, x, y, w, h }) => {
-      editor.createShape({
-        id: shapeId as TLShapeId,
-        type: "terminal",
-        x,
-        y,
-        props: { w, h },
-      })
-    })
-
-    const removeGetShapes = window.electron.rpc.onGetShapes(({ responseChannel }) => {
-      const shapes = editor.getCurrentPageShapes().map((s) => ({
-        id: s.id,
-        type: s.type,
-        x: s.x,
-        y: s.y,
-        props: s.props,
-      }))
-      window.electron.rpc.respondShapes(responseChannel, shapes)
-    })
-
-    const removeNotifications = window.electron.rpc.onNotification(({ method, params }) => {
-      if (method === "terminal.created") {
-        addTerminalAtCenter(editor, { sidecarSessionId: params.sessionKey as string })
-      } else if (method === "worktree.created") {
-        addTerminalAtCenter(editor, { cwd: params.path as string })
-      } else if (method === "worktree.removed") {
-        const removedPath = params.path as string
-        const terminals = editor
-          .getCurrentPageShapes()
-          .filter((s) => s.type === "terminal")
-        const toRemove = terminals
-          .filter((s) =>
-            cwdUnderRemovedWorktree(
-              (s.props as { cwd?: string }).cwd,
-              removedPath,
-            ),
-          )
-          .map((s) => s.id as TLShapeId)
-        deleteTerminalShapesSilently(editor, toRemove)
+    const removeCreateTerminal = window.electron.rpc.onCreateTerminal(
+      ({ shapeId, x, y, w, h }) => {
+        editor.createShape({
+          id: shapeId as TLShapeId,
+          type: "terminal",
+          x,
+          y,
+          props: { w, h },
+        })
       }
-    })
+    )
+
+    const removeGetShapes = window.electron.rpc.onGetShapes(
+      ({ responseChannel }) => {
+        const shapes = editor.getCurrentPageShapes().map((s) => ({
+          id: s.id,
+          type: s.type,
+          x: s.x,
+          y: s.y,
+          props: s.props,
+        }))
+        window.electron.rpc.respondShapes(responseChannel, shapes)
+      }
+    )
+
+    const removeNotifications = window.electron.rpc.onNotification(
+      ({ method, params }) => {
+        if (method === "terminal.created") {
+          addTerminalAtCenter(editor, {
+            sessionId: params.sessionKey as string,
+          })
+        } else if (method === "worktree.created") {
+          addTerminalAtCenter(editor, { cwd: params.path as string })
+        } else if (method === "worktree.removed") {
+          const removedPath = params.path as string
+          const terminals = editor
+            .getCurrentPageShapes()
+            .filter((s) => s.type === "terminal")
+          const toRemove = terminals
+            .filter((s) =>
+              cwdUnderRemovedWorktree(
+                (s.props as { cwd?: string }).cwd,
+                removedPath
+              )
+            )
+            .map((s) => s.id as TLShapeId)
+          editor.store.mergeRemoteChanges(() => {
+            editor.deleteShapes(toRemove)
+          })
+        }
+      }
+    )
 
     return () => {
       removeCreateTerminal()
