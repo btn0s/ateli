@@ -29,7 +29,12 @@ export function SidebarShell({
   children,
   className,
 }: SidebarShellProps) {
-  const [width, setWidth] = useState(() => getStoredWidth(side, defaultWidth))
+  const [width, setWidth] = useState(() => {
+    const stored = getStoredWidth(side, defaultWidth)
+    // A stored width of 0 means "collapsed" — drive that through `collapsed`,
+    // not `width`, otherwise expanding has no pixels to expand into.
+    return stored === 0 ? defaultWidth : stored
+  })
   const [collapsed, setCollapsed] = useState(() => getStoredWidth(side, defaultWidth) === 0)
   const dragging = useRef(false)
   const startX = useRef(0)
@@ -83,17 +88,6 @@ export function SidebarShell({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!e.metaKey && !e.ctrlKey) return
-      // Diagnostic: log every Cmd/Ctrl keydown the capture-phase listener sees.
-      // eslint-disable-next-line no-console
-      console.log("[sidebar]", side, {
-        key: e.key,
-        code: e.code,
-        meta: e.metaKey,
-        ctrl: e.ctrlKey,
-        alt: e.altKey,
-        shift: e.shiftKey,
-        target: (e.target as Element | null)?.tagName,
-      })
       const key = side === "left" ? "[" : "]"
       if (e.key !== key) return
       e.preventDefault()
