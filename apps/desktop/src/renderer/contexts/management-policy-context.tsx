@@ -27,10 +27,12 @@ function defaultPolicy(): ManagementPolicy {
     user: {
       renameTerminal: true,
       renameBranch: true,
+      updatePolicy: true,
     },
     agent: {
       renameTerminal: true,
       renameBranch: true,
+      updatePolicy: false,
     },
   }
 }

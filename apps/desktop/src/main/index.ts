@@ -7,7 +7,6 @@ import {
   ensureManagementAllowed,
   loadManagementPolicy,
   updateManagementPolicy,
-  type ManagementPolicy,
 } from "./management"
 import {
   addWorktree,
@@ -21,6 +20,15 @@ import {
 } from "./worktree"
 import { readProjectDirectory, startFsWatch, fsWatchKey } from "./file-tree"
 import { getGitChangesOverview, getGitFilePatch } from "./git-status"
+import {
+  assertRecord,
+  expectGitDiffRequest,
+  expectNumber,
+  expectOptionalString,
+  expectString,
+  parseManagementPolicyPatch,
+  requireStringValue,
+} from "./ipc-payloads"
 
 if (process.env.NODE_ENV_ELECTRON_VITE === "development") {
   console.log(
@@ -84,275 +92,264 @@ ipcMain.handle("select-folder", async () => {
   return result.filePaths[0] ?? null
 })
 
-ipcMain.handle(
-  "terminal:create",
-  async (_event, { cwd }: { shapeId: string; cwd: string }) => {
-    const result = await ptyManager.createSession({ cwd })
-    return { pid: null, sessionKey: result.sessionKey }
-  }
-)
+ipcMain.handle("terminal:create", async (_event, payload) => {
+  const r = assertRecord(payload, "terminal:create")
+  const cwd = expectString(r, "cwd", "terminal:create")
+  const result = await ptyManager.createSession({ cwd })
+  return { pid: null, sessionKey: result.sessionKey }
+})
 
-ipcMain.handle(
-  "terminal:reconnect",
-  async (
-    _event,
-    {
-      sessionKey,
-      cols,
-      rows,
-    }: { sessionKey: string; cols: number; rows: number }
-  ) => {
-    const sessions = ptyManager.listSessions()
-    const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
-    if (!meta) throw new Error(`Unknown session: ${sessionKey}`)
-    await ptyManager.reconnectSession(meta.id, cols, rows)
+ipcMain.handle("terminal:reconnect", async (_event, payload) => {
+  const r = assertRecord(payload, "terminal:reconnect")
+  const sessionKey = expectString(r, "sessionKey", "terminal:reconnect")
+  const cols = expectNumber(r, "cols", "terminal:reconnect")
+  const rows = expectNumber(r, "rows", "terminal:reconnect")
+  const sessions = ptyManager.listSessions()
+  const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
+  if (!meta) {
+    throw new Error(`Unknown session: ${sessionKey}`)
   }
-)
+  await ptyManager.reconnectSession(meta.id, cols, rows)
+})
 
 function findSessionByKey(sessionKey: string) {
   return ptyManager.getSessionByKey(sessionKey)
 }
 
-ipcMain.on(
-  "terminal:input",
-  (_event, { sessionKey, data }: { sessionKey: string; data: string }) => {
-    const meta = findSessionByKey(sessionKey)
-    if (!meta) {
-      console.warn(`terminal:input — unknown session: ${sessionKey}`)
-      return
-    }
-    void ptyManager.writeSession(meta.id, data)
+ipcMain.on("terminal:input", (_event, payload) => {
+  const r = assertRecord(payload, "terminal:input")
+  const sessionKey = expectString(r, "sessionKey", "terminal:input")
+  const data = requireStringValue(r, "data", "terminal:input")
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) {
+    console.warn(`terminal:input — unknown session: ${sessionKey}`)
+    return
   }
-)
+  void ptyManager.writeSession(meta.id, data)
+})
 
-ipcMain.on(
-  "terminal:resize",
-  (
-    _event,
-    {
-      sessionKey,
-      cols,
-      rows,
-    }: { sessionKey: string; cols: number; rows: number }
-  ) => {
-    const meta = findSessionByKey(sessionKey)
-    if (!meta) {
-      console.warn(`terminal:resize — unknown session: ${sessionKey}`)
-      return
-    }
-    void ptyManager.resizeSession(meta.id, cols, rows)
+ipcMain.on("terminal:resize", (_event, payload) => {
+  const r = assertRecord(payload, "terminal:resize")
+  const sessionKey = expectString(r, "sessionKey", "terminal:resize")
+  const cols = expectNumber(r, "cols", "terminal:resize")
+  const rows = expectNumber(r, "rows", "terminal:resize")
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) {
+    console.warn(`terminal:resize — unknown session: ${sessionKey}`)
+    return
   }
-)
+  void ptyManager.resizeSession(meta.id, cols, rows)
+})
 
-ipcMain.on(
-  "terminal:dispose",
-  (_event, { sessionKey }: { sessionKey: string }) => {
-    const meta = findSessionByKey(sessionKey)
-    if (!meta) {
-      console.warn(`terminal:dispose — unknown session: ${sessionKey}`)
-      return
-    }
-    void ptyManager.killSession(meta.id)
+ipcMain.on("terminal:dispose", (_event, payload) => {
+  const r = assertRecord(payload, "terminal:dispose")
+  const sessionKey = expectString(r, "sessionKey", "terminal:dispose")
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) {
+    console.warn(`terminal:dispose — unknown session: ${sessionKey}`)
+    return
   }
-)
+  void ptyManager.killSession(meta.id)
+})
 
-ipcMain.on(
-  "terminal:detach",
-  (_event, { sessionKey }: { sessionKey: string }) => {
-    const meta = findSessionByKey(sessionKey)
-    if (!meta) return
-    ptyManager.detachSession(meta.id)
+ipcMain.on("terminal:detach", (_event, payload) => {
+  const r = assertRecord(payload, "terminal:detach")
+  const sessionKey = expectString(r, "sessionKey", "terminal:detach")
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) {
+    return
   }
-)
+  ptyManager.detachSession(meta.id)
+})
 
 ipcMain.handle("terminal:list", async () => {
   return ptyManager.listSessions()
 })
 
-ipcMain.handle(
-  "terminal:rename",
-  async (_event, { sessionKey, name }: { sessionKey: string; name?: string }) => {
-    ensureManagementAllowed("user", "renameTerminal")
-    const meta = findSessionByKey(sessionKey)
-    if (!meta) throw new Error(`Unknown session: ${sessionKey}`)
-    const updated = ptyManager.renameSession(meta.id, name)
-    broadcast("terminal.renamed", {
-      id: updated.id,
-      sessionKey: updated.sidecarSessionId,
-      name: updated.name ?? null,
-    })
-    return updated
+ipcMain.handle("terminal:rename", async (_event, payload) => {
+  ensureManagementAllowed("user", "renameTerminal")
+  const r = assertRecord(payload, "terminal:rename")
+  const sessionKey = expectString(r, "sessionKey", "terminal:rename")
+  const name = expectOptionalString(r, "name")
+  const meta = findSessionByKey(sessionKey)
+  if (!meta) {
+    throw new Error(`Unknown session: ${sessionKey}`)
   }
-)
+  const updated = ptyManager.renameSession(meta.id, name)
+  broadcast("terminal.renamed", {
+    id: updated.id,
+    sessionKey: updated.sidecarSessionId,
+    name: updated.name ?? null,
+  })
+  return updated
+})
 
 // --- Worktree IPC ---
 
-ipcMain.handle(
-  "worktree:list",
-  async (_event, { repoPath }: { repoPath: string }) => {
-    return listWorktrees(repoPath)
+ipcMain.handle("worktree:list", async (_event, payload) => {
+  const r = assertRecord(payload, "worktree:list")
+  const repoPath = expectString(r, "repoPath", "worktree:list")
+  return listWorktrees(repoPath)
+})
+
+ipcMain.handle("git:status", async (_event, payload) => {
+  const r = assertRecord(payload, "git:status")
+  const repoPath = expectString(r, "repoPath", "git:status")
+  return getGitChangesOverview(repoPath)
+})
+
+ipcMain.handle("worktree:create", async (_event, payload) => {
+  const r = assertRecord(payload, "worktree:create")
+  const repoPath = expectString(r, "repoPath", "worktree:create")
+  const branch = expectString(r, "branch", "worktree:create")
+  const wtPath = worktreePath(repoPath, branch)
+  await addWorktree({
+    repoPath,
+    worktreePath: wtPath,
+    branch,
+    createBranch: true,
+  })
+
+  const id = crypto.randomUUID().slice(0, 8)
+  const metadata = loadWorktreeMetadata()
+  metadata.entries[wtPath] = {
+    id,
+    branch,
+    createdAt: new Date().toISOString(),
   }
-)
+  saveWorktreeMetadata(metadata)
 
-ipcMain.handle(
-  "git:status",
-  async (_event, { repoPath }: { repoPath: string }) => {
-    return getGitChangesOverview(repoPath)
+  broadcast("worktree.created", { id, path: wtPath, branch })
+  return { id, path: wtPath, branch }
+})
+
+ipcMain.handle("worktree:remove", async (_event, payload) => {
+  const r = assertRecord(payload, "worktree:remove")
+  const repoPath = expectString(r, "repoPath", "worktree:remove")
+  const id = expectString(r, "id", "worktree:remove")
+  const entry = await findWorktreeById(repoPath, id)
+  if (!entry) {
+    throw new Error(`Worktree not found: ${id}`)
   }
-)
 
-ipcMain.handle(
-  "worktree:create",
-  async (
-    _event,
-    { repoPath, branch }: { repoPath: string; branch: string }
-  ) => {
-    const wtPath = worktreePath(repoPath, branch)
-    await addWorktree({
-      repoPath,
-      worktreePath: wtPath,
-      branch,
-      createBranch: true,
-    })
-
-    const id = crypto.randomUUID().slice(0, 8)
-    const metadata = loadWorktreeMetadata()
-    metadata.entries[wtPath] = {
-      id,
-      branch,
-      createdAt: new Date().toISOString(),
+  for (const session of ptyManager.listSessions()) {
+    if (session.cwd.startsWith(entry.path)) {
+      await ptyManager.killSession(session.id)
     }
-    saveWorktreeMetadata(metadata)
-
-    broadcast("worktree.created", { id, path: wtPath, branch })
-    return { id, path: wtPath, branch }
   }
-)
 
-ipcMain.handle(
-  "worktree:remove",
-  async (_event, { repoPath, id }: { repoPath: string; id: string }) => {
-    const entry = await findWorktreeById(repoPath, id)
-    if (!entry) throw new Error(`Worktree not found: ${id}`)
-
-    for (const session of ptyManager.listSessions()) {
-      if (session.cwd.startsWith(entry.path)) {
-        await ptyManager.killSession(session.id)
-      }
-    }
-
-    try {
-      await removeGitWorktree(repoPath, entry.path)
-    } catch {
-      // Already removed on disk.
-    }
-
-    const metadata = loadWorktreeMetadata()
-    delete metadata.entries[entry.path]
-    saveWorktreeMetadata(metadata)
-
-    broadcast("worktree.removed", {
-      id,
-      path: entry.path,
-      branch: entry.branch,
-    })
-    return { ok: true }
+  try {
+    await removeGitWorktree(repoPath, entry.path)
+  } catch {
+    // Already removed on disk.
   }
-)
 
-ipcMain.handle(
-  "worktree:rename-branch",
-  async (
-    _event,
-    { repoPath, id, branch }: { repoPath: string; id: string; branch: string }
-  ) => {
-    ensureManagementAllowed("user", "renameBranch")
-    const nextBranch = branch.trim()
-    if (!nextBranch) throw new Error("branch is required")
+  const metadata = loadWorktreeMetadata()
+  delete metadata.entries[entry.path]
+  saveWorktreeMetadata(metadata)
 
-    const entry = await findWorktreeById(repoPath, id)
-    if (!entry) throw new Error(`Worktree not found: ${id}`)
+  broadcast("worktree.removed", {
+    id,
+    path: entry.path,
+    branch: entry.branch,
+  })
+  return { ok: true }
+})
 
-    const previousBranch = entry.branch
-    await renameWorktreeBranch(entry.path, nextBranch)
-
-    const worktrees = await listWorktrees(repoPath)
-    const updated = worktrees.find((worktree) => worktree.id === id)
-    if (!updated) throw new Error(`Worktree not found after rename: ${id}`)
-
-    broadcast("worktree.renamed", {
-      id: updated.id,
-      path: updated.path,
-      branch: updated.branch,
-      previousBranch,
-    })
-    return updated
+ipcMain.handle("worktree:rename-branch", async (_event, payload) => {
+  ensureManagementAllowed("user", "renameBranch")
+  const r = assertRecord(payload, "worktree:rename-branch")
+  const repoPath = expectString(r, "repoPath", "worktree:rename-branch")
+  const id = expectString(r, "id", "worktree:rename-branch")
+  const branchField = r["branch"]
+  if (typeof branchField !== "string") {
+    throw new Error("Invalid worktree:rename-branch: branch is required")
   }
-)
+  const nextBranch = branchField.trim()
+  if (!nextBranch) {
+    throw new Error("branch is required")
+  }
 
-ipcMain.handle(
-  "git:diff",
-  async (
-    _event,
-    request: {
-      repoPath: string
-      path: string
-      absPath: string
-      indexStatus: string
-      workTreeStatus: string
-    }
-  ) => getGitFilePatch(request)
-)
+  const entry = await findWorktreeById(repoPath, id)
+  if (!entry) {
+    throw new Error(`Worktree not found: ${id}`)
+  }
+
+  const previousBranch = entry.branch
+  await renameWorktreeBranch(entry.path, nextBranch)
+
+  const worktrees = await listWorktrees(repoPath)
+  const updated = worktrees.find((worktree) => worktree.id === id)
+  if (!updated) {
+    throw new Error(`Worktree not found after rename: ${id}`)
+  }
+
+  broadcast("worktree.renamed", {
+    id: updated.id,
+    path: updated.path,
+    branch: updated.branch,
+    previousBranch,
+  })
+  return updated
+})
+
+ipcMain.handle("git:diff", async (_event, payload) => {
+  return getGitFilePatch(expectGitDiffRequest(payload))
+})
 
 ipcMain.handle("management:get-policy", async () => {
   return loadManagementPolicy()
 })
 
-ipcMain.handle(
-  "management:update-policy",
-  async (_event, patch: Partial<Pick<ManagementPolicy, "user" | "agent">>) => {
-    const policy = updateManagementPolicy(patch)
-    broadcast("management.policy.updated", { policy })
-    return policy
-  }
-)
+ipcMain.handle("management:update-policy", async (_event, payload) => {
+  ensureManagementAllowed("user", "updatePolicy")
+  const patch = parseManagementPolicyPatch(payload)
+  const policy = updateManagementPolicy(patch)
+  broadcast("management.policy.updated", { policy })
+  return policy
+})
 
 // --- File tree / FS IPC ---
 
-ipcMain.handle(
-  "fs:readdir",
-  async (_event, { dirPath }: { dirPath: string }) => {
-    return readProjectDirectory(dirPath)
-  }
-)
+ipcMain.handle("fs:readdir", async (_event, payload) => {
+  const r = assertRecord(payload, "fs:readdir")
+  const dirPath = expectString(r, "dirPath", "fs:readdir")
+  return readProjectDirectory(dirPath)
+})
 
-ipcMain.handle(
-  "fs:open-path",
-  async (_event, { filePath }: { filePath: string }) => {
-    const err = await shell.openPath(filePath)
-    if (err) throw new Error(err)
+ipcMain.handle("fs:open-path", async (_event, payload) => {
+  const r = assertRecord(payload, "fs:open-path")
+  const filePath = expectString(r, "filePath", "fs:open-path")
+  const err = await shell.openPath(filePath)
+  if (err) {
+    throw new Error(err)
   }
-)
+})
 
-ipcMain.handle(
-  "fs:watch-root",
-  async (event, { rootPath }: { rootPath: string }) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) return
-    const key = fsWatchKey(win.id, rootPath)
-    fsWatchByKey.get(key)?.()
-    const cleanup = startFsWatch(key, rootPath, () => {
-      if (!win.isDestroyed()) {
-        win.webContents.send("fs:changed", { rootPath: path.resolve(rootPath) })
-      }
-    })
-    fsWatchByKey.set(key, cleanup)
-  }
-)
-
-ipcMain.on("fs:unwatch-root", (event, { rootPath }: { rootPath: string }) => {
+ipcMain.handle("fs:watch-root", async (event, payload) => {
+  const r = assertRecord(payload, "fs:watch-root")
+  const rootPath = expectString(r, "rootPath", "fs:watch-root")
   const win = BrowserWindow.fromWebContents(event.sender)
-  if (!win) return
+  if (!win) {
+    return
+  }
+  const key = fsWatchKey(win.id, rootPath)
+  fsWatchByKey.get(key)?.()
+  const cleanup = startFsWatch(key, rootPath, () => {
+    if (!win.isDestroyed()) {
+      win.webContents.send("fs:changed", { rootPath: path.resolve(rootPath) })
+    }
+  })
+  fsWatchByKey.set(key, cleanup)
+})
+
+ipcMain.on("fs:unwatch-root", (event, payload) => {
+  const r = assertRecord(payload, "fs:unwatch-root")
+  const rootPath = expectString(r, "rootPath", "fs:unwatch-root")
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win) {
+    return
+  }
   const key = fsWatchKey(win.id, rootPath)
   fsWatchByKey.get(key)?.()
   fsWatchByKey.delete(key)

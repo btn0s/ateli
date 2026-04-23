@@ -13,6 +13,7 @@ export type ManagementActor = "user" | "agent"
 export interface ManagementPermissions {
   renameTerminal: boolean
   renameBranch: boolean
+  updatePolicy: boolean
 }
 
 export interface ManagementPolicy {
@@ -27,10 +28,12 @@ export function defaultManagementPolicy(): ManagementPolicy {
     user: {
       renameTerminal: true,
       renameBranch: true,
+      updatePolicy: true,
     },
     agent: {
       renameTerminal: true,
       renameBranch: true,
+      updatePolicy: false,
     },
   }
 }
@@ -50,14 +53,26 @@ export function loadManagementPolicy(): ManagementPolicy {
     return defaultManagementPolicy()
   }
 
-  if (
-    parsed &&
-    typeof parsed === "object" &&
-    (parsed as Record<string, unknown>).version === MANAGEMENT_POLICY_VERSION &&
-    isPermissions((parsed as Record<string, unknown>).user) &&
-    isPermissions((parsed as Record<string, unknown>).agent)
-  ) {
-    return parsed as ManagementPolicy
+  if (parsed && typeof parsed === "object") {
+    const o = parsed as Record<string, unknown>
+    if (o.version === MANAGEMENT_POLICY_VERSION) {
+      const def = defaultManagementPolicy()
+      const user = mergePermissions(
+        (o as { user?: unknown }).user,
+        def.user
+      )
+      const agent = mergePermissions(
+        (o as { agent?: unknown }).agent,
+        def.agent
+      )
+      if (user && agent) {
+        return {
+          version: MANAGEMENT_POLICY_VERSION,
+          user,
+          agent,
+        }
+      }
+    }
   }
 
   return defaultManagementPolicy()
@@ -98,11 +113,21 @@ export function ensureManagementAllowed(
   throw new Error(`${actor} is not allowed to ${permission}`)
 }
 
-function isPermissions(value: unknown): value is ManagementPermissions {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    typeof (value as Record<string, unknown>).renameTerminal === "boolean" &&
-    typeof (value as Record<string, unknown>).renameBranch === "boolean"
-  )
+function mergePermissions(
+  value: unknown,
+  defaults: ManagementPermissions
+): ManagementPermissions | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+  const o = value as Record<string, unknown>
+  if (typeof o.renameTerminal !== "boolean" || typeof o.renameBranch !== "boolean") {
+    return null
+  }
+  return {
+    renameTerminal: o.renameTerminal,
+    renameBranch: o.renameBranch,
+    updatePolicy:
+      typeof o.updatePolicy === "boolean" ? o.updatePolicy : defaults.updatePolicy,
+  }
 }

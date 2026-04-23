@@ -6,11 +6,11 @@ import os from "node:os"
 import crypto from "node:crypto"
 import { BrowserWindow, ipcMain } from "electron"
 import type { PtyManager } from "./pty"
+import { isRpcInvalidParams, RpcInvalidParamsError } from "./jsonrpc-error"
 import {
   ensureManagementAllowed,
   loadManagementPolicy,
   updateManagementPolicy,
-  type ManagementPolicy,
 } from "./management"
 import {
   addWorktree,
@@ -22,6 +22,17 @@ import {
   loadWorktreeMetadata,
   saveWorktreeMetadata,
 } from "./worktree"
+import {
+  parseManagementPatchRpc,
+  rpcFiniteOr,
+  rpcObj,
+  rpcOptionalBool,
+  rpcOptionalNumber,
+  rpcOptionalString,
+  rpcRequireNumber,
+  rpcRequireString,
+  rpcRequireStringData,
+} from "./rpc-payloads"
 
 const ATELI_DIR = path.join(os.homedir(), ".ateli")
 const SOCKET_PATH_FILE = path.join(ATELI_DIR, "socket-path")
@@ -95,12 +106,16 @@ export function startRpcServer(ptyManager: PtyManager) {
   // --- Terminal methods ---
 
   methods.set("terminal.create", async (params) => {
-    const cwd = params.cwd as string | undefined
+    const p = rpcObj(params)
+    const cwd = rpcOptionalString(p, "cwd")
+    const name = rpcOptionalString(p, "name")
     const win = getMainWindow()
-    if (!cwd && !win) throw new Error("cwd is required when no window is open")
+    if (!cwd && !win) {
+      throw new Error("cwd is required when no window is open")
+    }
     const result = await ptyManager.createSession({
       cwd: cwd || process.cwd(),
-      name: params.name as string | undefined,
+      name,
     })
     broadcast("terminal.created", { id: result.id, sessionKey: result.sessionKey })
     return result
@@ -111,33 +126,34 @@ export function startRpcServer(ptyManager: PtyManager) {
   })
 
   methods.set("terminal.write", async (params) => {
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
-    const data = params.data as string
-    if (typeof data !== "string") throw new Error("data is required")
+    const p = rpcObj(params)
+    const id = rpcRequireString(p, "id")
+    const data = rpcRequireStringData(p, "data")
     await ptyManager.writeSession(id, data)
     return { ok: true }
   })
 
   methods.set("terminal.resize", async (params) => {
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
-    await ptyManager.resizeSession(id, params.cols as number, params.rows as number)
+    const p = rpcObj(params)
+    const id = rpcRequireString(p, "id")
+    const cols = rpcRequireNumber(p, "cols")
+    const rows = rpcRequireNumber(p, "rows")
+    await ptyManager.resizeSession(id, cols, rows)
     return { ok: true }
   })
 
   methods.set("terminal.kill", async (params) => {
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
+    const p = rpcObj(params)
+    const id = rpcRequireString(p, "id")
     await ptyManager.killSession(id)
     return { ok: true }
   })
 
   methods.set("terminal.rename", async (params) => {
     ensureManagementAllowed("agent", "renameTerminal")
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
-    const name = typeof params.name === "string" ? params.name : undefined
+    const p = rpcObj(params)
+    const id = rpcRequireString(p, "id")
+    const name = rpcOptionalString(p, "name")
     const updated = ptyManager.renameSession(id, name)
     broadcast("terminal.renamed", {
       id: updated.id,
@@ -148,15 +164,17 @@ export function startRpcServer(ptyManager: PtyManager) {
   })
 
   methods.set("terminal.reconnect", async (params) => {
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
-    await ptyManager.reconnectSession(id, params.cols as number ?? 80, params.rows as number ?? 24)
+    const p = rpcObj(params)
+    const id = rpcRequireString(p, "id")
+    const cols = rpcOptionalNumber(p, "cols", 80)
+    const rows = rpcOptionalNumber(p, "rows", 24)
+    await ptyManager.reconnectSession(id, cols, rows)
     return { ok: true }
   })
 
   methods.set("terminal.read", async (params) => {
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
+    const p = rpcObj(params)
+    const id = rpcRequireString(p, "id")
     const data = await ptyManager.readSession(id)
     return { data }
   })
@@ -165,7 +183,9 @@ export function startRpcServer(ptyManager: PtyManager) {
 
   methods.set("canvas.getShapes", async () => {
     const win = getMainWindow()
-    if (!win) throw new Error("No window available")
+    if (!win) {
+      throw new Error("No window available")
+    }
 
     return new Promise((resolve, reject) => {
       const channel = `rpc:shapes-response:${crypto.randomUUID()}`
@@ -185,12 +205,14 @@ export function startRpcServer(ptyManager: PtyManager) {
 
   methods.set("canvas.createTerminal", async (params) => {
     const win = getMainWindow()
-    if (!win) throw new Error("No window available")
-
-    const x = typeof params.x === "number" ? params.x : 0
-    const y = typeof params.y === "number" ? params.y : 0
-    const w = typeof params.w === "number" ? params.w : 600
-    const h = typeof params.h === "number" ? params.h : 400
+    if (!win) {
+      throw new Error("No window available")
+    }
+    const p = rpcObj(params)
+    const x = rpcFiniteOr(p, "x", 0)
+    const y = rpcFiniteOr(p, "y", 0)
+    const w = rpcFiniteOr(p, "w", 600)
+    const h = rpcFiniteOr(p, "h", 400)
 
     const shapeId = `shape:rpc-${crypto.randomUUID().slice(0, 12)}`
     win.webContents.send("rpc:create-terminal", { shapeId, x, y, w, h })
@@ -200,12 +222,11 @@ export function startRpcServer(ptyManager: PtyManager) {
   // --- Worktree methods ---
 
   methods.set("worktree.create", async (params) => {
-    const repoPath = params.repoPath as string
-    if (!repoPath) throw new Error("repoPath is required")
-    const branch = params.branch as string
-    if (!branch) throw new Error("branch is required")
-    const createBranch = params.createBranch as boolean ?? true
-    const startPoint = params.startPoint as string | undefined
+    const p = rpcObj(params)
+    const repoPath = rpcRequireString(p, "repoPath")
+    const branch = rpcRequireString(p, "branch")
+    const createBranch = rpcOptionalBool(p, "createBranch", true)
+    const startPoint = rpcOptionalString(p, "startPoint")
 
     const wtPath = worktreePath(repoPath, branch)
     await addWorktree({
@@ -230,20 +251,21 @@ export function startRpcServer(ptyManager: PtyManager) {
   })
 
   methods.set("worktree.list", async (params) => {
-    const repoPath = params.repoPath as string | undefined
-    if (!repoPath) throw new Error("repoPath is required")
+    const p = rpcObj(params)
+    const repoPath = rpcRequireString(p, "repoPath")
     const worktrees = await listWorktrees(repoPath)
     return { worktrees }
   })
 
   methods.set("worktree.remove", async (params) => {
-    const repoPath = params.repoPath as string
-    if (!repoPath) throw new Error("repoPath is required")
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
+    const p = rpcObj(params)
+    const repoPath = rpcRequireString(p, "repoPath")
+    const id = rpcRequireString(p, "id")
 
     const entry = await findWorktreeById(repoPath, id)
-    if (!entry) throw new Error(`Worktree not found: ${id}`)
+    if (!entry) {
+      throw new Error(`Worktree not found: ${id}`)
+    }
 
     // Kill terminals whose cwd is inside this worktree
     const sessions = ptyManager.listSessions()
@@ -271,23 +293,29 @@ export function startRpcServer(ptyManager: PtyManager) {
 
   methods.set("worktree.renameBranch", async (params) => {
     ensureManagementAllowed("agent", "renameBranch")
-    const repoPath = params.repoPath as string
-    if (!repoPath) throw new Error("repoPath is required")
-    const id = params.id as string
-    if (!id) throw new Error("id is required")
+    const p = rpcObj(params)
+    const repoPath = rpcRequireString(p, "repoPath")
+    const id = rpcRequireString(p, "id")
+    const branchField = p["branch"]
     const nextBranch =
-      typeof params.branch === "string" ? params.branch.trim() : ""
-    if (!nextBranch) throw new Error("branch is required")
+      typeof branchField === "string" ? branchField.trim() : ""
+    if (!nextBranch) {
+      throw new RpcInvalidParamsError("branch is required")
+    }
 
     const entry = await findWorktreeById(repoPath, id)
-    if (!entry) throw new Error(`Worktree not found: ${id}`)
+    if (!entry) {
+      throw new Error(`Worktree not found: ${id}`)
+    }
 
     const previousBranch = entry.branch
     await renameWorktreeBranch(entry.path, nextBranch)
 
     const worktrees = await listWorktrees(repoPath)
     const updated = worktrees.find((worktree) => worktree.id === id)
-    if (!updated) throw new Error(`Worktree not found after rename: ${id}`)
+    if (!updated) {
+      throw new Error(`Worktree not found after rename: ${id}`)
+    }
 
     broadcast("worktree.renamed", {
       id: updated.id,
@@ -303,7 +331,9 @@ export function startRpcServer(ptyManager: PtyManager) {
   })
 
   methods.set("management.updatePolicy", async (params) => {
-    const patch = params as Partial<Pick<ManagementPolicy, "user" | "agent">>
+    ensureManagementAllowed("agent", "updatePolicy")
+    const p = rpcObj(params)
+    const patch = parseManagementPatchRpc(p)
     const policy = updateManagementPolicy(patch)
     broadcast("management.policy.updated", { policy })
     return policy
@@ -337,34 +367,47 @@ export function startRpcServer(ptyManager: PtyManager) {
           continue
         }
 
+        let bodyId: string | number | null = null
         try {
-          const body = JSON.parse(line)
-          const id = body.id ?? null
+          const body = JSON.parse(line) as { id?: string | number | null; jsonrpc?: string; method?: string; params?: unknown }
+          bodyId = body.id ?? null
 
           if (body.jsonrpc !== "2.0") {
-            conn.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32600, message: "Invalid Request" } }) + "\n")
+            conn.write(JSON.stringify({ jsonrpc: "2.0", id: bodyId, error: { code: -32600, message: "Invalid Request" } }) + "\n")
             continue
           }
 
-          const handler = methods.get(body.method)
+          const handler = body.method && methods.get(body.method)
           if (!handler) {
-            conn.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${body.method}` } }) + "\n")
+            conn.write(JSON.stringify({ jsonrpc: "2.0", id: bodyId, error: { code: -32601, message: `Method not found: ${body.method}` } }) + "\n")
             continue
           }
 
           try {
             const result = await Promise.race([
-              handler(body.params ?? {}),
-              new Promise((_, reject) =>
+              handler(rpcObj(body.params)),
+              new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error("Request timeout")), 10_000),
               ),
             ])
-            conn.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n")
+            conn.write(JSON.stringify({ jsonrpc: "2.0", id: bodyId, result }) + "\n")
           } catch (err) {
-            conn.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32000, message: String(err) } }) + "\n")
+            if (isRpcInvalidParams(err)) {
+              conn.write(
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: bodyId,
+                  error: { code: -32602, message: (err as Error).message || "Invalid params" },
+                }) + "\n"
+              )
+            } else {
+              conn.write(
+                JSON.stringify({ jsonrpc: "2.0", id: bodyId, error: { code: -32000, message: String(err) } }) + "\n"
+              )
+            }
           }
         } catch {
-          conn.write(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }) + "\n")
+          conn.write(JSON.stringify({ jsonrpc: "2.0", id: bodyId, error: { code: -32700, message: "Parse error" } }) + "\n")
         }
       }
     })

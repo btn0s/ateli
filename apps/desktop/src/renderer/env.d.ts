@@ -121,30 +121,36 @@ interface Window {
         user: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
         agent: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
       }>
       updatePolicy: (patch: {
         user?: {
           renameTerminal?: boolean
           renameBranch?: boolean
+          updatePolicy?: boolean
         }
         agent?: {
           renameTerminal?: boolean
           renameBranch?: boolean
+          updatePolicy?: boolean
         }
       }) => Promise<{
         version: number
         user: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
         agent: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
       }>
     }

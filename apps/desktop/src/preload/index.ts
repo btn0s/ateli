@@ -129,10 +129,12 @@ contextBridge.exposeInMainWorld("electron", {
         user: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
         agent: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
       }>,
     updatePolicy: (
@@ -140,10 +142,12 @@ contextBridge.exposeInMainWorld("electron", {
         user: Partial<{
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }>
         agent: Partial<{
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }>
       }>
     ) =>
@@ -152,10 +156,12 @@ contextBridge.exposeInMainWorld("electron", {
         user: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
         agent: {
           renameTerminal: boolean
           renameBranch: boolean
+          updatePolicy: boolean
         }
       }>,
   },
