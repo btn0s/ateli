@@ -119,20 +119,23 @@ export function SidebarShell({
             side === "left" ? "border-r" : "border-l",
           )}
         >
-          {/* Safe zone matches the Titlebar drag region (40px). The
-              direct child is stretched to full width + height so the
-              consumer's header (e.g. Sidebar.SectionHeader with
-              justify-between) can own layout. pt-[2px] nudges content
-              down 2px for optical alignment with the traffic lights.
-              NOTE: do not use `translate` here — it creates a new
-              stacking context and traps z-[1000] on interactive
-              children below the Titlebar drag overlay. */}
+          {/* Safe zone: top 40px, matches the macOS hiddenInset titlebar.
+              The SidebarHud now sits above the Titlebar drag overlay, so
+              this strip is the drag region — empty parts drag the window,
+              interactive children (marked no-drag) stay clickable. */}
           {safeArea != null ? (
-            <div className="flex h-10 min-h-10 shrink-0 items-stretch pt-[2px] [&>*]:min-w-0 [&>*]:flex-1">
+            <div
+              className="flex h-10 min-h-10 shrink-0 items-stretch pt-[2px] [&>*]:min-w-0 [&>*]:flex-1"
+              style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+            >
               {safeArea}
             </div>
           ) : (
-            <div className="h-10 min-h-10 shrink-0" aria-hidden />
+            <div
+              className="h-10 min-h-10 shrink-0"
+              style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+              aria-hidden
+            />
           )}
           {children}
         </div>

@@ -12,15 +12,13 @@ import {
   loadWorktreeMetadata,
   saveWorktreeMetadata,
 } from "./worktree"
-import {
-  readProjectDirectory,
-  startFsWatch,
-  fsWatchKey,
-} from "./file-tree"
-import { getGitChangesOverview } from "./git-status"
+import { readProjectDirectory, startFsWatch, fsWatchKey } from "./file-tree"
+import { getGitChangesOverview, getGitFilePatch } from "./git-status"
 
 if (process.env.NODE_ENV_ELECTRON_VITE === "development") {
-  console.log("[ateli] main dev load (change this file to confirm --watch restart)")
+  console.log(
+    "[ateli] main dev load (change this file to confirm --watch restart)"
+  )
 }
 
 const ptyManager = new PtyManager()
@@ -84,17 +82,24 @@ ipcMain.handle(
   async (_event, { cwd }: { shapeId: string; cwd: string }) => {
     const result = await ptyManager.createSession({ cwd })
     return { pid: null, sessionKey: result.sessionKey }
-  },
+  }
 )
 
 ipcMain.handle(
   "terminal:reconnect",
-  async (_event, { sessionKey, cols, rows }: { sessionKey: string; cols: number; rows: number }) => {
+  async (
+    _event,
+    {
+      sessionKey,
+      cols,
+      rows,
+    }: { sessionKey: string; cols: number; rows: number }
+  ) => {
     const sessions = ptyManager.listSessions()
     const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
     if (!meta) throw new Error(`Unknown session: ${sessionKey}`)
     await ptyManager.reconnectSession(meta.id, cols, rows)
-  },
+  }
 )
 
 function findSessionByKey(sessionKey: string) {
@@ -106,31 +111,53 @@ ipcMain.on(
   "terminal:input",
   (_event, { sessionKey, data }: { sessionKey: string; data: string }) => {
     const meta = findSessionByKey(sessionKey)
-    if (!meta) { console.warn(`terminal:input — unknown session: ${sessionKey}`); return }
+    if (!meta) {
+      console.warn(`terminal:input — unknown session: ${sessionKey}`)
+      return
+    }
     void ptyManager.writeSession(meta.id, data)
-  },
+  }
 )
 
 ipcMain.on(
   "terminal:resize",
-  (_event, { sessionKey, cols, rows }: { sessionKey: string; cols: number; rows: number }) => {
+  (
+    _event,
+    {
+      sessionKey,
+      cols,
+      rows,
+    }: { sessionKey: string; cols: number; rows: number }
+  ) => {
     const meta = findSessionByKey(sessionKey)
-    if (!meta) { console.warn(`terminal:resize — unknown session: ${sessionKey}`); return }
+    if (!meta) {
+      console.warn(`terminal:resize — unknown session: ${sessionKey}`)
+      return
+    }
     void ptyManager.resizeSession(meta.id, cols, rows)
-  },
+  }
 )
 
-ipcMain.on("terminal:dispose", (_event, { sessionKey }: { sessionKey: string }) => {
-  const meta = findSessionByKey(sessionKey)
-  if (!meta) { console.warn(`terminal:dispose — unknown session: ${sessionKey}`); return }
-  void ptyManager.killSession(meta.id)
-})
+ipcMain.on(
+  "terminal:dispose",
+  (_event, { sessionKey }: { sessionKey: string }) => {
+    const meta = findSessionByKey(sessionKey)
+    if (!meta) {
+      console.warn(`terminal:dispose — unknown session: ${sessionKey}`)
+      return
+    }
+    void ptyManager.killSession(meta.id)
+  }
+)
 
-ipcMain.on("terminal:detach", (_event, { sessionKey }: { sessionKey: string }) => {
-  const meta = findSessionByKey(sessionKey)
-  if (!meta) return
-  ptyManager.detachSession(meta.id)
-})
+ipcMain.on(
+  "terminal:detach",
+  (_event, { sessionKey }: { sessionKey: string }) => {
+    const meta = findSessionByKey(sessionKey)
+    if (!meta) return
+    ptyManager.detachSession(meta.id)
+  }
+)
 
 // --- Worktree IPC ---
 
@@ -138,19 +165,22 @@ ipcMain.handle(
   "worktree:list",
   async (_event, { repoPath }: { repoPath: string }) => {
     return listWorktrees(repoPath)
-  },
+  }
 )
 
 ipcMain.handle(
   "git:status",
   async (_event, { repoPath }: { repoPath: string }) => {
     return getGitChangesOverview(repoPath)
-  },
+  }
 )
 
 ipcMain.handle(
   "worktree:create",
-  async (_event, { repoPath, branch }: { repoPath: string; branch: string }) => {
+  async (
+    _event,
+    { repoPath, branch }: { repoPath: string; branch: string }
+  ) => {
     const wtPath = worktreePath(repoPath, branch)
     await addWorktree({
       repoPath,
@@ -170,7 +200,7 @@ ipcMain.handle(
 
     broadcast("worktree.created", { id, path: wtPath, branch })
     return { id, path: wtPath, branch }
-  },
+  }
 )
 
 ipcMain.handle(
@@ -195,9 +225,27 @@ ipcMain.handle(
     delete metadata.entries[entry.path]
     saveWorktreeMetadata(metadata)
 
-    broadcast("worktree.removed", { id, path: entry.path, branch: entry.branch })
+    broadcast("worktree.removed", {
+      id,
+      path: entry.path,
+      branch: entry.branch,
+    })
     return { ok: true }
-  },
+  }
+)
+
+ipcMain.handle(
+  "git:diff",
+  async (
+    _event,
+    request: {
+      repoPath: string
+      path: string
+      absPath: string
+      indexStatus: string
+      workTreeStatus: string
+    }
+  ) => getGitFilePatch(request)
 )
 
 // --- File tree / FS IPC ---
@@ -206,7 +254,7 @@ ipcMain.handle(
   "fs:readdir",
   async (_event, { dirPath }: { dirPath: string }) => {
     return readProjectDirectory(dirPath)
-  },
+  }
 )
 
 ipcMain.handle(
@@ -214,7 +262,7 @@ ipcMain.handle(
   async (_event, { filePath }: { filePath: string }) => {
     const err = await shell.openPath(filePath)
     if (err) throw new Error(err)
-  },
+  }
 )
 
 ipcMain.handle(
@@ -230,19 +278,16 @@ ipcMain.handle(
       }
     })
     fsWatchByKey.set(key, cleanup)
-  },
+  }
 )
 
-ipcMain.on(
-  "fs:unwatch-root",
-  (event, { rootPath }: { rootPath: string }) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) return
-    const key = fsWatchKey(win.id, rootPath)
-    fsWatchByKey.get(key)?.()
-    fsWatchByKey.delete(key)
-  },
-)
+ipcMain.on("fs:unwatch-root", (event, { rootPath }: { rootPath: string }) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win) return
+  const key = fsWatchKey(win.id, rootPath)
+  fsWatchByKey.get(key)?.()
+  fsWatchByKey.delete(key)
+})
 
 // --- App Lifecycle ---
 

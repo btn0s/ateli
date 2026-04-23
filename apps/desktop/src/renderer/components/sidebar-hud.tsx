@@ -3,16 +3,17 @@ import { SidebarShell } from "./sidebar-shell"
 
 interface SidebarHudProps {
   left?: ReactNode
+  center?: ReactNode | null
   /** Omitted or null: right sidebar is not mounted (no panel chrome or width). */
   right?: ReactNode | null
 }
 
-export function SidebarHud({ left, right }: SidebarHudProps) {
+export function SidebarHud({ left, center, right }: SidebarHudProps) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-[200] flex font-sans">
+    <div className="pointer-events-none absolute inset-0 z-[1000] flex font-sans">
       <SidebarShell side="left">{left}</SidebarShell>
 
-      <div className="min-w-0 flex-1" />
+      <div className="min-w-0 flex-1 overflow-hidden">{center}</div>
 
       {right != null ? right : null}
     </div>

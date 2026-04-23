@@ -8,7 +8,8 @@ function onIpc<T>(channel: string, callback: (data: T) => void): () => void {
 
 contextBridge.exposeInMainWorld("electron", {
   platform: process.platform,
-  selectFolder: () => ipcRenderer.invoke("select-folder") as Promise<string | null>,
+  selectFolder: () =>
+    ipcRenderer.invoke("select-folder") as Promise<string | null>,
   terminal: {
     create: (shapeId: string, cwd: string) =>
       ipcRenderer.invoke("terminal:create", { shapeId, cwd }) as Promise<{
@@ -16,7 +17,11 @@ contextBridge.exposeInMainWorld("electron", {
         sessionKey: string
       }>,
     reconnect: (sessionKey: string, cols: number, rows: number) =>
-      ipcRenderer.invoke("terminal:reconnect", { sessionKey, cols, rows }) as Promise<void>,
+      ipcRenderer.invoke("terminal:reconnect", {
+        sessionKey,
+        cols,
+        rows,
+      }) as Promise<void>,
     write: (sessionKey: string, data: string) =>
       ipcRenderer.send("terminal:input", { sessionKey, data }),
     resize: (sessionKey: string, cols: number, rows: number) =>
@@ -45,6 +50,17 @@ contextBridge.exposeInMainWorld("electron", {
         trunk: string | null
         error: string | null
       }>,
+    diff: (request: {
+      repoPath: string
+      path: string
+      absPath: string
+      indexStatus: string
+      workTreeStatus: string
+    }) =>
+      ipcRenderer.invoke("git:diff", request) as Promise<{
+        patch: string | null
+        error: string | null
+      }>,
   },
   worktree: {
     list: (repoPath: string) =>
@@ -66,7 +82,9 @@ contextBridge.exposeInMainWorld("electron", {
         branch: string
       }>,
     remove: (repoPath: string, id: string) =>
-      ipcRenderer.invoke("worktree:remove", { repoPath, id }) as Promise<{ ok: true }>,
+      ipcRenderer.invoke("worktree:remove", { repoPath, id }) as Promise<{
+        ok: true
+      }>,
   },
   fs: {
     readdir: (dirPath: string) =>
@@ -84,8 +102,15 @@ contextBridge.exposeInMainWorld("electron", {
       onIpc("fs:changed", callback),
   },
   rpc: {
-    onCreateTerminal: (callback: (data: { shapeId: string; x: number; y: number; w: number; h: number }) => void) =>
-      onIpc("rpc:create-terminal", callback),
+    onCreateTerminal: (
+      callback: (data: {
+        shapeId: string
+        x: number
+        y: number
+        w: number
+        h: number
+      }) => void
+    ) => onIpc("rpc:create-terminal", callback),
     onGetShapes: (callback: (data: { responseChannel: string }) => void) =>
       onIpc("rpc:get-shapes", callback),
     respondShapes: (channel: string, shapes: unknown) => {
@@ -94,7 +119,11 @@ contextBridge.exposeInMainWorld("electron", {
       }
       ipcRenderer.send(channel, shapes)
     },
-    onNotification: (callback: (data: { method: string; params: Record<string, unknown> }) => void) =>
-      onIpc("rpc:notification", callback),
+    onNotification: (
+      callback: (data: {
+        method: string
+        params: Record<string, unknown>
+      }) => void
+    ) => onIpc("rpc:notification", callback),
   },
 })

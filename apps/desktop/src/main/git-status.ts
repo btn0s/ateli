@@ -43,7 +43,7 @@ function normalizeGitPath(p: string): string {
 
 function parsePorcelainLine(
   line: string,
-  repoPath: string,
+  repoPath: string
 ): GitStatusEntry | null {
   if (line.length < 4) return null
   const indexStatus = line[0] ?? " "
@@ -61,7 +61,9 @@ function parsePorcelainLine(
 }
 
 /** Parse `git diff --numstat HEAD` lines into per-path added/removed. */
-function parseNumstat(stdout: string): Map<string, { added: number; removed: number }> {
+function parseNumstat(
+  stdout: string
+): Map<string, { added: number; removed: number }> {
   const map = new Map<string, { added: number; removed: number }>()
   for (const line of stdout.split("\n")) {
     if (!line) continue
@@ -120,7 +122,7 @@ async function readTrunkName(repoPath: string): Promise<string | null> {
     const { stdout } = await exec(
       "git",
       ["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"],
-      { cwd: repoPath },
+      { cwd: repoPath }
     )
     const s = stdout.trim()
     const slash = s.indexOf("/")
@@ -143,7 +145,7 @@ async function readTrunkName(repoPath: string): Promise<string | null> {
 
 async function execDiffAllowExitOne(
   args: string[],
-  repoPath: string,
+  repoPath: string
 ): Promise<string> {
   try {
     const { stdout } = await exec("git", args, {
@@ -164,7 +166,7 @@ async function execDiffAllowExitOne(
 }
 
 export async function getGitChangesOverview(
-  repoPath: string,
+  repoPath: string
 ): Promise<GitChangesOverview> {
   try {
     const [porcelain, numstatOut, branch, trunk] = await Promise.all([
@@ -220,7 +222,7 @@ export async function getGitChangesOverview(
 }
 
 export async function getGitFilePatch(
-  request: GitPatchRequest,
+  request: GitPatchRequest
 ): Promise<GitPatchResult> {
   try {
     const isUntracked =
@@ -239,7 +241,7 @@ export async function getGitFilePatch(
             "/dev/null",
             request.absPath,
           ],
-          request.repoPath,
+          request.repoPath
         )
       : await execDiffAllowExitOne(
           [
@@ -252,7 +254,7 @@ export async function getGitFilePatch(
             "--",
             request.path,
           ],
-          request.repoPath,
+          request.repoPath
         )
 
     const normalizedAbsPath = normalizeGitPath(request.absPath)
