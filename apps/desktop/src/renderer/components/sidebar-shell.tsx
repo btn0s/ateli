@@ -119,14 +119,18 @@ export function SidebarShell({
             side === "left" ? "border-r" : "border-l",
           )}
         >
-          {/* Safe zone height matches the Titlebar drag region (48px).
-              Inside, content top-aligns with pt-5 (20px) so the branch
-              text baseline sits near the vertical center of the traffic
-              lights (y≈25 for trafficLightPosition.y=18 + 7 radius). */}
+          {/* Safe zone matches the Titlebar drag region (40px). Content
+              sits centered, then nudged up 2px via -translate-y-0.5 to
+              optically center with the traffic lights (which ride slightly
+              higher than the text line's ascender). */}
           {safeArea != null ? (
-            <div className="h-12 min-h-12 shrink-0 px-3 pt-5 pb-1">{safeArea}</div>
+            <div className="flex h-10 min-h-10 shrink-0 items-center px-3">
+              <div className="flex w-full -translate-y-0.5 items-center">
+                {safeArea}
+              </div>
+            </div>
           ) : (
-            <div className="h-12 min-h-12 shrink-0" aria-hidden />
+            <div className="h-10 min-h-10 shrink-0" aria-hidden />
           )}
           {children}
         </div>

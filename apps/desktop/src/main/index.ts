@@ -33,7 +33,7 @@ function createWindow() {
     height: 800,
     show: false,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
+    trafficLightPosition: { x: 12, y: 12 },
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
       sandbox: true,
@@ -42,6 +42,9 @@ function createWindow() {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow.show()
+    // Suppress the macOS "unsaved changes" dot on the red close button.
+    // We don't have a document model and never want to show this indicator.
+    mainWindow.setDocumentEdited(false)
   })
 
   mainWindow.on("closed", () => {
