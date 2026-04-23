@@ -8,10 +8,13 @@ import {
 } from "react"
 
 export type WorktreeIndexEntry = {
+  id: string
   path: string
   branch: string
   head: string
   isMain: boolean
+  createdAt: string
+  repoPath: string
 }
 
 const WorktreeIndexContext = createContext<WorktreeIndexEntry[]>([])

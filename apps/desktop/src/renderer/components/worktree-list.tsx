@@ -3,6 +3,13 @@ import { track, useEditor } from "tldraw"
 import type { TLShapeId } from "tldraw"
 import { Plus, Terminal } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@workspace/ui/components/context-menu"
 import { addTerminalAtCenter } from "@/lib/default-actions"
 import { SidebarPanelHeader } from "@/components/sidebar-panel-header"
 import {
@@ -14,6 +21,7 @@ import {
   type WorktreeIndexEntry,
 } from "@/contexts/worktree-index-context"
 import { terminalsBelongingToWorktree } from "@/lib/worktree-terminals"
+import { useTerminalKillConfirmation } from "@/components/terminal-kill-dialog"
 
 export const WorktreeList = track(function WorktreeList({
   repoPath,
@@ -22,6 +30,7 @@ export const WorktreeList = track(function WorktreeList({
 }) {
   const editor = useEditor()
   const worktrees = useWorktrees()
+  const { requestKill, dialog: killDialog } = useTerminalKillConfirmation()
   const [expanded, setExpanded] = useState(
     () => new Set<string>([repoPath]),
   )
@@ -38,9 +47,46 @@ export const WorktreeList = track(function WorktreeList({
   // Main repo first, then non-main worktrees (avoid duplicate main)
   const mainWt = worktrees.find((w) => w.isMain)
   const entries: WorktreeIndexEntry[] = [
-    mainWt ?? { path: repoPath, branch: "main", head: "", isMain: true },
+    mainWt ?? {
+      id: "",
+      path: repoPath,
+      branch: "main",
+      head: "",
+      isMain: true,
+      createdAt: "",
+      repoPath,
+    },
     ...worktrees.filter((w) => !w.isMain),
   ]
+
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // ignore
+    }
+  }
+
+  async function revealInFinder(p: string) {
+    try {
+      await window.electron.fs.openPath(p)
+    } catch {
+      // ignore
+    }
+  }
+
+  async function removeWorktree(wt: WorktreeIndexEntry) {
+    if (!wt.id || wt.isMain) return
+    const ok = window.confirm(
+      `Remove worktree "${wt.branch}"?\n\nAny terminals rooted in ${wt.path} will be killed. The branch itself is not deleted.`,
+    )
+    if (!ok) return
+    try {
+      await window.electron.worktree.remove(repoPath, wt.id)
+    } catch (err) {
+      console.error("worktree.remove failed", err)
+    }
+  }
 
   function toggleExpanded(path: string) {
     setExpanded((prev) => {
@@ -93,57 +139,134 @@ export const WorktreeList = track(function WorktreeList({
 
         return (
           <div key={rowKey}>
-            <SidebarTreeRow>
-              <SidebarTreeRow.Trigger
-                onClick={() => toggleExpanded(rowKey)}
-                title={wt.path}
-              >
-                <SidebarTreeRow.Disclosure expanded={isExpanded} />
-                <SidebarTreeRow.Label>
-                  {wt.isMain ? "main" : wt.branch}
-                </SidebarTreeRow.Label>
-              </SidebarTreeRow.Trigger>
-              <SidebarTreeRow.Meta>{terminals.length}</SidebarTreeRow.Meta>
-              <SidebarTreeRow.Actions>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  className="text-muted-foreground"
-                  title="Add terminal"
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <div>
+                  <SidebarTreeRow>
+                    <SidebarTreeRow.Trigger
+                      onClick={() => toggleExpanded(rowKey)}
+                      title={wt.path}
+                    >
+                      <SidebarTreeRow.Disclosure expanded={isExpanded} />
+                      <SidebarTreeRow.Label>
+                        {wt.isMain ? "main" : wt.branch}
+                      </SidebarTreeRow.Label>
+                    </SidebarTreeRow.Trigger>
+                    <SidebarTreeRow.Meta>{terminals.length}</SidebarTreeRow.Meta>
+                    <SidebarTreeRow.Actions>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        className="text-muted-foreground"
+                        title="Add terminal"
+                        onClick={() =>
+                          addTerminalAtCenter(editor, { cwd: cwdForTerminal })
+                        }
+                      >
+                        <Plus />
+                      </Button>
+                    </SidebarTreeRow.Actions>
+                  </SidebarTreeRow>
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="min-w-48">
+                <ContextMenuItem
                   onClick={() =>
                     addTerminalAtCenter(editor, { cwd: cwdForTerminal })
                   }
                 >
-                  <Plus />
-                </Button>
-              </SidebarTreeRow.Actions>
-            </SidebarTreeRow>
+                  Add terminal here
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={() => copyText(wt.path)}>
+                  Copy path
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => revealInFinder(wt.path)}>
+                  Reveal in Finder
+                </ContextMenuItem>
+                {!wt.isMain && (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      variant="destructive"
+                      disabled={!wt.id}
+                      onClick={() => removeWorktree(wt)}
+                    >
+                      Remove worktree
+                    </ContextMenuItem>
+                  </>
+                )}
+              </ContextMenuContent>
+            </ContextMenu>
 
             {isExpanded && (
               <SidebarTreeBranch>
                 <SidebarTreeBranch.Ruler />
                 <SidebarTreeBranch.Content>
                   {terminals.map((shape) => {
-                    const props = shape.props as { cwd?: string }
+                    const props = shape.props as {
+                      cwd?: string
+                      sessionId?: string
+                    }
                     const label = props.cwd
                       ? props.cwd.split("/").pop() || "Terminal"
                       : "Terminal"
 
                     return (
-                      <SidebarTreeRow key={shape.id}>
-                        <SidebarTreeRow.Trigger
-                          className="text-muted-foreground hover:text-accent-foreground"
-                          onClick={() => navigateToShape(shape.id)}
-                          title={props.cwd}
-                        >
-                          <SidebarTreeRow.Icon>
-                            <Terminal className="size-3 shrink-0 opacity-70" />
-                          </SidebarTreeRow.Icon>
-                          <SidebarTreeRow.Label>{label}</SidebarTreeRow.Label>
-                        </SidebarTreeRow.Trigger>
-                        <SidebarTreeRow.AlignedEnd />
-                      </SidebarTreeRow>
+                      <ContextMenu key={shape.id}>
+                        <ContextMenuTrigger asChild>
+                          <div>
+                            <SidebarTreeRow>
+                              <SidebarTreeRow.Trigger
+                                className="text-muted-foreground hover:text-accent-foreground"
+                                onClick={() => navigateToShape(shape.id)}
+                                title={props.cwd}
+                              >
+                                <SidebarTreeRow.Icon>
+                                  <Terminal className="size-3 shrink-0 opacity-70" />
+                                </SidebarTreeRow.Icon>
+                                <SidebarTreeRow.Label>
+                                  {label}
+                                </SidebarTreeRow.Label>
+                              </SidebarTreeRow.Trigger>
+                              <SidebarTreeRow.AlignedEnd />
+                            </SidebarTreeRow>
+                          </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="min-w-44">
+                          <ContextMenuItem
+                            onClick={() => navigateToShape(shape.id)}
+                          >
+                            Focus on canvas
+                          </ContextMenuItem>
+                          {props.cwd && (
+                            <>
+                              <ContextMenuItem
+                                onClick={() => copyText(props.cwd!)}
+                              >
+                                Copy cwd
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => revealInFinder(props.cwd!)}
+                              >
+                                Reveal in Finder
+                              </ContextMenuItem>
+                            </>
+                          )}
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            variant="destructive"
+                            disabled={!props.sessionId}
+                            onClick={() => {
+                              if (!props.sessionId) return
+                              requestKill({ sessionId: props.sessionId })
+                            }}
+                          >
+                            Kill session
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     )
                   })}
                 </SidebarTreeBranch.Content>
@@ -152,6 +275,7 @@ export const WorktreeList = track(function WorktreeList({
           </div>
         )
       })}
+      {killDialog}
     </div>
   )
 })
