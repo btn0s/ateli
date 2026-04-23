@@ -3,12 +3,13 @@ import { Agentation } from "agentation"
 import { FolderPicker } from "@/components/folder-picker"
 import { Canvas } from "@/components/canvas"
 import { Titlebar } from "@/components/titlebar"
+import { TerminalSessionProvider } from "@/contexts/terminal-session-store"
 
 const FOLDER_KEY = "ateli:folder-path"
 
 export function App() {
-  const [folderPath, setFolderPath] = useState<string | null>(
-    () => localStorage.getItem(FOLDER_KEY),
+  const [folderPath, setFolderPath] = useState<string | null>(() =>
+    localStorage.getItem(FOLDER_KEY)
   )
 
   function handleSelect(path: string) {
@@ -22,11 +23,13 @@ export function App() {
         <Agentation endpoint="http://localhost:4747" />
       )}
       <Titlebar />
-      {folderPath ? (
-        <Canvas folderPath={folderPath} />
-      ) : (
-        <FolderPicker onSelect={handleSelect} />
-      )}
+      <TerminalSessionProvider>
+        {folderPath ? (
+          <Canvas folderPath={folderPath} />
+        ) : (
+          <FolderPicker onSelect={handleSelect} />
+        )}
+      </TerminalSessionProvider>
     </>
   )
 }
