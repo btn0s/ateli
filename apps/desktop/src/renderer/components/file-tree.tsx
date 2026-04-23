@@ -291,7 +291,7 @@ export const FileTree = track(function FileTree() {
   const editor = useEditor()
   const repoPath = getRepoPath()
   const worktrees = useWorktrees()
-  const { activeTabId, openDiffTab } = useDiffPreviewTabs()
+  const { activeTab, activeTabId, openDiffTab } = useDiffPreviewTabs()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
   const [sidebarTerminalState, setSidebarTerminalState] =
     useState<SidebarTerminalState>(() => {
@@ -465,6 +465,11 @@ export const FileTree = track(function FileTree() {
     })
   }, [gitOverview])
 
+  useEffect(() => {
+    if (!activeTab) return
+    setSelectedChangePath(activeTab.path)
+  }, [activeTab])
+
   const openDiffPreview = useCallback(
     (entry: GitChangeRow) => {
       setSelectedChangePath(entry.path)
@@ -576,6 +581,7 @@ export const FileTree = track(function FileTree() {
     "--trees-bg-override": "transparent",
     "--trees-border-color-override": "transparent",
     "--trees-fg-override": "hsl(var(--foreground))",
+    "--trees-padding-inline-override": "8px",
     "--trees-selected-bg-override": "hsl(var(--accent))",
   } as React.CSSProperties
 
@@ -652,21 +658,21 @@ export const FileTree = track(function FileTree() {
         </SidebarTabStrip>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {/* px-0 here — Pierre's file tree has its own 14px internal
-              horizontal padding, so the Sidebar.Section's default px-2
-              was doubling it. Changes panel adds its own px-1.5 below. */}
+          {/* px-0 here — Pierre's tree manages its own inline padding
+              (overridden to 8px to match the tab strip above). Changes
+              panel adds its own px-2 below for the same alignment. */}
           <Sidebar.Section className="min-h-0 flex-[2] overflow-hidden px-0 [scrollbar-gutter:stable]">
             {panelTab === "files" ? (
               treeError ? (
-                <p className={cn(changesPanelHintClass, "px-1.5 py-1")}>
+                <p className={cn(changesPanelHintClass, "px-2 py-1")}>
                   Could not read files.
                 </p>
               ) : treeLoading && treePathCount === 0 ? (
-                <p className={cn(changesPanelHintClass, "px-1.5 py-1")}>
+                <p className={cn(changesPanelHintClass, "px-2 py-1")}>
                   Loading files…
                 </p>
               ) : treePathCount === 0 ? (
-                <p className={cn(changesPanelHintClass, "px-1.5 py-1")}>
+                <p className={cn(changesPanelHintClass, "px-2 py-1")}>
                   No visible files.
                 </p>
               ) : (
@@ -679,7 +685,7 @@ export const FileTree = track(function FileTree() {
                 </div>
               )
             ) : (
-              <div className="flex h-full min-h-0 flex-col overflow-hidden px-1.5 py-1">
+              <div className="flex h-full min-h-0 flex-col overflow-hidden px-2 py-1">
                 <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
                   <ChangesList
                     overview={gitOverview}
@@ -688,7 +694,7 @@ export const FileTree = track(function FileTree() {
                     onOpenDiff={openDiffPreview}
                   />
                 </div>
-                {!activeTabId ? (
+                {activeTabId === "canvas" ? (
                   <p className="border-t border-border/70 pt-2 pl-1 text-xs text-muted-foreground">
                     Select a changed file to open its diff in a canvas tab.
                   </p>
