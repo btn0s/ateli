@@ -45,6 +45,7 @@ interface Session {
   hasAttachedClient: boolean;
   /** When non-null, PTY output is queued here instead of sent to client. */
   reconnectQueue: Buffer[] | null;
+  killEscalationTimer: NodeJS.Timeout | null;
 }
 
 // --- Socket helpers (no Windows support) ---
@@ -335,6 +336,7 @@ export class SidecarServer {
       socketPath,
       hasAttachedClient: false,
       reconnectQueue: null,
+      killEscalationTimer: null,
     };
 
     // Listen for PTY output
@@ -564,19 +566,27 @@ export class SidecarServer {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    session.pty.kill();
-    if (session.dataClient && !session.dataClient.destroyed) {
-      session.dataClient.destroy();
-    }
-    session.dataServer.close();
-    cleanupEndpoint(session.socketPath);
-    this.sessions.delete(sessionId);
-    this.resetIdleTimer();
+    if (session.killEscalationTimer) return;
+
+    session.pty.kill("SIGTERM");
+    session.killEscalationTimer = setTimeout(() => {
+      if (!this.sessions.has(sessionId)) return;
+      try {
+        session.pty.kill("SIGKILL");
+      } catch {
+        // The PTY may have exited between the session lookup and escalation.
+      }
+    }, 500);
   }
 
   private cleanupSession(sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
+
+    if (session.killEscalationTimer) {
+      clearTimeout(session.killEscalationTimer);
+      session.killEscalationTimer = null;
+    }
 
     if (session.dataClient && !session.dataClient.destroyed) {
       session.dataClient.destroy();

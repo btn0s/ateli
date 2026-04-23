@@ -14,7 +14,7 @@ export type TerminalSessionHandle = {
 
 type TerminalSessionSubscriber = {
   onData: (data: string) => void
-  onExit: () => void
+  onExit: (event: { killed: boolean }) => void
 }
 
 type TerminalSessionEntry = TerminalSessionAttachment & {
@@ -40,6 +40,7 @@ export type TerminalSessionStore = {
   ) => () => void
   write: (sessionId: string, data: string) => void
   resize: (sessionId: string, cols: number, rows: number) => void
+  kill: (sessionId: string) => Promise<void>
   list: () => TerminalSessionAttachment[]
 }
 
@@ -47,6 +48,7 @@ const TerminalSessionContext = createContext<TerminalSessionStore | null>(null)
 
 class RendererTerminalSessionStore implements TerminalSessionStore {
   private sessions = new Map<string, TerminalSessionEntry>()
+  private killedSessionIds = new Set<string>()
 
   async attach({
     existingSessionId,
@@ -122,6 +124,18 @@ class RendererTerminalSessionStore implements TerminalSessionStore {
     window.electron.terminal.resize(entry.ipcSessionKey, cols, rows)
   }
 
+  async kill(sessionId: string): Promise<void> {
+    const entry = this.sessions.get(sessionId)
+    if (!entry) return
+
+    if (!this.killedSessionIds.has(sessionId)) {
+      this.killedSessionIds.add(sessionId)
+      this.emitData(entry, "\r\n[process killed]\r\n")
+    }
+
+    window.electron.terminal.dispose(entry.ipcSessionKey)
+  }
+
   list(): TerminalSessionAttachment[] {
     return [...this.sessions.values()].map(
       ({ sessionId, ipcSessionKey, refs, cwd }) => ({
@@ -149,9 +163,7 @@ class RendererTerminalSessionStore implements TerminalSessionStore {
       entry.removeData = window.electron.terminal.onData(
         entry.ipcSessionKey,
         (data) => {
-          for (const subscriber of [...entry.subscribers]) {
-            subscriber.onData(data)
-          }
+          this.emitData(entry, data)
         }
       )
     }
@@ -160,13 +172,21 @@ class RendererTerminalSessionStore implements TerminalSessionStore {
       entry.removeExit = window.electron.terminal.onExit(
         entry.ipcSessionKey,
         () => {
+          const killed = this.killedSessionIds.has(entry.sessionId)
+          this.killedSessionIds.delete(entry.sessionId)
           this.removeSession(entry)
           for (const subscriber of [...entry.subscribers]) {
-            subscriber.onExit()
+            subscriber.onExit({ killed })
           }
           entry.subscribers.clear()
         }
       )
+    }
+  }
+
+  private emitData(entry: TerminalSessionEntry, data: string): void {
+    for (const subscriber of [...entry.subscribers]) {
+      subscriber.onData(data)
     }
   }
 
@@ -176,6 +196,7 @@ class RendererTerminalSessionStore implements TerminalSessionStore {
     entry.removeData = null
     entry.removeExit = null
     this.sessions.delete(entry.sessionId)
+    this.killedSessionIds.delete(entry.sessionId)
   }
 
   private toHandle(entry: TerminalSessionEntry): TerminalSessionHandle {
