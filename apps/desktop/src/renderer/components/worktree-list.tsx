@@ -103,22 +103,6 @@ export const WorktreeList = track(function WorktreeList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <Sidebar.SectionHeader>
-        <span className="text-xs text-muted-foreground">Worktrees</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="-mr-1 text-muted-foreground"
-          title="New worktree"
-          onClick={() => {
-            const branch = `ateli/${Date.now().toString(36)}`
-            window.electron.worktree.create(repoPath, branch)
-          }}
-        >
-          <Plus />
-        </Button>
-      </Sidebar.SectionHeader>
       <Sidebar.Section className="min-h-0 flex-1 overflow-y-auto">
 
       {entries.map((wt) => {

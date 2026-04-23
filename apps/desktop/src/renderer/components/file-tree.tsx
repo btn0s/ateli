@@ -1,6 +1,6 @@
 import type { MutableRefObject } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Eye, File, MoreHorizontal } from "lucide-react"
+import { File, MoreHorizontal } from "lucide-react"
 import { track, useEditor } from "tldraw"
 import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
@@ -15,6 +15,10 @@ import { useWorktrees } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot, resolveFilesRootFromCwd } from "@/lib/worktree-files-root"
 import { Sidebar } from "@/components/sidebar"
 import { SidebarShell } from "@/components/sidebar-shell"
+import {
+  SidebarTabButton,
+  SidebarTabStrip,
+} from "@/components/sidebar-tab-button"
 import { SidebarTerminalTabs } from "@/components/sidebar-terminal-stack"
 import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
 import {
@@ -23,16 +27,6 @@ import {
 } from "@/components/sidebar-tree"
 
 type FilesPanelTab = "files" | "changes"
-
-function filePanelTabClass(selected: boolean) {
-  return cn(
-    "inline-flex h-7 items-center gap-1.5 rounded-[3px] px-2 text-xs transition-colors duration-150 ease-out",
-    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-    selected
-      ? "bg-accent text-accent-foreground"
-      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-  )
-}
 
 type GitChangesOverview = Awaited<ReturnType<typeof window.electron.git.status>>
 
@@ -502,25 +496,15 @@ export const FileTree = track(function FileTree() {
   return (
     <SidebarShell side="right" defaultWidth={240} minWidth={120} safeArea={safeArea}>
       <Sidebar.Root>
-        <div
-          className="flex w-full min-w-0 items-center gap-1 px-2 py-1.5"
-          role="tablist"
-          aria-label="Workspace panel"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panelTab === "files"}
-            className={filePanelTabClass(panelTab === "files")}
+        <SidebarTabStrip ariaLabel="Workspace panel">
+          <SidebarTabButton
+            selected={panelTab === "files"}
             onClick={() => setPanelTab("files")}
           >
             Files
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panelTab === "changes"}
-            className={filePanelTabClass(panelTab === "changes")}
+          </SidebarTabButton>
+          <SidebarTabButton
+            selected={panelTab === "changes"}
             onClick={() => setPanelTab("changes")}
           >
             <span>Changes</span>
@@ -536,8 +520,8 @@ export const FileTree = track(function FileTree() {
                 {changeCount}
               </span>
             ) : null}
-          </button>
-        </div>
+          </SidebarTabButton>
+        </SidebarTabStrip>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <Sidebar.Section className="min-h-0 flex-[2] overflow-y-auto overflow-x-hidden px-1.5 py-1 [scrollbar-gutter:stable]">

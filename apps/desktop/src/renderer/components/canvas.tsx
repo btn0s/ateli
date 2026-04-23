@@ -37,7 +37,7 @@ import "@/lib/default-actions"
 import { CommandMenu } from "./command-menu"
 import { SidebarHud } from "./sidebar-hud"
 import { FileTree } from "./file-tree"
-import { WorktreeList } from "./worktree-list"
+import { LeftSidebarTabs } from "./left-sidebar-tabs"
 import { useTerminalKillConfirmation } from "./terminal-kill-dialog"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -256,7 +256,7 @@ const SidebarHudWithSelection = track(function SidebarHudWithSelection() {
 
   return (
     <SidebarHud
-      left={<WorktreeList repoPath={getRepoPath()} />}
+      left={<LeftSidebarTabs repoPath={getRepoPath()} />}
       right={hasCanvasSelection ? <FileTree /> : undefined}
     />
   )
