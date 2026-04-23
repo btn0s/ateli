@@ -23,8 +23,8 @@ function getStoredWidth(side: string, fallback: number): number {
 
 export function SidebarShell({
   side,
-  defaultWidth = 240,
-  minWidth = 120,
+  defaultWidth = 260,
+  minWidth = 180,
   safeArea,
   children,
   className,
@@ -130,7 +130,7 @@ export function SidebarShell({
 
       <div
         className={cn(
-          "absolute top-0 z-10 h-full w-1 cursor-col-resize transition-colors hover:bg-border",
+          "absolute top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors duration-150 ease-out hover:bg-border/60 active:bg-border",
           side === "left" ? "right-0" : "left-0",
         )}
         onPointerDown={onPointerDown}

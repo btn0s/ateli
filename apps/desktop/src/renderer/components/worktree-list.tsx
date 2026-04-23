@@ -11,7 +11,7 @@ import {
   ContextMenuTrigger,
 } from "@workspace/ui/components/context-menu"
 import { addTerminalAtCenter } from "@/lib/default-actions"
-import { SidebarPanelHeader } from "@/components/sidebar-panel-header"
+import { Sidebar } from "@/components/sidebar"
 import {
   SidebarTreeBranch,
   SidebarTreeRow,
@@ -102,26 +102,24 @@ export const WorktreeList = track(function WorktreeList({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-      <SidebarPanelHeader>
-        <SidebarPanelHeader.Title>Worktrees</SidebarPanelHeader.Title>
-        <SidebarPanelHeader.Trailer>
-          <SidebarPanelHeader.CountSpacer />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="text-muted-foreground"
-            title="New worktree"
-            onClick={() => {
-              const branch = `ateli/${Date.now().toString(36)}`
-              window.electron.worktree.create(repoPath, branch)
-            }}
-          >
-            <Plus />
-          </Button>
-        </SidebarPanelHeader.Trailer>
-      </SidebarPanelHeader>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Sidebar.SectionHeader>
+        <span className="text-xs text-muted-foreground">Worktrees</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="-mr-1 text-muted-foreground"
+          title="New worktree"
+          onClick={() => {
+            const branch = `ateli/${Date.now().toString(36)}`
+            window.electron.worktree.create(repoPath, branch)
+          }}
+        >
+          <Plus />
+        </Button>
+      </Sidebar.SectionHeader>
+      <Sidebar.Section className="min-h-0 flex-1 overflow-y-auto">
 
       {entries.map((wt) => {
         const rowKey = wt.isMain ? repoPath : wt.path
@@ -274,6 +272,7 @@ export const WorktreeList = track(function WorktreeList({
           </div>
         )
       })}
+      </Sidebar.Section>
       {killDialog}
       {removeDialog}
     </div>

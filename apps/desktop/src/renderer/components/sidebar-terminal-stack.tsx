@@ -14,11 +14,11 @@ import { useTerminalKillConfirmation } from "@/components/terminal-kill-dialog"
 
 function terminalTabSurfaceClass(selected: boolean) {
   return cn(
-    "inline-flex h-8 shrink-0 items-stretch overflow-hidden border-y border-transparent outline-none",
-    "focus-within:ring-1 focus-within:ring-ring focus-within:ring-inset",
+    "group/tab inline-flex h-7 shrink-0 items-center gap-1 rounded-[3px] outline-none transition-colors duration-150 ease-out",
+    "focus-within:ring-1 focus-within:ring-ring",
     selected
-      ? "bg-muted text-foreground"
-      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      ? "bg-accent text-accent-foreground"
+      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
   )
 }
 
@@ -81,13 +81,13 @@ export function SidebarTerminalTabs({
   )
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden border-b border-border bg-muted px-0 py-0">
-      <div className="flex h-8 min-h-8 shrink-0 items-stretch border-b border-border bg-background">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border/60 bg-background">
+      <div className="flex h-9 shrink-0 items-center gap-1 px-2">
         <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-gutter:stable]">
           <div
             role="tablist"
             aria-label="Sidebar terminals"
-            className="flex h-8 min-h-8 w-max min-w-full items-stretch"
+            className="flex w-max min-w-full items-center gap-1"
           >
             {tabIds.map((id, i) => {
               const selected = activeTabId === id
@@ -101,25 +101,22 @@ export function SidebarTerminalTabs({
                     aria-selected={selected}
                     tabIndex={selected ? 0 : -1}
                     className={cn(
-                      "flex shrink-0 items-stretch border-r border-border last:border-r-0",
+                      "pl-2",
+                      canClose ? "pr-1" : "pr-2",
                       terminalTabSurfaceClass(selected),
                     )}
                   >
                     <button
                       type="button"
-                      className="flex min-w-0 max-w-[9rem] flex-1 items-center px-2 text-left text-xs font-medium uppercase tracking-wide"
+                      className="flex min-w-0 max-w-[8rem] items-center text-left text-xs"
                       onClick={() => onSelectTab(id)}
                     >
-                      <span
-                        className={cn("truncate", i === 0 && "normal-case")}
-                      >
-                        {label}
-                      </span>
+                      <span className="truncate">{label}</span>
                     </button>
                     {canClose ? (
                       <button
                         type="button"
-                        className="flex h-8 w-7 shrink-0 items-center justify-center border-l border-border text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                        className="flex size-5 shrink-0 items-center justify-center rounded-[2px] text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
                         title={`Close ${label}`}
                         aria-label={`Close ${label}`}
                         onClick={(e) => {
@@ -127,7 +124,7 @@ export function SidebarTerminalTabs({
                           closeTab(id)
                         }}
                       >
-                        <X className="size-3.5 shrink-0 opacity-70 hover:opacity-100" />
+                        <X className="size-3" />
                       </button>
                     ) : null}
                   </ContextMenuTrigger>
@@ -141,9 +138,7 @@ export function SidebarTerminalTabs({
                       }}
                     >
                       Kill session
-                      <ContextMenuShortcut>
-                        Cmd/Ctrl+Shift+K
-                      </ContextMenuShortcut>
+                      <ContextMenuShortcut>⌘⇧K</ContextMenuShortcut>
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
@@ -151,19 +146,17 @@ export function SidebarTerminalTabs({
             })}
           </div>
         </div>
-        <div className="flex shrink-0 items-stretch border-l border-border bg-background">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="h-8 min-h-8 w-8 shrink-0 rounded-none"
-            title="New terminal"
-            aria-label="New terminal"
-            onClick={onAddTab}
-          >
-            <Plus />
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-muted-foreground"
+          title="New terminal"
+          aria-label="New terminal"
+          onClick={onAddTab}
+        >
+          <Plus />
+        </Button>
       </div>
 
       {tabIds.length === 0 ? (

@@ -9,14 +9,14 @@ function RowRoot({
 }: {
   className?: string
   children: ReactNode
-  /** Subtle background + weight shift for the 'being explored' row. */
+  /** Subtle background + text shift for the 'being explored' row. */
   active?: boolean
 }) {
   return (
     <div
       data-active={active || undefined}
       className={cn(
-        "group/row relative flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 transition-colors duration-100 ease-out hover:bg-accent/60 data-[active]:bg-accent/40 data-[active]:text-foreground",
+        "group/row relative flex h-7 w-full items-center gap-1 rounded-[3px] pl-2 pr-1 transition-colors duration-150 ease-out hover:bg-accent/60 data-[active]:bg-accent/50 data-[active]:text-foreground",
         className,
       )}
     >
@@ -34,7 +34,7 @@ function RowTrigger({
     <button
       type="button"
       className={cn(
-        "flex min-w-0 flex-1 items-center gap-0.5 rounded-sm px-0 py-px text-left text-xs leading-tight transition-colors",
+        "flex min-w-0 flex-1 items-center gap-1.5 rounded-[3px] py-0 text-left text-sm leading-none transition-colors",
         className,
       )}
       {...props}
@@ -84,7 +84,7 @@ function RowMeta({ className, children }: { className?: string; children: ReactN
   return (
     <span
       className={cn(
-        "min-w-[2ch] shrink-0 text-right tabular-nums text-xs text-muted-foreground",
+        "min-w-[2ch] shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground/80",
         className,
       )}
     >
@@ -96,7 +96,7 @@ function RowMeta({ className, children }: { className?: string; children: ReactN
 function RowMetaPlaceholder({ value = "0" }: { value?: string }) {
   return (
     <span
-      className="min-w-[2ch] shrink-0 text-right tabular-nums text-xs text-transparent select-none"
+      className="min-w-[2ch] shrink-0 text-right font-mono text-[11px] tabular-nums text-transparent select-none"
       aria-hidden
     >
       {value}

@@ -20,7 +20,7 @@ function Section({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-section"
-      className={cn("px-2", className)}
+      className={cn("px-2 py-1", className)}
       {...props}
     />
   )
@@ -32,7 +32,7 @@ function SectionHeader({ className, ...props }: ComponentProps<"div">) {
     <div
       data-slot="sidebar-section-header"
       className={cn(
-        "flex h-8 min-h-8 items-center justify-between gap-1 border-b border-border px-2",
+        "flex h-9 min-h-9 items-center justify-between gap-2 px-3",
         className,
       )}
       {...props}

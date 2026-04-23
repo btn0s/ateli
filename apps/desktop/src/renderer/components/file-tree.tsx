@@ -26,11 +26,11 @@ type FilesPanelTab = "files" | "changes"
 
 function filePanelTabClass(selected: boolean) {
   return cn(
-    "h-8 min-h-8 px-2 text-center text-xs transition-colors duration-150 ease-out",
-    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
+    "inline-flex h-7 items-center gap-1.5 rounded-[3px] px-2 text-xs transition-colors duration-150 ease-out",
+    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
     selected
-      ? "text-foreground"
-      : "text-muted-foreground/60 hover:text-muted-foreground",
+      ? "bg-accent text-accent-foreground"
+      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
   )
 }
 
@@ -502,63 +502,41 @@ export const FileTree = track(function FileTree() {
   return (
     <SidebarShell side="right" defaultWidth={240} minWidth={120} safeArea={safeArea}>
       <Sidebar.Root>
-        <div className="flex w-full min-w-0 items-stretch border-b border-border">
-          <div
-            className="grid min-w-0 flex-1 grid-cols-2 divide-x divide-border"
-            role="tablist"
-            aria-label="Workspace panel"
+        <div
+          className="flex w-full min-w-0 items-center gap-1 px-2 py-1.5"
+          role="tablist"
+          aria-label="Workspace panel"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelTab === "files"}
+            className={filePanelTabClass(panelTab === "files")}
+            onClick={() => setPanelTab("files")}
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={panelTab === "files"}
-              className={filePanelTabClass(panelTab === "files")}
-              onClick={() => setPanelTab("files")}
-            >
-              Files
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={panelTab === "changes"}
-              className={cn(
-                filePanelTabClass(panelTab === "changes"),
-                "inline-flex items-center justify-center gap-1",
-              )}
-              onClick={() => setPanelTab("changes")}
-            >
-              <span>Changes</span>
-              {changeCount > 0 ? (
-                <span
-                  className={cn(
-                    "font-mono text-[10px] tabular-nums",
-                    panelTab === "changes"
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/50",
-                  )}
-                >
-                  {changeCount}
-                </span>
-              ) : null}
-            </button>
-          </div>
-          <div className="flex shrink-0 items-stretch border-l border-border">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-pressed={panelTab === "changes"}
-              className={cn(
-                "h-8 min-h-8 w-8 shrink-0 text-muted-foreground",
-                panelTab === "changes" && "bg-muted text-foreground",
-              )}
-              title="Review changes"
-              aria-label="Review changes"
-              onClick={() => setPanelTab("changes")}
-            >
-              <Eye />
-            </Button>
-          </div>
+            Files
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelTab === "changes"}
+            className={filePanelTabClass(panelTab === "changes")}
+            onClick={() => setPanelTab("changes")}
+          >
+            <span>Changes</span>
+            {changeCount > 0 ? (
+              <span
+                className={cn(
+                  "font-mono text-[11px] tabular-nums",
+                  panelTab === "changes"
+                    ? "text-accent-foreground/80"
+                    : "text-muted-foreground/60",
+                )}
+              >
+                {changeCount}
+              </span>
+            ) : null}
+          </button>
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
