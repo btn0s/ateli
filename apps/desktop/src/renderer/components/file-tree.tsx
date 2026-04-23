@@ -463,18 +463,23 @@ export const FileTree = track(function FileTree() {
 
   const safeArea = (
     <Sidebar.SectionHeader className="h-full">
+      {/* The outer titlebar (z-[999]) is the drag region. Interactive
+          elements in the safe zone must sit above it AND be marked
+          no-drag, otherwise clicks fall through to the drag handler. */}
       <span
         className={cn(
-          "min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",
+          "relative z-[1000] min-w-0 flex-1 truncate font-mono text-xs leading-none text-foreground",
           branchLabelPending && "animate-pulse text-muted-foreground",
         )}
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         title={workingTitle}
       >
         {workingTitle}
       </span>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className={workspaceIconButtonClass}
+          className={cn(workspaceIconButtonClass, "relative z-[1000]")}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           aria-label="Workspace menu"
         >
           <MoreHorizontal />

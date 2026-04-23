@@ -52,7 +52,8 @@ export function SidebarTabStrip({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="flex w-full min-w-0 items-center gap-1 px-2 py-1.5"
+      // Top pad matches BrowserWindow trafficLightPosition.y (12px in main/index.ts).
+      className="flex w-full min-w-0 items-center gap-1 px-2 pt-3 pb-1.5"
     >
       {children}
       {trailing ? <div className="ml-auto flex items-center">{trailing}</div> : null}
