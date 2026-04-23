@@ -170,7 +170,7 @@ export const WorktreeList = track(function WorktreeList({
                   </SidebarTreeRow>
                 </div>
               </ContextMenuTrigger>
-              <ContextMenuContent className="min-w-48">
+              <ContextMenuContent className="z-[300] min-w-48">
                 <ContextMenuItem
                   onClick={() =>
                     addTerminalAtCenter(editor, { cwd: cwdForTerminal })
@@ -234,7 +234,7 @@ export const WorktreeList = track(function WorktreeList({
                             </SidebarTreeRow>
                           </div>
                         </ContextMenuTrigger>
-                        <ContextMenuContent className="min-w-44">
+                        <ContextMenuContent className="z-[300] min-w-44">
                           <ContextMenuItem
                             onClick={() => navigateToShape(shape.id)}
                           >
