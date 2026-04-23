@@ -7,6 +7,7 @@ import {
   useTerminalKillConfirmation,
 } from "@/components/terminal-kill-dialog"
 import { useTerminalSessionStore } from "@/contexts/terminal-session-store"
+import { buildXtermTheme } from "@/lib/xterm-theme"
 
 function getTerminalSize(term: Terminal): { cols: number; rows: number } {
   return {
@@ -56,18 +57,7 @@ export function SidebarEmbeddedTerminal({
       fontSize: 12,
       lineHeight: 1.35,
       cursorBlink: true,
-      theme: {
-        // Match the Quiet theme's --card (sidebar surface) for seamless blend.
-        background: "#282725",
-        foreground: "#f4f3f0",
-        cursor: "#f4f3f0",
-        cursorAccent: "#282725",
-        selectionBackground: "#ffffff1f",
-        black: "#282725",
-        brightBlack: "#6b6a67",
-        white: "#e6e4e0",
-        brightWhite: "#f4f3f0",
-      },
+      theme: buildXtermTheme("card"),
     })
 
     const fitAddon = new FitAddon()

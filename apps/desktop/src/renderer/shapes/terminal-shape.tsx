@@ -14,6 +14,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { TerminalSquare } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { ShapeChrome } from "@/components/shape-chrome"
+import { buildXtermTheme } from "@/lib/xterm-theme"
 import {
   isTerminalKillShortcut,
   useTerminalKillConfirmation,
@@ -110,18 +111,7 @@ function TerminalComponent({
       fontSize: 13,
       lineHeight: 1.4,
       cursorBlink: true,
-      theme: {
-        // Match the Quiet theme's --card surface (warm near-black).
-        background: "#282725",
-        foreground: "#f4f3f0",
-        cursor: "#f4f3f0",
-        cursorAccent: "#282725",
-        selectionBackground: "#ffffff1f",
-        black: "#282725",
-        brightBlack: "#6b6a67",
-        white: "#e6e4e0",
-        brightWhite: "#f4f3f0",
-      },
+      theme: buildXtermTheme("card"),
     })
 
     const fitAddon = new FitAddon()
@@ -348,7 +338,7 @@ function TerminalComponent({
             width: "100%",
             height: "100%",
             padding: 8,
-            background: "#282725",
+            background: "var(--card)",
             overflow: "hidden",
           }}
         />

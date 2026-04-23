@@ -164,7 +164,7 @@ export function SidebarTerminalTabs({
           No terminals. Use + to add one.
         </p>
       ) : (
-        <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           {tabIds.map((id) => (
             <div
               key={id}
