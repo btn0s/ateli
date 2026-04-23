@@ -57,14 +57,16 @@ export function SidebarEmbeddedTerminal({
       lineHeight: 1.35,
       cursorBlink: true,
       theme: {
-        background: "#1a1a1a",
-        foreground: "#e0e0e0",
-        cursor: "#e0e0e0",
-        selectionBackground: "#ffffff30",
-        black: "#1a1a1a",
-        brightBlack: "#555555",
-        white: "#e0e0e0",
-        brightWhite: "#ffffff",
+        // Match the Quiet theme's --background surface in the sidebar.
+        background: "#1d1d1b",
+        foreground: "#f4f3f0",
+        cursor: "#f4f3f0",
+        cursorAccent: "#1d1d1b",
+        selectionBackground: "#ffffff1f",
+        black: "#1d1d1b",
+        brightBlack: "#6b6a67",
+        white: "#e6e4e0",
+        brightWhite: "#f4f3f0",
       },
     })
 
@@ -202,7 +204,7 @@ export function SidebarEmbeddedTerminal({
 
   return (
     <>
-      <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-[#1a1a1a] p-2">
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-background p-2">
         <div
           ref={containerRef}
           className="min-h-0 w-full flex-1 overflow-hidden"

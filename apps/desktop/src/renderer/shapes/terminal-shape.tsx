@@ -111,14 +111,16 @@ function TerminalComponent({
       lineHeight: 1.4,
       cursorBlink: true,
       theme: {
-        background: "#1a1a1a",
-        foreground: "#e0e0e0",
-        cursor: "#e0e0e0",
-        selectionBackground: "#ffffff30",
-        black: "#1a1a1a",
-        brightBlack: "#555555",
-        white: "#e0e0e0",
-        brightWhite: "#ffffff",
+        // Match the Quiet theme's --card surface (warm near-black).
+        background: "#282725",
+        foreground: "#f4f3f0",
+        cursor: "#f4f3f0",
+        cursorAccent: "#282725",
+        selectionBackground: "#ffffff1f",
+        black: "#282725",
+        brightBlack: "#6b6a67",
+        white: "#e6e4e0",
+        brightWhite: "#f4f3f0",
       },
     })
 
@@ -346,7 +348,7 @@ function TerminalComponent({
             width: "100%",
             height: "100%",
             padding: 8,
-            background: "#1a1a1a",
+            background: "#282725",
             overflow: "hidden",
           }}
         />
