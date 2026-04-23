@@ -14,8 +14,16 @@
   --dur-slow: 240ms;
 }
 
-@theme inline {
-  --color-signal: var(--accent-signal);
+/* Signal-accent utilities (Tailwind v4 theme-scan doesn't pick up
+   --color-signal when declared here, so ship plain classes). */
+.bg-signal {
+  background-color: var(--accent-signal);
+}
+.text-signal {
+  color: var(--accent-signal);
+}
+.border-signal {
+  border-color: var(--accent-signal);
 }
 
 /* Atmospheric dark: subtle top-glow so the canvas isn't flat. */
