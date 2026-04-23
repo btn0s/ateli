@@ -94,7 +94,7 @@ function Tab({
       role="tab"
       aria-selected={selected}
       className={cn(
-        "relative flex min-w-0 shrink-0 items-center border-0 bg-transparent p-0 shadow-none outline-none",
+        "flex min-w-0 shrink-0 items-center border-0 bg-transparent p-0 shadow-none outline-none",
         "px-0.5 py-0.5",
         "focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0",
         className,
@@ -103,20 +103,13 @@ function Tab({
     >
       <span
         className={cn(
-          "relative truncate pl-0.5 text-left text-[10px] font-medium uppercase tracking-[0.16em] transition-colors duration-150 ease-out",
+          "truncate pl-0.5 text-left text-[10px] font-medium uppercase tracking-[0.16em] transition-colors duration-150 ease-out",
           selected
             ? "text-foreground"
-            : "text-muted-foreground/60 hover:text-muted-foreground",
+            : "text-muted-foreground/50 hover:text-muted-foreground",
         )}
       >
         {children}
-        {selected && (
-          <span
-            aria-hidden
-            key="tab-underline"
-            className="tab-underline absolute -bottom-[3px] left-[2px] right-0 h-px bg-signal"
-          />
-        )}
       </span>
     </button>
   )

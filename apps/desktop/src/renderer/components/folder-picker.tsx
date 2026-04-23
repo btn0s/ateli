@@ -20,10 +20,9 @@ export function FolderPicker({ onSelect }: { onSelect: (path: string) => void })
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background font-sans antialiased">
-      {/* Corner marks: top-left brand, bottom-left tagline, bottom-right version/status. */}
-      <div className="pointer-events-none absolute top-10 left-8 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/80">
-        <span className="size-1.5 bg-signal" aria-hidden />
-        <span>ateli</span>
+      {/* Corner marks: top-left brand, bottom-left tagline, bottom-right status. */}
+      <div className="pointer-events-none absolute top-10 left-8 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/80">
+        ateli
       </div>
 
       <div className="pointer-events-none absolute bottom-8 left-8 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">

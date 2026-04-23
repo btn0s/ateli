@@ -516,13 +516,6 @@ export const FileTree = track(function FileTree() {
               onClick={() => setPanelTab("files")}
             >
               Files
-              {panelTab === "files" && (
-                <span
-                  aria-hidden
-                  key="files-underline"
-                  className="tab-underline pointer-events-none absolute bottom-0 left-2 right-2 h-px bg-signal"
-                />
-              )}
             </button>
             <button
               type="button"
@@ -540,20 +533,13 @@ export const FileTree = track(function FileTree() {
                   className={cn(
                     "font-mono text-[10px] tabular-nums",
                     panelTab === "changes"
-                      ? "text-signal"
-                      : "text-muted-foreground/60",
+                      ? "text-muted-foreground"
+                      : "text-muted-foreground/50",
                   )}
                 >
                   {changeCount}
                 </span>
               ) : null}
-              {panelTab === "changes" && (
-                <span
-                  aria-hidden
-                  key="changes-underline"
-                  className="tab-underline pointer-events-none absolute bottom-0 left-2 right-2 h-px bg-signal"
-                />
-              )}
             </button>
           </div>
           <div className="flex shrink-0 items-stretch border-l border-border">

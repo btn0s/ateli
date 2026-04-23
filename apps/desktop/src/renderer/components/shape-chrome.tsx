@@ -31,31 +31,12 @@ export function ShapeChrome({
   return (
     <div
       className="flex h-full w-full flex-col overflow-hidden border border-border bg-card transition-colors duration-150 ease-out"
-      style={{
-        borderRadius: "var(--radius)",
-        borderColor: isInteractive ? "var(--accent-signal)" : undefined,
-      }}
+      style={{ borderRadius: "var(--radius)" }}
     >
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-muted/50 px-2">
         <div className="flex items-center gap-1.5 overflow-hidden">
-          {/* Live dot — amber when interactive (pulses with soft glow), muted when not. */}
-          <span
-            aria-hidden
-            className={`size-1.5 shrink-0 transition-all duration-150 ease-out ${
-              isInteractive ? "signal-dot" : ""
-            }`}
-            style={{
-              backgroundColor: isInteractive
-                ? "var(--accent-signal)"
-                : "var(--muted-foreground)",
-              opacity: isInteractive ? 1 : 0.4,
-              filter: isInteractive
-                ? "drop-shadow(0 0 3px oklch(0.82 0.16 80 / 60%))"
-                : "none",
-            }}
-          />
           {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}
-          <span className="truncate text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+          <span className="truncate text-[11px] tracking-[0.02em] text-muted-foreground">
             {title}
           </span>
         </div>

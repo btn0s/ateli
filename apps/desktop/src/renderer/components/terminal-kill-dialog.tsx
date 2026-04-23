@@ -54,20 +54,9 @@ export function useTerminalKillConfirmation(): {
 
   const dialog = (
     <Dialog open={pending !== null} onOpenChange={(next) => !next && cancel()}>
-      <DialogContent
-        showCloseButton={false}
-        className="gap-3 border-l-2 border-l-destructive pl-5"
-      >
-        <DialogHeader className="gap-1.5">
-          <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em]">
-            <span className="text-destructive">Destructive</span>
-            <kbd className="inline-flex items-center rounded-none border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium tracking-normal text-muted-foreground">
-              ⌘⇧K
-            </kbd>
-          </div>
-          <DialogTitle className="font-mono text-base leading-tight">
-            Kill session
-          </DialogTitle>
+      <DialogContent showCloseButton={false} className="gap-3">
+        <DialogHeader className="gap-1">
+          <DialogTitle>Kill session?</DialogTitle>
           <DialogDescription>
             Sends SIGTERM to the terminal process and closes attached views.
             Unsaved shell state is lost.

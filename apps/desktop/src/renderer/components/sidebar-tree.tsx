@@ -9,22 +9,17 @@ function RowRoot({
 }: {
   className?: string
   children: ReactNode
-  /** Render a 2px amber left-edge indicator. */
+  /** Subtle background + weight shift for the 'being explored' row. */
   active?: boolean
 }) {
   return (
     <div
+      data-active={active || undefined}
       className={cn(
-        "group/row relative flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 transition-all duration-100 ease-out hover:bg-accent",
+        "group/row relative flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 transition-colors duration-100 ease-out hover:bg-accent/60 data-[active]:bg-accent/40 data-[active]:text-foreground",
         className,
       )}
     >
-      {active && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-px left-0 w-[2px] bg-signal"
-        />
-      )}
       {children}
     </div>
   )

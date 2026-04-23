@@ -48,25 +48,18 @@ export function useWorktreeRemoveConfirmation(): {
 
   const dialog = (
     <Dialog open={pending !== null} onOpenChange={(next) => !next && cancel()}>
-      <DialogContent
-        showCloseButton={false}
-        className="gap-3 border-l-2 border-l-destructive pl-5"
-      >
-        <DialogHeader className="gap-1.5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-destructive">
-            Destructive
-          </div>
-          <DialogTitle className="font-mono text-base leading-tight">
+      <DialogContent showCloseButton={false} className="gap-3">
+        <DialogHeader className="gap-1">
+          <DialogTitle>
             Remove worktree
+            {pending?.branch ? (
+              <span className="text-muted-foreground"> · {pending.branch}</span>
+            ) : null}
+            ?
           </DialogTitle>
-          {pending?.branch && (
-            <div className="-mt-0.5 truncate font-mono text-xs text-muted-foreground">
-              {pending.branch}
-            </div>
-          )}
-          <DialogDescription className="mt-1">
+          <DialogDescription>
             Terminals rooted in{" "}
-            <code className="rounded-none border border-border bg-muted/60 px-1 py-px font-mono text-[0.95em] text-foreground">
+            <code className="rounded-none border border-border bg-muted/60 px-1 py-px text-[0.95em] text-foreground">
               {pending?.path}
             </code>{" "}
             are killed. The branch itself is preserved.
