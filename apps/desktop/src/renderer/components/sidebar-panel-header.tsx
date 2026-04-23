@@ -113,7 +113,8 @@ function Tab({
         {selected && (
           <span
             aria-hidden
-            className="absolute -bottom-[3px] left-[2px] right-0 h-px bg-signal"
+            key="tab-underline"
+            className="tab-underline absolute -bottom-[3px] left-[2px] right-0 h-px bg-signal"
           />
         )}
       </span>

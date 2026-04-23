@@ -38,10 +38,12 @@ export function ShapeChrome({
     >
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-muted/50 px-2">
         <div className="flex items-center gap-1.5 overflow-hidden">
-          {/* Live dot — amber when interactive, muted when not. */}
+          {/* Live dot — amber when interactive (pulses), muted when not. */}
           <span
             aria-hidden
-            className="size-1.5 shrink-0 transition-colors duration-150 ease-out"
+            className={`size-1.5 shrink-0 transition-colors duration-150 ease-out ${
+              isInteractive ? "signal-dot" : ""
+            }`}
             style={{
               backgroundColor: isInteractive
                 ? "var(--accent-signal)"

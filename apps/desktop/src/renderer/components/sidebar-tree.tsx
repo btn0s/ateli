@@ -15,7 +15,7 @@ function RowRoot({
   return (
     <div
       className={cn(
-        "relative flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 transition-colors duration-100 ease-out hover:bg-accent",
+        "group/row relative flex w-full items-center gap-0 rounded-sm py-0 pl-1 pr-0 transition-all duration-100 ease-out hover:bg-accent",
         className,
       )}
     >

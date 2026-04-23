@@ -26,15 +26,147 @@
   border-color: var(--accent-signal);
 }
 
-/* Atmospheric dark: subtle top-glow so the canvas isn't flat. */
+/* Atmospheric dark: top-glow + grain so the background reads as material. */
 body {
   background:
     radial-gradient(
       ellipse 90% 50% at 50% -10%,
-      oklch(1 0 0 / 3.5%) 0%,
+      oklch(1 0 0 / 5%) 0%,
       transparent 60%
     ),
     var(--background);
+}
+
+/* Film-grain overlay. SVG fractal noise at very low opacity — adds texture
+   to flat dark panes without reading as decoration. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10000;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+/* Motion keyframes — mechanical, never bouncy. */
+@keyframes signal-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes underline-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Staggered row entrance — up to the first 12 children. */
+.stagger-rows > * {
+  animation: row-in var(--dur-slow, 240ms) var(--ease-out) both;
+}
+.stagger-rows > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-rows > *:nth-child(2) { animation-delay: 16ms; }
+.stagger-rows > *:nth-child(3) { animation-delay: 32ms; }
+.stagger-rows > *:nth-child(4) { animation-delay: 48ms; }
+.stagger-rows > *:nth-child(5) { animation-delay: 64ms; }
+.stagger-rows > *:nth-child(6) { animation-delay: 80ms; }
+.stagger-rows > *:nth-child(7) { animation-delay: 96ms; }
+.stagger-rows > *:nth-child(8) { animation-delay: 112ms; }
+.stagger-rows > *:nth-child(9) { animation-delay: 128ms; }
+.stagger-rows > *:nth-child(10) { animation-delay: 144ms; }
+.stagger-rows > *:nth-child(11) { animation-delay: 160ms; }
+.stagger-rows > *:nth-child(12) { animation-delay: 176ms; }
+
+.signal-dot {
+  animation: signal-pulse 2.4s var(--ease-in-out) infinite;
+}
+
+/* Sliding underline for active tab. */
+.tab-underline {
+  transform-origin: left center;
+  animation: underline-in var(--dur-normal) var(--ease-out);
+}
+
+/* Kbd chip physicality — inset hairline + soft drop for key-cap feel. */
+kbd {
+  box-shadow:
+    inset 0 -1px 0 oklch(1 0 0 / 8%),
+    inset 0 1px 0 oklch(0 0 0 / 30%),
+    0 1px 0 oklch(0 0 0 / 50%);
+}
+
+/* Dialog entrance: slide up + fade, longer than shadcn's default zoom-95. */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes dialog-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.98);
+  }
+}
+[data-slot="dialog-content"][data-open] {
+  animation: dialog-in 220ms var(--ease-out);
+}
+[data-slot="dialog-content"][data-closed] {
+  animation: dialog-out 140ms var(--ease-in-out);
+}
+
+/* Context menu item: subtle hover translate for physical feedback. */
+[data-slot="context-menu-content"] [data-slot$="-item"] {
+  transition: background-color var(--dur-fast) var(--ease-out),
+              padding-left var(--dur-fast) var(--ease-out);
+}
+[data-slot="context-menu-content"] [data-slot$="-item"]:hover,
+[data-slot="context-menu-content"] [data-slot$="-item"][data-highlighted] {
+  padding-left: calc(var(--spacing) * 2.75);
+}
+[data-slot="context-menu-content"] [data-slot$="-item"][data-variant="destructive"]:hover,
+[data-slot="context-menu-content"] [data-slot$="-item"][data-variant="destructive"][data-highlighted] {
+  box-shadow: inset 2px 0 0 var(--destructive);
+}
+
+/* Reduce motion for users who ask for it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Focus ring uses the signal accent for a single consistent identity. */
