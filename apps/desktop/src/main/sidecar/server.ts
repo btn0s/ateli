@@ -50,7 +50,12 @@ interface Session {
 // --- Socket helpers (no Windows support) ---
 
 function prepareEndpoint(endpoint: string): void {
-  fs.mkdirSync(ATELI_DIR, { recursive: true });
+  fs.mkdirSync(ATELI_DIR, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(ATELI_DIR, 0o700);
+  } catch {
+    // Best effort; restrictive umask may already be sufficient.
+  }
   if (fs.existsSync(endpoint)) {
     try {
       fs.unlinkSync(endpoint);
@@ -87,7 +92,17 @@ export class SidecarServer {
   }
 
   async start(): Promise<void> {
-    fs.mkdirSync(this.opts.sessionSocketDir, { recursive: true });
+    fs.mkdirSync(this.opts.sessionSocketDir, { recursive: true, mode: 0o700 });
+    try {
+      fs.chmodSync(this.opts.sessionSocketDir, 0o700);
+    } catch {
+      // Best effort.
+    }
+    try {
+      fs.chmodSync(ATELI_DIR, 0o700);
+    } catch {
+      // Best effort.
+    }
     prepareEndpoint(this.opts.controlSocketPath);
 
     // Write PID file
@@ -96,13 +111,27 @@ export class SidecarServer {
       token: this.opts.token,
       version: SIDECAR_VERSION,
     };
-    fs.writeFileSync(this.opts.pidFilePath, JSON.stringify(pidData));
+    fs.writeFileSync(this.opts.pidFilePath, JSON.stringify(pidData), {
+      mode: 0o600,
+    });
+    try {
+      fs.chmodSync(this.opts.pidFilePath, 0o600);
+    } catch {
+      // Best effort.
+    }
 
     await new Promise<void>((resolve) => {
       this.controlServer = net.createServer((sock) =>
         this.handleControlClient(sock),
       );
-      this.controlServer.listen(this.opts.controlSocketPath, resolve);
+      this.controlServer.listen(this.opts.controlSocketPath, () => {
+        try {
+          fs.chmodSync(this.opts.controlSocketPath, 0o600);
+        } catch {
+          // Best effort.
+        }
+        resolve();
+      });
     });
 
     this.resetIdleTimer();
@@ -385,6 +414,11 @@ export class SidecarServer {
     this.sessions.set(sessionId, session);
 
     dataServer.listen(socketPath, () => {
+      try {
+        fs.chmodSync(socketPath, 0o600);
+      } catch {
+        // Best effort.
+      }
       this.resetIdleTimer();
       const result: SessionCreateResult = {
         sessionId,

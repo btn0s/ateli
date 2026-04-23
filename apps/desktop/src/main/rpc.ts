@@ -52,11 +52,13 @@ export function broadcast(method: string, params: Record<string, unknown>): void
 }
 
 export function startRpcServer(ptyManager: PtyManager) {
-  fs.mkdirSync(ATELI_DIR, { recursive: true })
+  fs.mkdirSync(ATELI_DIR, { recursive: true, mode: 0o700 })
+  try { fs.chmodSync(ATELI_DIR, 0o700) } catch {}
 
   // Generate auth nonce
   nonce = crypto.randomUUID()
-  fs.writeFileSync(TOKEN_PATH, nonce)
+  fs.writeFileSync(TOKEN_PATH, nonce, { mode: 0o600 })
+  try { fs.chmodSync(TOKEN_PATH, 0o600) } catch {}
 
   socketPath = path.join(ATELI_DIR, `rpc-${crypto.randomUUID().slice(0, 8)}.sock`)
   try { fs.unlinkSync(socketPath) } catch {}
@@ -321,8 +323,11 @@ export function startRpcServer(ptyManager: PtyManager) {
     })
   })
 
-  server.listen(socketPath)
-  fs.writeFileSync(SOCKET_PATH_FILE, socketPath)
+  server.listen(socketPath, () => {
+    try { fs.chmodSync(socketPath!, 0o600) } catch {}
+    fs.writeFileSync(SOCKET_PATH_FILE, socketPath!, { mode: 0o600 })
+    try { fs.chmodSync(SOCKET_PATH_FILE, 0o600) } catch {}
+  })
 }
 
 export function stopRpcServer() {
