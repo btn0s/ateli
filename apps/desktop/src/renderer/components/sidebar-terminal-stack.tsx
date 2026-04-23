@@ -141,9 +141,7 @@ export function SidebarTerminalTabs({
                       }}
                     >
                       Kill session
-                      <ContextMenuShortcut>
-                        Cmd/Ctrl+Shift+K
-                      </ContextMenuShortcut>
+                      <ContextMenuShortcut>⌘⇧K</ContextMenuShortcut>
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
@@ -172,25 +170,47 @@ export function SidebarTerminalTabs({
         </p>
       ) : (
         <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
-          {tabIds.map((id) => (
-            <div
-              key={id}
-              className={cn(
-                "absolute inset-0 flex min-h-0 flex-col overflow-hidden",
-                activeTabId === id
-                  ? "visible z-10"
-                  : "invisible z-0 pointer-events-none",
-              )}
-              aria-hidden={activeTabId !== id}
-            >
-              <SidebarEmbeddedTerminal
-                instanceKey={id}
-                cwd={cwd}
-                onSessionAttached={(sessionId) => setTabSessionId(id, sessionId)}
-                onSessionEnded={() => endSession(id)}
-              />
-            </div>
-          ))}
+          {tabIds.map((id) => {
+            const sessionId = sessionIdsByTab[id]
+            return (
+              <div
+                key={id}
+                className={cn(
+                  "absolute inset-0 flex min-h-0 flex-col overflow-hidden",
+                  activeTabId === id
+                    ? "visible z-10"
+                    : "invisible z-0 pointer-events-none",
+                )}
+                aria-hidden={activeTabId !== id}
+              >
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+                      <SidebarEmbeddedTerminal
+                        instanceKey={id}
+                        cwd={cwd}
+                        onSessionAttached={(sid) => setTabSessionId(id, sid)}
+                        onSessionEnded={() => endSession(id)}
+                      />
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent className="min-w-44">
+                    <ContextMenuItem
+                      variant="destructive"
+                      disabled={!sessionId}
+                      onClick={() => {
+                        if (!sessionId) return
+                        requestKill({ sessionId })
+                      }}
+                    >
+                      Kill session
+                      <ContextMenuShortcut>⌘⇧K</ContextMenuShortcut>
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              </div>
+            )
+          })}
         </div>
       )}
       {dialog}

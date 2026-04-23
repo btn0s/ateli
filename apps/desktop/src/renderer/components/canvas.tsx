@@ -147,7 +147,7 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
             <TldrawUiMenuItem
               id="kill-terminal-session"
               label={"Kill session" as any}
-              kbd="Cmd/Ctrl+Shift+K"
+              kbd="$!k"
               readonlyOk
               disabled={!selectedTerminal.sessionId}
               onSelect={() => {
