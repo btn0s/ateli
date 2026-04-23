@@ -82,7 +82,7 @@ export function SidebarTerminalTabs({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border/60">
-      <div className="flex h-9 shrink-0 items-center gap-1 px-2">
+      <div className="flex shrink-0 items-center gap-1 px-2 pt-2 pb-0">
         <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-gutter:stable]">
           <div
             role="tablist"
