@@ -26,8 +26,8 @@ type FilesPanelTab = "files" | "changes"
 
 function filePanelTabClass(selected: boolean) {
   return cn(
-    "relative h-8 min-h-8 px-1 text-center text-[10px] font-medium uppercase tracking-[0.16em] transition-colors duration-150 ease-out",
-    "focus-visible:outline-none",
+    "h-8 min-h-8 px-2 text-center text-xs transition-colors duration-150 ease-out",
+    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
     selected
       ? "text-foreground"
       : "text-muted-foreground/60 hover:text-muted-foreground",

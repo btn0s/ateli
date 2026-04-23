@@ -23,7 +23,7 @@ function Root({
 function Title({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-1 items-center px-0.5 py-0.5">
-      <span className="truncate pl-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+      <span className="truncate pl-0.5 text-xs text-muted-foreground">
         {children}
       </span>
     </div>
@@ -103,10 +103,10 @@ function Tab({
     >
       <span
         className={cn(
-          "truncate pl-0.5 text-left text-[10px] font-medium uppercase tracking-[0.16em] transition-colors duration-150 ease-out",
+          "truncate pl-0.5 text-left text-xs transition-colors duration-150 ease-out",
           selected
             ? "text-foreground"
-            : "text-muted-foreground/50 hover:text-muted-foreground",
+            : "text-muted-foreground/60 hover:text-muted-foreground",
         )}
       >
         {children}

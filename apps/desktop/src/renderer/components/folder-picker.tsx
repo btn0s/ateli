@@ -20,51 +20,32 @@ export function FolderPicker({ onSelect }: { onSelect: (path: string) => void })
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background font-sans antialiased">
-      {/* Corner marks: top-left brand, bottom-left tagline, bottom-right status. */}
-      <div className="pointer-events-none absolute top-10 left-8 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/80">
-        ateli
+      <div className="pointer-events-none absolute top-10 left-8 text-xs text-muted-foreground/70">
+        Ateli
       </div>
 
-      <div className="pointer-events-none absolute bottom-8 left-8 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">
-        canvas-first workspace for dev
-      </div>
-
-      <div className="pointer-events-none absolute right-8 bottom-8 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">
-        idle · awaiting project
-      </div>
-
-      {/* Main content block — loosely centered, slight upward bias. */}
-      <div className="flex flex-1 items-center justify-center">
-        <div className="flex max-w-md flex-col gap-6">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            <span className="inline-block size-px w-8 bg-border" aria-hidden />
-            <span>step 01 / open a project</span>
-          </div>
-
-          <h1 className="text-[28px] leading-[1.05] font-light tracking-tight text-foreground">
-            Open a project
-            <span className="text-muted-foreground/60">.</span>
+      <div className="flex flex-1 items-center justify-center px-8">
+        <div className="flex max-w-md flex-col gap-5">
+          <h1 className="text-[32px] leading-[1.1] font-light tracking-tight text-foreground">
+            Open a project.
           </h1>
 
-          <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-            Select a folder to begin. Ateli arranges terminals, worktrees, and
-            files on an infinite canvas — one spatial workspace per project.
+          <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+            Choose a folder and Ateli will lay out its terminals, worktrees,
+            and files on a canvas you can arrange to your taste.
           </p>
 
-          <div className="flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-3">
             <Button
               onClick={handleClick}
               size="lg"
-              className="group gap-2 border-border bg-foreground text-background hover:bg-foreground/90"
+              className="px-4"
             >
-              <span>Choose folder</span>
-              <span className="transition-transform duration-150 ease-out group-hover:translate-x-0.5">
-                →
-              </span>
+              Choose folder
             </Button>
-            <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
-              or press{" "}
-              <kbd className="inline-flex items-center rounded-none border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium tracking-normal text-muted-foreground">
+            <span className="text-xs text-muted-foreground/70">
+              or{" "}
+              <kbd className="inline-flex items-center rounded-[2px] border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                 ⌘O
               </kbd>
             </span>

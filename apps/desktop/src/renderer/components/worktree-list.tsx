@@ -102,7 +102,7 @@ export const WorktreeList = track(function WorktreeList({
   }
 
   return (
-    <div className="stagger-rows flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
       <SidebarPanelHeader>
         <SidebarPanelHeader.Title>Worktrees</SidebarPanelHeader.Title>
         <SidebarPanelHeader.Trailer>

@@ -36,7 +36,7 @@ export function ShapeChrome({
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-muted/50 px-2">
         <div className="flex items-center gap-1.5 overflow-hidden">
           {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}
-          <span className="truncate text-[11px] tracking-[0.02em] text-muted-foreground">
+          <span className="truncate font-mono text-xs text-muted-foreground">
             {title}
           </span>
         </div>
