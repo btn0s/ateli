@@ -36,7 +36,7 @@ function createWindow() {
     trafficLightPosition: { x: 12, y: 12 },
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
-      sandbox: false,
+      sandbox: true,
     },
   })
 
