@@ -32,6 +32,16 @@ export interface WorktreeMetadataFile {
   entries: Record<string, WorktreeEntry>
 }
 
+export interface WorktreeListItem {
+  id: string
+  path: string
+  branch: string
+  head: string
+  isMain: boolean
+  createdAt: string
+  repoPath: string
+}
+
 function repoHash(repoPath: string): string {
   return crypto.createHash("sha256").update(repoPath).digest("hex").slice(0, 8)
 }
@@ -192,4 +202,67 @@ export function saveWorktreeMetadata(data: WorktreeMetadataFile): void {
   const tmp = WORKTREES_PATH + "." + crypto.randomUUID().slice(0, 8)
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
   fs.renameSync(tmp, WORKTREES_PATH)
+}
+
+/**
+ * Canonical worktree list: git is truth. JSON enriches with our id+createdAt.
+ * If a git worktree has no JSON entry, one is generated and persisted.
+ * If a JSON entry's path is no longer a git worktree, it is pruned.
+ */
+export async function listWorktrees(repoPath: string): Promise<WorktreeListItem[]> {
+  const gitList = await listGitWorktrees(repoPath)
+  const metadata = loadWorktreeMetadata()
+  let dirty = false
+
+  const gitPaths = new Set(gitList.map((w) => w.path))
+
+  // Prune JSON entries for this repo whose worktree paths no longer exist in git.
+  const expectedPrefix = path.join(WORKTREES_DIR, repoHash(repoPath))
+  for (const wtPath of Object.keys(metadata.entries)) {
+    const belongsToRepo =
+      wtPath === repoPath || wtPath.startsWith(expectedPrefix + path.sep)
+    if (belongsToRepo && !gitPaths.has(wtPath)) {
+      delete metadata.entries[wtPath]
+      dirty = true
+    }
+  }
+
+  const result: WorktreeListItem[] = []
+  for (const gw of gitList) {
+    let entry = metadata.entries[gw.path]
+    if (!entry) {
+      entry = {
+        id: crypto.randomUUID().slice(0, 8),
+        branch: gw.branch,
+        createdAt: new Date().toISOString(),
+      }
+      metadata.entries[gw.path] = entry
+      dirty = true
+    } else if (entry.branch !== gw.branch) {
+      entry.branch = gw.branch
+      dirty = true
+    }
+
+    result.push({
+      id: entry.id,
+      path: gw.path,
+      branch: gw.branch,
+      head: gw.head,
+      isMain: gw.isMain,
+      createdAt: entry.createdAt,
+      repoPath,
+    })
+  }
+
+  if (dirty) saveWorktreeMetadata(metadata)
+
+  return result
+}
+
+export async function findWorktreeById(
+  repoPath: string,
+  id: string,
+): Promise<WorktreeListItem | null> {
+  const list = await listWorktrees(repoPath)
+  return list.find((w) => w.id === id) ?? null
 }
