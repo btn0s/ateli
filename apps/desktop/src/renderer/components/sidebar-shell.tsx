@@ -92,8 +92,8 @@ export function SidebarShell({
         return next
       })
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    window.addEventListener("keydown", onKey, true)
+    return () => window.removeEventListener("keydown", onKey, true)
   }, [side, width, persist])
 
   const displayWidth = collapsed ? 0 : width
