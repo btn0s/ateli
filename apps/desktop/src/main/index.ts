@@ -120,12 +120,12 @@ ipcMain.handle("terminal:reconnect", async (_event, payload) => {
   const sessionKey = expectString(r, "sessionKey", "terminal:reconnect")
   const cols = expectNumber(r, "cols", "terminal:reconnect")
   const rows = expectNumber(r, "rows", "terminal:reconnect")
-  const sessions = ptyManager.listSessions()
-  const meta = sessions.find((s) => s.sidecarSessionId === sessionKey)
+  const meta = ptyManager.getSessionByKey(sessionKey)
   if (!meta) {
-    throw new Error(`Unknown session: ${sessionKey}`)
+    return { reconnected: false as const }
   }
   await ptyManager.reconnectSession(meta.id, cols, rows)
+  return { reconnected: true as const }
 })
 
 function findSessionByKey(sessionKey: string) {
@@ -446,8 +446,8 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.whenReady().then(async () => {
-  createWindow()
   await ptyManager.init()
+  createWindow()
   startRpcServer(ptyManager)
 
   // Relay RPC broadcasts to renderer

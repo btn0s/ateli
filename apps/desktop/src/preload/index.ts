@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld("electron", {
         sessionKey,
         cols,
         rows,
-      }) as Promise<void>,
+      }) as Promise<{ reconnected: boolean }>,
     rename: (sessionKey: string, name?: string) =>
       ipcRenderer.invoke("terminal:rename", { sessionKey, name }) as Promise<{
         id: string
