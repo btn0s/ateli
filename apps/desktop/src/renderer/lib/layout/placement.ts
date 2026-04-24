@@ -3,6 +3,8 @@ import { centroidOf, inflate, rectsOverlap, snap } from "./geometry"
 import { scoreCluster } from "./weight"
 import type { Cluster, Rect, ShapeRect } from "./types"
 
+const GOLDEN_ANGLE_RAD = 2.3998 // ≈ 137.5°
+
 export function pickAnchor(
   clusters: Cluster[],
   targetGroupKey: string,
@@ -100,11 +102,11 @@ export function spiralSearch(
   const first = candidate(anchor.x, anchor.y)
   if (fits(first)) return { x: anchor.x, y: anchor.y }
 
-  // Archimedean spiral sampled at SPIRAL_STEP.
+  // Vogel/sunflower spiral sampled at SPIRAL_STEP; golden-angle for uniform-density disk sampling.
   for (let i = 1; i < MAX_SPIRAL_ITERS; i++) {
     const t = i * 0.5
     const r = SPIRAL_STEP * Math.sqrt(t)
-    const theta = t * 2.3998
+    const theta = t * GOLDEN_ANGLE_RAD
     const x = snap(anchor.x + r * Math.cos(theta), SPIRAL_STEP)
     const y = snap(anchor.y + r * Math.sin(theta), SPIRAL_STEP)
     if (fits(candidate(x, y))) return { x, y }
