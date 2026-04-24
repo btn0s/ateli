@@ -1,19 +1,30 @@
 import { createShapeId, type Editor, type TLShapeId } from "tldraw"
-import { TerminalSquare, GitBranch } from "lucide-react"
+import { TerminalSquare, GitBranch, LayoutGrid } from "lucide-react"
 import { registerAction } from "./tool-registry"
+import { placeTerminal } from "./layout"
+import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
+
+const DEFAULT_TERMINAL_W = 600
+const DEFAULT_TERMINAL_H = 400
 
 export function addTerminalAtCenter(
   editor: Editor,
-  props?: Record<string, unknown>,
+  props: Record<string, unknown> = {},
+  worktrees: WorktreeIndexEntry[] = [],
 ): TLShapeId {
-  const center = editor.getViewportPageBounds().center
   const id = createShapeId()
+  const cwd = typeof props.cwd === "string" ? props.cwd : ""
+  const { x, y } = placeTerminal(editor, {
+    cwd,
+    worktrees,
+    size: { w: DEFAULT_TERMINAL_W, h: DEFAULT_TERMINAL_H },
+  })
   editor.createShape({
     id,
     type: "terminal",
-    x: center.x - 300,
-    y: center.y - 200,
-    props,
+    x,
+    y,
+    props: { w: DEFAULT_TERMINAL_W, h: DEFAULT_TERMINAL_H, ...props },
   })
   return id
 }
