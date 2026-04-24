@@ -107,6 +107,54 @@ function entryIgnoredByLayers(
   return ignored
 }
 
+export interface PackageJsonScripts {
+  scripts: { name: string; command: string }[]
+  packageName: string | null
+}
+
+/**
+ * Read `${dirPath}/package.json` and return its `scripts` as an ordered list
+ * preserving JSON declaration order. Returns `null` if the file doesn't exist
+ * or can't be parsed; the caller treats both the same (empty state).
+ */
+export async function readPackageJsonScripts(
+  dirPath: string,
+): Promise<PackageJsonScripts | null> {
+  const pkgPath = path.join(path.resolve(dirPath), "package.json")
+  let raw: string
+  try {
+    raw = await fs.promises.readFile(pkgPath, "utf8")
+  } catch {
+    return null
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+
+  if (!parsed || typeof parsed !== "object") return null
+  const obj = parsed as Record<string, unknown>
+
+  const packageName =
+    typeof obj.name === "string" && obj.name.length > 0 ? obj.name : null
+
+  const rawScripts = obj.scripts
+  if (!rawScripts || typeof rawScripts !== "object") {
+    return { scripts: [], packageName }
+  }
+
+  const out: { name: string; command: string }[] = []
+  for (const [name, command] of Object.entries(rawScripts)) {
+    if (typeof command === "string") {
+      out.push({ name, command })
+    }
+  }
+  return { scripts: out, packageName }
+}
+
 export async function readProjectDirectory(
   dirPath: string,
 ): Promise<{ entries: DirEntry[]; repoRoot: string | null }> {

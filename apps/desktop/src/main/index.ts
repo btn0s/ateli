@@ -18,7 +18,12 @@ import {
   loadWorktreeMetadata,
   saveWorktreeMetadata,
 } from "./worktree"
-import { readProjectDirectory, startFsWatch, fsWatchKey } from "./file-tree"
+import {
+  readPackageJsonScripts,
+  readProjectDirectory,
+  startFsWatch,
+  fsWatchKey,
+} from "./file-tree"
 import { isPathInside } from "./path-utils"
 import { getGitChangesOverview, getGitFilePatch } from "./git-status"
 import {
@@ -367,6 +372,12 @@ ipcMain.handle("fs:readdir", async (_event, payload) => {
   const r = assertRecord(payload, "fs:readdir")
   const dirPath = expectString(r, "dirPath", "fs:readdir")
   return readProjectDirectory(dirPath)
+})
+
+ipcMain.handle("fs:read-package-json-scripts", async (_event, payload) => {
+  const r = assertRecord(payload, "fs:read-package-json-scripts")
+  const dirPath = expectString(r, "dirPath", "fs:read-package-json-scripts")
+  return readPackageJsonScripts(dirPath)
 })
 
 ipcMain.handle("fs:open-path", async (_event, payload) => {

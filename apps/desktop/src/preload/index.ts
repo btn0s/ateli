@@ -200,6 +200,13 @@ contextBridge.exposeInMainWorld("electron", {
         entries: { name: string; path: string; isDirectory: boolean }[]
         repoRoot: string | null
       }>,
+    readPackageJsonScripts: (dirPath: string) =>
+      ipcRenderer.invoke("fs:read-package-json-scripts", {
+        dirPath,
+      }) as Promise<{
+        scripts: { name: string; command: string }[]
+        packageName: string | null
+      } | null>,
     openPath: (filePath: string) =>
       ipcRenderer.invoke("fs:open-path", { filePath }) as Promise<void>,
     watchRoot: (rootPath: string) =>

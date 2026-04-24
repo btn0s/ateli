@@ -1,15 +1,21 @@
-import type { Editor } from "tldraw"
+import { createShapeId, type Editor, type TLShapeId } from "tldraw"
 import { TerminalSquare, GitBranch } from "lucide-react"
 import { registerAction } from "./tool-registry"
 
-export function addTerminalAtCenter(editor: Editor, props?: Record<string, unknown>) {
+export function addTerminalAtCenter(
+  editor: Editor,
+  props?: Record<string, unknown>,
+): TLShapeId {
   const center = editor.getViewportPageBounds().center
+  const id = createShapeId()
   editor.createShape({
+    id,
     type: "terminal",
     x: center.x - 300,
     y: center.y - 200,
     props,
   })
+  return id
 }
 
 registerAction({
