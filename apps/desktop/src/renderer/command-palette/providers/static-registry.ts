@@ -1,7 +1,10 @@
 import { getCommandMenuActions } from "@/lib/tool-registry"
+import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
 import type { CommandDefinition, CommandExecutionContext } from "../types"
 
-export function createStaticRegistryCommands(): CommandDefinition[] {
+export function createStaticRegistryCommands(
+  worktrees: WorktreeIndexEntry[],
+): CommandDefinition[] {
   return getCommandMenuActions().map((a) => {
     const push = a.openPaletteRoute
     return {
@@ -11,13 +14,14 @@ export function createStaticRegistryCommands(): CommandDefinition[] {
       keywords: [a.label.toLowerCase(), "action", a.id],
       group: a.id === "add-terminal" || a.id === "add-worktree" ? "create" : "action",
       emptyQuerySection: a.id === "add-worktree" ? "actions" : "suggested",
-      when: () => true,
+      when: (ctx: CommandExecutionContext) =>
+        !a.when || a.when({ editor: ctx.editor, worktrees }),
       score: () => (a.id === "add-terminal" ? 0.15 : 0.05),
       push,
       run: push
         ? () => "continue" as const
         : (ctx: CommandExecutionContext) => {
-            a.execute?.(ctx.editor)
+            a.execute?.({ editor: ctx.editor, worktrees })
           },
       mutatesState: a.id === "add-worktree",
       shortcut: a.shortcut,

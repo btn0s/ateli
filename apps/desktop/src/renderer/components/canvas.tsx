@@ -29,6 +29,7 @@ import {
   WorktreeIndexProvider,
   useRepoPath,
   useWorktrees,
+  type WorktreeIndexEntry,
 } from "@/contexts/worktree-index-context"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { cwdUnderRemovedWorktree } from "@/lib/terminal-worktree-title"
@@ -100,21 +101,23 @@ const toolButtonActiveClass =
 function runToolAction(
   action: ToolAction,
   editor: ReturnType<typeof useEditor>,
+  worktrees: WorktreeIndexEntry[],
   palette: PaletteController,
 ) {
   if (action.openPaletteRoute) {
     palette.openRoute(action.openPaletteRoute)
     return
   }
-  action.execute?.(editor)
+  action.execute?.({ editor, worktrees })
 }
 
 const CustomToolbar = track(() => {
   const editor = useEditor()
   const palette = usePaletteController()
+  const worktrees = useWorktrees()
   const tools = useTools()
   const currentToolId = editor.getCurrentToolId()
-  const customActions = getToolbarActions()
+  const customActions = getToolbarActions({ editor, worktrees })
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans antialiased">
@@ -150,7 +153,7 @@ const CustomToolbar = track(() => {
               <button
                 key={action.id}
                 className={toolButtonClass}
-                onClick={() => runToolAction(action, editor, palette)}
+                onClick={() => runToolAction(action, editor, worktrees, palette)}
                 title={action.label}
               >
                 <action.icon className="size-4" />
@@ -166,7 +169,12 @@ const CustomToolbar = track(() => {
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
   const palette = usePaletteController()
-  const customActions = getContextMenuActions()
+  const worktrees = useWorktrees()
+  const customActions = useValue(
+    "custom-context-menu-actions",
+    () => getContextMenuActions({ editor, worktrees }),
+    [editor, worktrees]
+  )
   const { requestKill, dialog } = useTerminalKillConfirmation()
   const selectedTerminal = useValue(
     "terminal-context-menu-kill-action",
@@ -207,7 +215,7 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
                 label={action.label as any}
                 icon={action.tldrawIcon as any}
                 readonlyOk
-                onSelect={() => runToolAction(action, editor, palette)}
+                onSelect={() => runToolAction(action, editor, worktrees, palette)}
               />
             ))}
           </TldrawUiMenuGroup>
