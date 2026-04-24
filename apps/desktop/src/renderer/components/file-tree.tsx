@@ -26,21 +26,13 @@ import {
   SidebarTabButton,
   SidebarTabStrip,
 } from "@/components/sidebar-tab-button"
-import {
-  SidebarTerminalTabs,
-  type SidebarLowerMainTab,
-} from "@/components/sidebar-terminal-stack"
+import { SidebarScriptRunner } from "@/components/sidebar-script-runner"
 import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
 import { collectExpandedDirectoryPaths } from "@/lib/pierre-tree-expanded"
 import { SIDEBAR_PIERRE_TREE_STYLE } from "@/lib/sidebar-pierre-tree-style"
 import { ChangesCommitPanel } from "@/components/changes-commit-panel"
 
 type FilesPanelTab = "files" | "changes"
-type SidebarTerminalId = string
-type SidebarTerminalState = {
-  terminalIds: SidebarTerminalId[]
-  activeMain: SidebarLowerMainTab
-}
 
 type GitChangesOverview = Awaited<ReturnType<typeof window.electron.git.status>>
 
@@ -398,14 +390,6 @@ export const FileTree = track(function FileTree() {
   const worktrees = useWorktrees()
   const { activeTab, openDiffTab } = useDiffPreviewTabs()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
-  const [sidebarTerminalState, setSidebarTerminalState] =
-    useState<SidebarTerminalState>(() => {
-      const id = crypto.randomUUID()
-      return {
-        terminalIds: [id],
-        activeMain: { kind: "terminal", id },
-      }
-    })
   const [gitOverview, setGitOverview] = useState<GitChangesOverview | null>(
     null
   )
@@ -751,49 +735,6 @@ export const FileTree = track(function FileTree() {
     setReloadSeq((s) => s + 1)
   }, [refreshGitOverview])
 
-  const addSidebarTerminal = useCallback(() => {
-    setSidebarTerminalState((t) => {
-      const id = crypto.randomUUID()
-      return {
-        terminalIds: [...t.terminalIds, id],
-        activeMain: { kind: "terminal", id },
-      }
-    })
-  }, [])
-
-  const removeSidebarTerminal = useCallback((id: string) => {
-    setSidebarTerminalState((t) => {
-      if (t.terminalIds.length === 1 && t.terminalIds[0] === id) {
-        const newId = crypto.randomUUID()
-        const nextActive: SidebarLowerMainTab =
-          t.activeMain.kind === "terminal" && t.activeMain.id === id
-            ? { kind: "terminal", id: newId }
-            : t.activeMain
-        return { terminalIds: [newId], activeMain: nextActive }
-      }
-      const idx = t.terminalIds.indexOf(id)
-      if (idx < 0) return t
-      const terminalIds = t.terminalIds.filter((x) => x !== id)
-      let activeMain = t.activeMain
-      if (t.activeMain.kind === "terminal" && t.activeMain.id === id) {
-        activeMain = {
-          kind: "terminal",
-          id: terminalIds[Math.min(idx, terminalIds.length - 1)]!,
-        }
-      }
-      return { terminalIds, activeMain }
-    })
-  }, [])
-
-  const selectSidebarLowerTab = useCallback((next: SidebarLowerMainTab) => {
-    setSidebarTerminalState((t) => {
-      if (next.kind === "terminal" && !t.terminalIds.includes(next.id)) {
-        return t
-      }
-      return { ...t, activeMain: next }
-    })
-  }, [])
-
   if (!repoPath) return null
 
   const workingTitle =
@@ -936,15 +877,7 @@ export const FileTree = track(function FileTree() {
             )}
           </Sidebar.Section>
           <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden">
-            <SidebarTerminalTabs
-              cwd={normalizeFsRoot(repoPath)}
-              terminalIds={sidebarTerminalState.terminalIds}
-              activeMain={sidebarTerminalState.activeMain}
-              onSelectMain={selectSidebarLowerTab}
-              onCloseTerminal={removeSidebarTerminal}
-              onSessionEnded={removeSidebarTerminal}
-              onAddTab={addSidebarTerminal}
-            />
+            <SidebarScriptRunner cwd={filesRootPath} />
           </div>
         </div>
       </Sidebar.Root>

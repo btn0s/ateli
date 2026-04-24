@@ -33,6 +33,7 @@ declare module "tldraw" {
       h: number
       sessionId?: string
       cwd?: string
+      initialCommand?: string
     }
   }
 }
@@ -43,6 +44,7 @@ const terminalShapeVersions = createShapePropsMigrationIds(
   TERMINAL_SHAPE_TYPE,
   {
     RenameSidecarSessionId: 1,
+    AddInitialCommand: 2,
   }
 )
 
@@ -61,6 +63,13 @@ const terminalShapeMigrations = createShapePropsMigrationSequence({
           props.sidecarSessionId = props.sessionId
         }
         delete props.sessionId
+      },
+    },
+    {
+      id: terminalShapeVersions.AddInitialCommand,
+      up: (_props: { initialCommand?: string }) => {},
+      down: (props: { initialCommand?: string }) => {
+        delete props.initialCommand
       },
     },
   ],
@@ -170,9 +179,12 @@ function TerminalComponent({
       sessions.resize(sessionId, cols, rows)
     }
 
+    const initialCommand = shape.props.initialCommand
+
     ;(async () => {
       try {
         let sessionId: string | null = null
+        let sessionIsBrandNew = false
         if (existingSessionId) {
           try {
             const { cols, rows } = getTerminalSize(term)
@@ -206,6 +218,7 @@ function TerminalComponent({
             rows,
           })
           sessionId = session.sessionId
+          sessionIsBrandNew = true
         }
 
         if (!sessionId) return
@@ -215,15 +228,31 @@ function TerminalComponent({
           return
         }
 
-        if (shape.props.sessionId !== sessionId) {
+        const shouldRunInitialCommand = Boolean(
+          sessionIsBrandNew && initialCommand
+        )
+        const nextSessionId =
+          shape.props.sessionId !== sessionId ? sessionId : undefined
+        if (nextSessionId !== undefined || shouldRunInitialCommand) {
           editor.updateShape<TerminalShape>({
             id: shapeId,
             type: TERMINAL_SHAPE_TYPE,
-            props: { sessionId },
+            props: {
+              ...(nextSessionId !== undefined
+                ? { sessionId: nextSessionId }
+                : {}),
+              ...(shouldRunInitialCommand
+                ? { initialCommand: undefined }
+                : {}),
+            },
           })
         }
 
         attachSession(sessionId)
+
+        if (shouldRunInitialCommand) {
+          sessions.write(sessionId, `${initialCommand}\n`)
+        }
       } catch (err: unknown) {
         term.write(`\r\nFailed to create terminal: ${err}\r\n`)
       }
@@ -357,6 +386,7 @@ export class TerminalShapeUtil extends BaseBoxShapeUtil<TerminalShape> {
     h: T.number,
     sessionId: T.string.optional(),
     cwd: T.string.optional(),
+    initialCommand: T.string.optional(),
   }
   static override migrations = terminalShapeMigrations
 

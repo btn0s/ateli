@@ -50,6 +50,10 @@ interface Window {
         entries: { name: string; path: string; isDirectory: boolean }[]
         repoRoot: string | null
       }>
+      readPackageJsonScripts: (dirPath: string) => Promise<{
+        scripts: { name: string; command: string }[]
+        packageName: string | null
+      } | null>
       openPath: (filePath: string) => Promise<void>
       watchRoot: (rootPath: string) => Promise<void>
       unwatchRoot: (rootPath: string) => void
