@@ -5,7 +5,7 @@ import { Compass, ExternalLink, FileCode2, X } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
 import { SidebarTabButton } from "@/components/sidebar-tab-button"
-import { getRepoPath } from "@/lib/default-actions"
+import { useRepoPath } from "@/contexts/worktree-index-context"
 import { normalizeFsRoot } from "@/lib/worktree-files-root"
 import {
   useDiffPreviewTabs,
@@ -53,7 +53,7 @@ function splitPath(path: string) {
 }
 
 function DiffPreviewPane({ tab }: { tab: DiffPreviewTab }) {
-  const repoPath = getRepoPath()
+  const repoPath = useRepoPath()
   const [patch, setPatch] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)

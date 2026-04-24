@@ -14,8 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
-import { getRepoPath } from "@/lib/default-actions"
-import { useWorktrees } from "@/contexts/worktree-index-context"
+import { useRepoPath, useWorktrees } from "@/contexts/worktree-index-context"
 import {
   normalizeFsRoot,
   resolveFilesRootFromCwd,
@@ -400,7 +399,7 @@ function ChangesList({
 
 export const FileTree = track(function FileTree() {
   const editor = useEditor()
-  const repoPath = getRepoPath()
+  const repoPath = useRepoPath()
   const worktrees = useWorktrees()
   const { activeTab, openDiffTab } = useDiffPreviewTabs()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")

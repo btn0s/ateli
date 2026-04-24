@@ -1,21 +1,23 @@
 import { GitBranch, GitPullRequest, LayoutList } from "lucide-react"
-import { getRepoPath, randomAteliWorktreeBranchName } from "@/lib/default-actions"
+import { randomAteliWorktreeBranchName } from "@/lib/default-actions"
 import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
 import { getDefaultWorktreeStartRef } from "../worktree-entries"
 import type { CommandDefinition } from "../types"
 
 type Env = {
   onUnavailable: (message: string) => void
+  repoPath: string
   worktrees: WorktreeIndexEntry[]
 }
 
 /**
- * Step 2 for “New Worktree”: main / Linear (stub) / branch·PR (stub).
+ * Step 2 for "New Worktree": main / Linear (stub) / branch·PR (stub).
  */
 export function createNewWorktreeSourceCommands(
   env: Env,
 ): CommandDefinition[] {
-  if (!getRepoPath()) {
+  const { repoPath } = env
+  if (!repoPath) {
     return []
   }
 
@@ -33,19 +35,17 @@ export function createNewWorktreeSourceCommands(
       "worktree",
     ],
     group: "worktree" as const,
-    contextBadge: "Git",
     emptyQuerySection: "suggested" as const,
     when: () => true,
     mutatesState: true,
     run: async () => {
-      const repo = getRepoPath()
-      if (!repo) {
+      if (!repoPath) {
         env.onUnavailable("No repository is open for this worktree action.")
         return
       }
       const branch = randomAteliWorktreeBranchName()
       const startPoint = getDefaultWorktreeStartRef(env.worktrees)
-      await window.electron.worktree.create(repo, branch, {
+      await window.electron.worktree.create(repoPath, branch, {
         startPoint,
       })
     },
@@ -62,7 +62,6 @@ export function createNewWorktreeSourceCommands(
       "task",
     ],
     group: "suggested" as const,
-    contextBadge: "Soon",
     emptyQuerySection: "suggested" as const,
     when: () => true,
     disabled: true,
@@ -80,7 +79,6 @@ export function createNewWorktreeSourceCommands(
       "remote",
     ],
     group: "suggested" as const,
-    contextBadge: "Soon",
     emptyQuerySection: "suggested" as const,
     when: () => true,
     disabled: true,

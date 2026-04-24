@@ -68,11 +68,21 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  leading,
+  trailing,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & {
+  leading?: React.ReactNode
+  trailing?: React.ReactNode
+}) {
   return (
     <div data-slot="command-input-wrapper" className="ateli-surface-input-stripe pb-0">
       <InputGroup className="ateli-skeuo-input-dish h-9 min-h-9 rounded-md border border-border/15 bg-input/20 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
+        <InputGroupAddon align="inline-start">
+          {leading ?? (
+            <SearchIcon className="size-4 shrink-0 text-muted-foreground/55" />
+          )}
+        </InputGroupAddon>
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
@@ -81,9 +91,11 @@ function CommandInput({
           )}
           {...props}
         />
-        <InputGroupAddon>
-          <SearchIcon className="size-4 shrink-0 text-muted-foreground/55" />
-        </InputGroupAddon>
+        {trailing ? (
+          <InputGroupAddon align="inline-end">
+            {trailing}
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
     </div>
   )
