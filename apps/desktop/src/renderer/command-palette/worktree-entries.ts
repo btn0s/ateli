@@ -20,3 +20,35 @@ export function buildWorktreeListForPalette(
     ...worktrees.filter((w) => !w.isMain),
   ]
 }
+
+/** When adding a terminal, we always need at least the main checkout when a repo is open. */
+export function buildNewTerminalWorktreeRows(
+  repoPath: string,
+  worktrees: WorktreeIndexEntry[],
+): WorktreeIndexEntry[] {
+  if (worktrees.length === 0) {
+    return [
+      {
+        id: "",
+        path: repoPath,
+        branch: "main",
+        head: "",
+        isMain: true,
+        createdAt: "",
+        repoPath,
+      },
+    ]
+  }
+  return buildWorktreeListForPalette(repoPath, worktrees)
+}
+
+/** Branch ref to use as `git worktree` start (main checkout / default). */
+export function getDefaultWorktreeStartRef(
+  worktrees: WorktreeIndexEntry[],
+): string {
+  const main = worktrees.find((w) => w.isMain)
+  if (main?.branch) {
+    return main.branch
+  }
+  return "main"
+}

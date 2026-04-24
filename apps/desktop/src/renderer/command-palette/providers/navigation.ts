@@ -65,20 +65,9 @@ export function createNavigationCommands(env: NavEnv): CommandDefinition[] {
   const wts: CommandDefinition[] = entries.map((wt) => {
     const key = wt.isMain ? (repoPath ?? "main") : wt.path
     const label = wt.isMain ? "main" : wt.branch
-    const inWt = repoPath
-      ? terminalsBelongingToWorktree(
-          repoPath,
-          worktrees,
-          wt,
-          terminalShapes,
-        )
-      : []
-    const suffix =
-      inWt.length === 0 ? " · add terminal" : ` · ${inWt.length} terminals`
     return {
       id: `worktree-focus:${key}`,
       title: label,
-      subtitle: `Worktree${suffix}`,
       icon: GitBranch,
       keywords: [label, wt.branch, wt.path, "worktree", "branch"],
       group: "worktree",
@@ -107,7 +96,6 @@ export function createNavigationCommands(env: NavEnv): CommandDefinition[] {
     return {
       id: `terminal-focus:${id}`,
       title,
-      subtitle: "Terminal on canvas",
       icon: TerminalSquare,
       keywords: [title, cwd ?? "", "terminal", "console"],
       group: "terminal",
@@ -135,7 +123,6 @@ export function createNavigationCommands(env: NavEnv): CommandDefinition[] {
     return {
       id: `frame-focus:${id}`,
       title: name,
-      subtitle: "Frame on canvas",
       icon: PanelsTopLeft,
       keywords: [name, "frame", "artboard"],
       group: "navigation",

@@ -29,6 +29,8 @@ import {
 } from "@/components/sidebar-tab-button"
 import { SidebarTerminalTabs } from "@/components/sidebar-terminal-stack"
 import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
+import { collectExpandedDirectoryPaths } from "@/lib/pierre-tree-expanded"
+import { SIDEBAR_PIERRE_TREE_STYLE } from "@/lib/sidebar-pierre-tree-style"
 
 type FilesPanelTab = "files" | "changes"
 type SidebarTerminalId = string
@@ -121,19 +123,6 @@ function toTreePath(rootPath: string, entry: DirEntry): string {
     ? normalizedPath.slice(normalizedRoot.length + 1)
     : entry.name
   return entry.isDirectory ? `${relative}/` : relative
-}
-
-function getExpandedDirectoryPaths(
-  model: PierreFileTreeModel,
-  directoryPaths: readonly string[]
-): string[] {
-  const expanded: string[] = []
-  for (const path of directoryPaths) {
-    const item = model.getItem(path)
-    if (!item || !("isExpanded" in item)) continue
-    if (item.isExpanded()) expanded.push(path)
-  }
-  return expanded
 }
 
 async function collectTreePaths(rootPath: string): Promise<{
@@ -417,7 +406,7 @@ export const FileTree = track(function FileTree() {
       setTreeError(null)
 
       try {
-        const expandedPaths = getExpandedDirectoryPaths(
+        const expandedPaths = collectExpandedDirectoryPaths(
           treeModel,
           treeDirectoryPathsRef.current
         )
@@ -553,7 +542,7 @@ export const FileTree = track(function FileTree() {
         const allPaths = [...nextMap.keys()].sort((x, y) =>
           x.localeCompare(y, undefined, { sensitivity: "base" })
         )
-        const expandedPaths = getExpandedDirectoryPaths(
+        const expandedPaths = collectExpandedDirectoryPaths(
           treeModel,
           treeDirectoryPathsRef.current
         )
@@ -706,16 +695,6 @@ export const FileTree = track(function FileTree() {
     !(gitOverview && !gitOverview.error && gitOverview.branch)
   )
 
-  const treeStyle = {
-    height: "100%",
-    width: "100%",
-    "--trees-bg-override": "transparent",
-    "--trees-border-color-override": "transparent",
-    "--trees-fg-override": "hsl(var(--foreground))",
-    "--trees-padding-inline-override": "8px",
-    "--trees-selected-bg-override": "hsl(var(--accent))",
-  } as React.CSSProperties
-
   const safeArea = (
     <Sidebar.SectionHeader className="h-full">
       {/* The outer titlebar (z-[999]) is the drag region. Interactive
@@ -811,7 +790,7 @@ export const FileTree = track(function FileTree() {
                   <PierreFileTree
                     aria-label="Repository files"
                     model={treeModel}
-                    style={treeStyle}
+                    style={SIDEBAR_PIERRE_TREE_STYLE}
                   />
                 </div>
               )

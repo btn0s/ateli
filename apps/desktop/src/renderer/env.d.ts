@@ -96,7 +96,8 @@ interface Window {
       >
       create: (
         repoPath: string,
-        branch: string
+        branch: string,
+        options?: { startPoint?: string }
       ) => Promise<{
         id: string
         path: string

@@ -58,6 +58,11 @@ function fuzzyAccepts(q: string, s: string): boolean {
 }
 
 function compareCommands(a: ScoredCommand, b: ScoredCommand): number {
+  const aOff = a.def.disabled ? 1 : 0
+  const bOff = b.def.disabled ? 1 : 0
+  if (aOff !== bOff) {
+    return aOff - bOff
+  }
   const ta =
     a.textScore * 1_000_000 +
     a.contextScore * 10_000 +

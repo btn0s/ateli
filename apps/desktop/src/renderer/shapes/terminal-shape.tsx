@@ -21,6 +21,7 @@ import {
 } from "@/components/terminal-kill-dialog"
 import { useTerminalSessionStore } from "@/contexts/terminal-session-store"
 import { useWorktrees } from "@/contexts/worktree-index-context"
+import { deleteCanvasShapesAsSync } from "@/lib/canvas-delete-shapes"
 import { terminalTitleFromCwd } from "@/lib/terminal-worktree-title"
 
 const TERMINAL_SHAPE_TYPE = "terminal" as const
@@ -139,12 +140,7 @@ function TerminalComponent({
           activeSessionIdRef.current = null
 
           const closeShape = () => {
-            editor.updateShape<TerminalShape>({
-              id: shapeId,
-              type: TERMINAL_SHAPE_TYPE,
-              props: { sessionId: undefined },
-            })
-            editor.deleteShape(shapeId)
+            deleteCanvasShapesAsSync(editor, [shapeId])
           }
 
           if (killed) {

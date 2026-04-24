@@ -62,7 +62,13 @@ export type CommandDefinition = {
   when: (ctx: CommandExecutionContext) => boolean
   /** Optional contextual score boost for ranking (0–1). */
   score?: (ctx: CommandExecutionContext) => number
-  run: (ctx: CommandExecutionContext) => void | Promise<void>
+  /**
+   * Return `"continue"` to keep the palette open and advance a multi-step
+   * flow (e.g. new terminal → pick folder). Default success closes the sheet.
+   */
+  run: (
+    ctx: CommandExecutionContext,
+  ) => void | "continue" | Promise<void | "continue">
   shortcut?: string
   mutatesState?: boolean
   /** Reserved for a later confirm dialog pass. */
@@ -72,6 +78,10 @@ export type CommandDefinition = {
    * Right-side group label in search mode; defaults from `group` if omitted.
    */
   contextBadge?: string
+  /**
+   * When true, the row is non-interactive and sorts after available commands.
+   */
+  disabled?: boolean
 }
 
 export type ScoredCommand = {

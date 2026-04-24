@@ -1,5 +1,7 @@
 import type { Editor } from "tldraw"
 import { TerminalSquare, GitBranch } from "lucide-react"
+import { openNewTerminalWorktreePicker } from "../command-palette/new-terminal-flow"
+import { openNewWorktreeSourcePicker } from "../command-palette/new-worktree-flow"
 import { registerAction } from "./tool-registry"
 
 let _repoPath = ""
@@ -24,13 +26,15 @@ export function addTerminalAtCenter(editor: Editor, props?: Record<string, unkno
 
 registerAction({
   id: "add-terminal",
-  label: "Add Terminal",
+  label: "New terminal",
   icon: TerminalSquare,
   tldrawIcon: "code",
   showInToolbar: true,
   showInCommandMenu: true,
   showInContextMenu: true,
-  execute: addTerminalAtCenter,
+  execute: (_editor: Editor) => {
+    openNewTerminalWorktreePicker()
+  },
 })
 
 const adjectives = [
@@ -42,7 +46,7 @@ const nouns = [
   "cliff", "marsh", "field", "crest", "shore", "dune", "peak",
 ]
 
-function generateBranchName(): string {
+export function randomAteliWorktreeBranchName(): string {
   const adj = adjectives[Math.floor(Math.random() * adjectives.length)]
   const noun = nouns[Math.floor(Math.random() * nouns.length)]
   const suffix = Math.floor(Math.random() * 100)
@@ -51,17 +55,13 @@ function generateBranchName(): string {
 
 registerAction({
   id: "add-worktree",
-  label: "New Worktree",
+  label: "New Git worktree",
   icon: GitBranch,
   tldrawIcon: "plus",
   showInToolbar: true,
   showInCommandMenu: true,
   showInContextMenu: true,
-  execute: async () => {
-    if (!_repoPath) {
-      throw new Error("No repository is open for this action.")
-    }
-    const branch = generateBranchName()
-    await window.electron.worktree.create(_repoPath, branch)
+  execute: (_editor: Editor) => {
+    openNewWorktreeSourcePicker()
   },
 })

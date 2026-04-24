@@ -12,6 +12,8 @@ import {
   CommandShortcut,
 } from "@workspace/ui/components/command"
 import { useWorktrees } from "@/contexts/worktree-index-context"
+import { registerNewTerminalWorktreeOpener } from "./new-terminal-flow"
+import { registerNewWorktreeSourceOpener } from "./new-worktree-flow"
 import { useCommandPalette } from "./use-command-palette"
 import type { CommandDefinition } from "./types"
 
@@ -24,7 +26,13 @@ function commandRow(
     <CommandItem
       key={def.id}
       value={value}
-      onSelect={() => onSelect(def)}
+      disabled={def.disabled}
+      onSelect={() => {
+        if (def.disabled) {
+          return
+        }
+        onSelect(def)
+      }}
     >
       <def.icon className="size-4 shrink-0 opacity-80" />
       <span className="min-w-0 flex-1 text-left">
@@ -38,7 +46,7 @@ function commandRow(
       {def.contextBadge ? (
         <Badge
           variant="secondary"
-          className="h-4 shrink-0 text-[0.5rem] font-medium uppercase"
+          className="h-5 min-w-0 max-w-[5.5rem] shrink-0 truncate text-[0.625rem] font-medium uppercase leading-none"
         >
           {def.contextBadge}
         </Badge>
@@ -51,10 +59,11 @@ function commandRow(
 function searchResultsList(
   list: CommandDefinition[],
   onSelect: (d: CommandDefinition) => void,
+  groupHeading: string,
 ) {
   if (list.length === 0) return null
   return (
-    <CommandGroup heading="Results">
+    <CommandGroup heading={groupHeading}>
       {list.map((def) => commandRow(def, onSelect))}
     </CommandGroup>
   )
@@ -81,10 +90,35 @@ export const CommandPalette = track(function CommandPalette() {
   const editor = useEditor()
   const worktrees = useWorktrees()
   const [open, setOpen] = useState(false)
-  const { search, setSearch, setError, run, error, display } = useCommandPalette(
-    editor,
-    worktrees,
-  )
+  const {
+    search,
+    setSearch,
+    setError,
+    run,
+    error,
+    display,
+    paletteSubflow,
+    setPaletteSubflow,
+    clearPaletteSubflow,
+  } = useCommandPalette(editor, worktrees)
+
+  useEffect(() => {
+    return registerNewTerminalWorktreeOpener(() => {
+      setOpen(true)
+      setPaletteSubflow("new-terminal")
+      setSearch("")
+      setError(null)
+    })
+  }, [setError, setPaletteSubflow, setSearch])
+
+  useEffect(() => {
+    return registerNewWorktreeSourceOpener(() => {
+      setOpen(true)
+      setPaletteSubflow("new-worktree")
+      setSearch("")
+      setError(null)
+    })
+  }, [setError, setPaletteSubflow, setSearch])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -95,33 +129,41 @@ export const CommandPalette = track(function CommandPalette() {
           if (wasOpen) return false
           setSearch("")
           setError(null)
+          clearPaletteSubflow()
           return true
         })
       }
       if (e.key === "Escape" && open) {
         e.preventDefault()
+        if (paletteSubflow) {
+          clearPaletteSubflow()
+          setSearch("")
+          return
+        }
         setOpen(false)
         setSearch("")
         setError(null)
+        clearPaletteSubflow()
       }
     }
     window.addEventListener("keydown", onKeyDown, { capture: true })
     return () =>
       window.removeEventListener("keydown", onKeyDown, { capture: true })
-  }, [open, setError, setSearch])
+  }, [open, paletteSubflow, clearPaletteSubflow, setError, setSearch])
 
   const close = useCallback(() => {
     setOpen(false)
     setSearch("")
     setError(null)
-  }, [setError, setSearch])
+    clearPaletteSubflow()
+  }, [clearPaletteSubflow, setError, setSearch])
 
   const selectCommand = useCallback(
     (def: CommandDefinition) => {
       void (async () => {
         setError(null)
-        const ok = await run(def)
-        if (ok) close()
+        const outcome = await run(def)
+        if (outcome === true) close()
       })()
     },
     [close, run, setError],
@@ -138,7 +180,7 @@ export const CommandPalette = track(function CommandPalette() {
         )
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-[400] flex items-start justify-center pt-[20vh]">
+    <div className="pointer-events-auto absolute inset-0 z-[400] flex items-start justify-center pt-[20vh] antialiased">
       <div
         className="absolute inset-0 bg-black/50"
         onClick={() => close()}
@@ -146,7 +188,7 @@ export const CommandPalette = track(function CommandPalette() {
       />
       <Command
         shouldFilter={false}
-        className="relative h-fit w-full max-w-md border border-border bg-background shadow-2xl"
+        className="relative z-[1] h-fit w-full max-w-md overflow-hidden rounded-lg bg-background text-popover-foreground ring-1 ring-border/50 shadow-2xl"
         loop
       >
         <CommandInput
@@ -156,16 +198,30 @@ export const CommandPalette = track(function CommandPalette() {
             setError(null)
           }}
           autoFocus
-          placeholder="Run a command, jump to a worktree, terminal, or frame…"
+          placeholder={
+            paletteSubflow === "new-terminal"
+              ? "Filter folders, or find “new worktree” to create one…"
+              : paletteSubflow === "new-worktree"
+                ? "Choose how to start the new worktree…"
+                : "Run a command, jump to a worktree, terminal, or frame…"
+          }
         />
         <CommandList className="max-h-80">
           {error ? (
-            <div className="border-b px-2 py-2 text-center text-xs text-amber-600">
+            <div className="border-b border-border/50 px-2.5 py-2 text-center text-pretty text-xs text-amber-600">
               {error}
             </div>
           ) : null}
           {display.mode === "search" ? (
-            searchResultsList(display.list, selectCommand)
+            searchResultsList(
+              display.list,
+              selectCommand,
+              paletteSubflow === "new-terminal"
+                ? "Working folder"
+                : paletteSubflow === "new-worktree"
+                  ? "Start from"
+                  : "Results",
+            )
           ) : (
             emptyQuerySections(display.sections, selectCommand)
           )}

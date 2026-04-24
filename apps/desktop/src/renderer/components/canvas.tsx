@@ -42,10 +42,8 @@ import { FileTree } from "./file-tree"
 import { LeftSidebarTabs } from "./left-sidebar-tabs"
 import { useTerminalKillConfirmation } from "./terminal-kill-dialog"
 import { Button } from "@workspace/ui/components/button"
-import {
-  ZOOM_ANIMATION,
-  fitPageBoundsInViewport,
-} from "@/lib/canvas-camera"
+import { ZOOM_ANIMATION } from "@/lib/canvas-camera"
+import { deleteCanvasShapesAsSync } from "@/lib/canvas-delete-shapes"
 import {
   Dialog,
   DialogContent,
@@ -82,11 +80,6 @@ const TOOLBAR_TOOL_IDS = [
 const ZoomControls = track(() => {
   const editor = useEditor()
   const zoom = useValue("canvas-zoom-level", () => editor.getZoomLevel(), [editor])
-  const hasSelection = useValue(
-    "canvas-has-selection",
-    () => editor.getSelectedShapeIds().length > 0,
-    [editor]
-  )
 
   const zoomSteps = editor.getCameraOptions().zoomSteps
   const minZoom = zoomSteps[0] ?? 0.1
@@ -95,11 +88,18 @@ const ZoomControls = track(() => {
   const zoomPercent = Math.round(clampedZoom * 100)
   const isAtMinZoom = clampedZoom <= minZoom + 0.001
   const isAtMaxZoom = clampedZoom >= maxZoom - 0.001
-  const laneRef = useRef<HTMLDivElement>(null)
 
   function getLaneScreenRect() {
-    const rect = laneRef.current?.getBoundingClientRect()
-    if (rect && rect.width > 0 && rect.height > 0) return rect
+    const lane = document.querySelector("[data-center-lane]")
+    const rect = lane?.getBoundingClientRect()
+    if (rect && rect.width > 0 && rect.height > 0) {
+      return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      }
+    }
 
     const viewport = editor.getViewportScreenBounds()
     return {
@@ -126,86 +126,43 @@ const ZoomControls = track(() => {
     return point
   }
 
-  function fitBoundsToLane(
-    bounds: { x: number; y: number; w: number; h: number },
-    fitOpts?: { maxTargetZoom?: number; zoomOutFactor?: number },
-  ) {
-    const r = getLaneScreenRect()
-    const screenRect = { x: r.left, y: r.top, w: r.width, h: r.height }
-    fitPageBoundsInViewport(editor, bounds, { ...fitOpts, screenRect })
-  }
-
   return (
-    <div className="pointer-events-none absolute inset-0" ref={laneRef}>
-      <div className="absolute bottom-0 left-0 m-3 flex items-center gap-2">
-        <div className="pointer-events-auto inline-flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
-          <button
-            className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={isAtMinZoom}
-            onClick={() =>
-              editor.zoomOut(getLaneScreenPoint(), {
-                animation: ZOOM_ANIMATION,
-              })
-            }
-            title="Zoom out"
-          >
-            -
-          </button>
-          <button
-            className="min-w-12 rounded-sm px-2 py-1 text-center text-xs font-medium tabular-nums text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
-            onClick={() =>
-              editor.resetZoom(getLaneScreenPoint(), {
-                animation: ZOOM_ANIMATION,
-              })
-            }
-            title="Reset zoom to 100%"
-          >
-            {zoomPercent}%
-          </button>
-          <button
-            className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={isAtMaxZoom}
-            onClick={() =>
-              editor.zoomIn(getLaneScreenPoint(), {
-                animation: ZOOM_ANIMATION,
-              })
-            }
-            title="Zoom in"
-          >
-            +
-          </button>
-        </div>
-
-        <div className="pointer-events-auto inline-flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
-          <button
-            className="rounded-sm px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            onClick={() => {
-              const bounds = editor.getCurrentPageBounds()
-              if (!bounds) return
-              fitBoundsToLane(bounds)
-            }}
-            title="Zoom to fit"
-          >
-            Fit
-          </button>
-          <button
-            className="rounded-sm px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!hasSelection}
-            onClick={() => {
-              const bounds = editor.getSelectionPageBounds()
-              if (!bounds) return
-              fitBoundsToLane(bounds, { maxTargetZoom: 1, zoomOutFactor: 0.9 })
-            }}
-            title={
-              hasSelection
-                ? "Zoom to selection"
-                : "Select shapes to zoom to selection"
-            }
-          >
-            Sel
-          </button>
-        </div>
-      </div>
+    <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
+        <button
+          className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={isAtMinZoom}
+          onClick={() =>
+            editor.zoomOut(getLaneScreenPoint(), {
+              animation: ZOOM_ANIMATION,
+            })
+          }
+          title="Zoom out"
+        >
+          -
+        </button>
+        <button
+          className="min-w-12 rounded-sm px-2 py-1 text-center text-xs font-medium tabular-nums text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
+          onClick={() =>
+            editor.resetZoom(getLaneScreenPoint(), {
+              animation: ZOOM_ANIMATION,
+            })
+          }
+          title="Reset zoom to 100%"
+        >
+          {zoomPercent}%
+        </button>
+        <button
+          className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={isAtMaxZoom}
+          onClick={() =>
+            editor.zoomIn(getLaneScreenPoint(), {
+              animation: ZOOM_ANIMATION,
+            })
+          }
+          title="Zoom in"
+        >
+          +
+        </button>
     </div>
   )
 })
@@ -219,41 +176,44 @@ const CustomToolbar = track(() => {
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
       <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
-          {TOOLBAR_TOOL_IDS.map((id) => {
-            const tool = tools[id]
-            if (!tool) return null
-            const isActive = currentToolId === id
-            return (
+        <div className="pointer-events-auto flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
+            {TOOLBAR_TOOL_IDS.map((id) => {
+              const tool = tools[id]
+              if (!tool) return null
+              const isActive = currentToolId === id
+              return (
+                <button
+                  key={id}
+                  className={`flex size-8 items-center justify-center rounded-sm transition-colors ${
+                    isActive
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
+                  onClick={() => tool.onSelect("toolbar")}
+                  title={`${id}${tool.kbd ? ` (${tool.kbd.split(",")[0]})` : ""}`}
+                >
+                  <TldrawUiIcon
+                    icon={tool.icon as TLUiIconType}
+                    small
+                    label={id}
+                  />
+                </button>
+              )
+            })}
+            <div className="mx-0.5 h-5 w-px bg-border" />
+            {customActions.map((action) => (
               <button
-                key={id}
-                className={`flex size-8 items-center justify-center rounded-sm transition-colors ${
-                  isActive
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-                onClick={() => tool.onSelect("toolbar")}
-                title={`${id}${tool.kbd ? ` (${tool.kbd.split(",")[0]})` : ""}`}
+                key={action.id}
+                className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                onClick={() => action.execute(editor)}
+                title={action.label}
               >
-                <TldrawUiIcon
-                  icon={tool.icon as TLUiIconType}
-                  small
-                  label={id}
-                />
+                <action.icon className="size-4" />
               </button>
-            )
-          })}
-          <div className="mx-0.5 h-5 w-px bg-border" />
-          {customActions.map((action) => (
-            <button
-              key={action.id}
-              className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              onClick={() => action.execute(editor)}
-              title={action.label}
-            >
-              <action.icon className="size-4" />
-            </button>
-          ))}
+            ))}
+          </div>
+          <ZoomControls />
         </div>
       </div>
     </div>
@@ -318,7 +278,6 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
 function TerminalDeleteDialog() {
   const editor = useEditor()
   const [pendingTerminalIds, setPendingTerminalIds] = useState<TLShapeId[]>([])
-  const allowDeleteRef = useRef<Set<TLShapeId>>(new Set())
 
   useEffect(() => {
     return editor.sideEffects.registerBeforeDeleteHandler(
@@ -328,10 +287,6 @@ function TerminalDeleteDialog() {
         if (source !== "user") return
         if (!shape.props.sessionId) return
         const shapeId = shape.id as TLShapeId
-        if (allowDeleteRef.current.has(shapeId)) {
-          allowDeleteRef.current.delete(shapeId)
-          return
-        }
 
         setPendingTerminalIds((prev) =>
           prev.includes(shapeId) ? prev : [...prev, shapeId]
@@ -351,18 +306,14 @@ function TerminalDeleteDialog() {
     const ids = pendingTerminalIds
     if (ids.length === 0) return
 
-    for (const id of ids) {
-      allowDeleteRef.current.add(id)
-    }
-
-    editor.deleteShapes(ids)
+    deleteCanvasShapesAsSync(editor, ids)
     setPendingTerminalIds([])
   }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
+      <DialogContent showCloseButton={false} className="gap-3">
+        <DialogHeader className="gap-1">
           <DialogTitle>Delete Terminal?</DialogTitle>
           <DialogDescription>
             {pendingTerminalIds.length > 1
@@ -373,9 +324,11 @@ function TerminalDeleteDialog() {
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>
             Cancel
+            <span className="ml-1 text-[11px] opacity-60 tabular-nums">Esc</span>
           </Button>
           <Button variant="destructive" onClick={onConfirmDelete}>
             Delete
+            <span className="ml-1 text-[11px] opacity-60 tabular-nums">⌘ ↩</span>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -395,7 +348,6 @@ const SidebarHudWithSelection = track(function SidebarHudWithSelection() {
     <SidebarHud
       left={<LeftSidebarTabs repoPath={getRepoPath()} />}
       center={<DiffPreviewTabs />}
-      centerOverlay={<ZoomControls />}
       right={hasCanvasSelection ? <FileTree /> : undefined}
     />
   )
@@ -605,9 +557,7 @@ function RpcBridge() {
               )
             )
             .map((s) => s.id as TLShapeId)
-          editor.store.mergeRemoteChanges(() => {
-            editor.deleteShapes(toRemove)
-          })
+          deleteCanvasShapesAsSync(editor, toRemove)
         }
       }
     )

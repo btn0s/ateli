@@ -203,12 +203,14 @@ ipcMain.handle("worktree:create", async (_event, payload) => {
   const r = assertRecord(payload, "worktree:create")
   const repoPath = expectString(r, "repoPath", "worktree:create")
   const branch = expectString(r, "branch", "worktree:create")
+  const startPoint = expectOptionalString(r, "startPoint")
   const wtPath = worktreePath(repoPath, branch)
   await addWorktree({
     repoPath,
     worktreePath: wtPath,
     branch,
     createBranch: true,
+    startPoint: startPoint ?? undefined,
   })
 
   const id = crypto.randomUUID().slice(0, 8)

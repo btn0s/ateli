@@ -97,8 +97,16 @@ contextBridge.exposeInMainWorld("electron", {
           repoPath: string
         }[]
       >,
-    create: (repoPath: string, branch: string) =>
-      ipcRenderer.invoke("worktree:create", { repoPath, branch }) as Promise<{
+    create: (
+      repoPath: string,
+      branch: string,
+      options?: { startPoint?: string },
+    ) =>
+      ipcRenderer.invoke("worktree:create", {
+        repoPath,
+        branch,
+        ...options,
+      }) as Promise<{
         id: string
         path: string
         branch: string

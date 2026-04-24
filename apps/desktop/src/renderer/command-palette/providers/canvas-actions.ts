@@ -18,7 +18,6 @@ export function createCanvasActionCommands(): CommandDefinition[] {
     {
       id: "canvas:zoom-fit",
       title: "Zoom to fit page",
-      subtitle: "Fit all content in the viewport",
       icon: Maximize2,
       keywords: ["fit", "zoom", "page", "view", "all"],
       group: "canvas",
@@ -37,7 +36,6 @@ export function createCanvasActionCommands(): CommandDefinition[] {
     {
       id: "canvas:zoom-selection",
       title: "Zoom to selection",
-      subtitle: "Cap zoom at 100% (same as canvas “Sel” control)",
       icon: Scan,
       keywords: ["selection", "sel", "zoom", "frame", "focus"],
       group: "canvas",
