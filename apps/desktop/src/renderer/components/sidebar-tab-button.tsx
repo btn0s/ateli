@@ -1,38 +1,54 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react"
+import {
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react"
 import { cn } from "@workspace/ui/lib/utils"
+
+/** Shared chip surface for `SidebarTabButton` and rare non-button tabs (e.g. tab + close). */
+export function sidebarTabChipClassName(
+  selected: boolean,
+  className?: string,
+) {
+  return cn(
+    "inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-[color,background-color,transform,box-shadow] duration-150 ease-out",
+    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+    selected
+      ? "ateli-skeuo-pill-inset bg-accent text-accent-foreground"
+      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground active:scale-[0.98]",
+    className,
+  )
+}
 
 /**
  * Small self-contained tab chip — used in both sidebars for panel switching.
  * Consistent vocabulary: h-7 ghost chip, bg-accent when selected.
  */
-export function SidebarTabButton({
-  selected,
-  children,
-  className,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  selected?: boolean
-  children: ReactNode
-}) {
+export const SidebarTabButton = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & {
+    selected?: boolean
+    children: ReactNode
+  }
+>(function SidebarTabButton(
+  { selected = false, children, className, type = "button", ...props },
+  ref,
+) {
   return (
     <button
-      type="button"
+      ref={ref}
+      type={type}
       role="tab"
       aria-selected={selected}
-      className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-[color,background-color,transform,box-shadow] duration-150 ease-out",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        selected
-          ? "ateli-skeuo-pill-inset bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground active:scale-[0.98]",
-        className,
-      )}
+      className={sidebarTabChipClassName(selected, className)}
       {...props}
     >
       {children}
     </button>
   )
-}
+})
+
+SidebarTabButton.displayName = "SidebarTabButton"
 
 /**
  * Shared container for a sidebar tab strip. Padding matches across both

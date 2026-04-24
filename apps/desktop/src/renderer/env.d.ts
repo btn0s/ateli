@@ -81,6 +81,26 @@ interface Window {
         patch: string | null
         error: string | null
       }>
+      commit: (request: {
+        repoPath: string
+        message: string
+        amend?: boolean
+      }) => Promise<{ ok: true } | { ok: false; error: string }>
+      push: (repoPath: string) => Promise<
+        { ok: true } | { ok: false; error: string }
+      >
+      generateCommitMessage: (repoPath: string) => Promise<{
+        message: string | null
+        error: string | null
+      }>
+      stagePaths: (
+        repoPath: string,
+        paths: string[]
+      ) => Promise<{ ok: true } | { ok: false; error: string }>
+      unstagePaths: (
+        repoPath: string,
+        paths: string[]
+      ) => Promise<{ ok: true } | { ok: false; error: string }>
     }
     worktree: {
       list: (repoPath: string) => Promise<

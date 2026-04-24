@@ -54,6 +54,23 @@ export function expectNumber(
   throw new Error(`Invalid ${label}: ${key} is required and must be a number`)
 }
 
+export function expectStringArray(
+  r: Record<string, unknown>,
+  key: string,
+  label: string
+): string[] {
+  const v = r[key]
+  if (!Array.isArray(v)) {
+    throw new Error(`Invalid ${label}: ${key} must be an array`)
+  }
+  for (let i = 0; i < v.length; i++) {
+    if (typeof v[i] !== "string") {
+      throw new Error(`Invalid ${label}: ${key}[${i}] must be a string`)
+    }
+  }
+  return v as string[]
+}
+
 export function expectBooleanKey(
   r: Record<string, unknown>,
   key: string

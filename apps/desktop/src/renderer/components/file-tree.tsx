@@ -5,7 +5,7 @@ import {
   type GitStatusEntry,
 } from "@pierre/trees"
 import { FileTree as PierreFileTree } from "@pierre/trees/react"
-import { MoreHorizontal } from "lucide-react"
+import { Check, Minus, MoreHorizontal, Square } from "lucide-react"
 import { track, useEditor } from "tldraw"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -27,16 +27,20 @@ import {
   SidebarTabButton,
   SidebarTabStrip,
 } from "@/components/sidebar-tab-button"
-import { SidebarTerminalTabs } from "@/components/sidebar-terminal-stack"
+import {
+  SidebarTerminalTabs,
+  type SidebarLowerMainTab,
+} from "@/components/sidebar-terminal-stack"
 import { workspaceIconButtonClass } from "@/components/sidebar-workspace-chrome"
 import { collectExpandedDirectoryPaths } from "@/lib/pierre-tree-expanded"
 import { SIDEBAR_PIERRE_TREE_STYLE } from "@/lib/sidebar-pierre-tree-style"
+import { ChangesCommitPanel } from "@/components/changes-commit-panel"
 
 type FilesPanelTab = "files" | "changes"
 type SidebarTerminalId = string
 type SidebarTerminalState = {
-  ids: SidebarTerminalId[]
-  activeId: SidebarTerminalId
+  terminalIds: SidebarTerminalId[]
+  activeMain: SidebarLowerMainTab
 }
 
 type GitChangesOverview = Awaited<ReturnType<typeof window.electron.git.status>>
@@ -56,6 +60,22 @@ function splitRepoPath(p: string): { dir: string; name: string } {
 function gitStatusTitle(indexStatus: string, workTreeStatus: string): string {
   const slot = (c: string) => (c === " " ? "unchanged" : c)
   return `Git: index ${slot(indexStatus)}, worktree ${slot(workTreeStatus)}`
+}
+
+function changeEntryStagingFlags(entry: GitChangeRow): {
+  hasStaged: boolean
+  hasUnstaged: boolean
+  fullyStaged: boolean
+  partial: boolean
+} {
+  const ix = entry.indexStatus
+  const wt = entry.workTreeStatus
+  const untracked = ix === "?" && wt === "?"
+  const hasStaged = !untracked && ix !== " "
+  const hasUnstaged = untracked || wt !== " "
+  const fullyStaged = hasStaged && !hasUnstaged
+  const partial = hasStaged && hasUnstaged
+  return { hasStaged, hasUnstaged, fullyStaged, partial }
 }
 
 type GitStatusBadge = {
@@ -239,24 +259,61 @@ function ChangeFileRow({
   entry,
   selected,
   onOpenDiff,
+  onStagePath,
+  onUnstagePath,
 }: {
   entry: GitChangeRow
   selected: boolean
   onOpenDiff: (entry: GitChangeRow) => void
+  onStagePath: (path: string) => void
+  onUnstagePath: (path: string) => void
 }) {
   const { dir, name } = splitRepoPath(entry.path)
   const badge = statusLetterBadge(entry.indexStatus, entry.workTreeStatus)
   const statusTitle = gitStatusTitle(entry.indexStatus, entry.workTreeStatus)
   const buttonTitle = `${entry.absPath}\n${statusTitle}`
   const badgeDescription = `${badge.label} — ${statusTitle}`
+  const { fullyStaged, partial } = changeEntryStagingFlags(entry)
+  const stageTitle = fullyStaged
+    ? "Unstage"
+    : partial
+      ? "Stage all changes for this file"
+      : "Stage"
 
   return (
     <div
       className={cn(
-        "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-sm py-0 pr-0 pl-1",
+        "grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-0.5 rounded-sm py-0 pr-0 pl-0",
         selected ? "bg-accent/70" : "hover:bg-accent"
       )}
     >
+      <button
+        type="button"
+        className={cn(
+          workspaceIconButtonClass,
+          "ateli-skeuo-input-dish size-7 shrink-0 rounded-md border border-border/20",
+          "bg-muted/12 text-muted-foreground",
+          "focus-visible:ring-1 focus-visible:ring-ring"
+        )}
+        title={stageTitle}
+        aria-label={stageTitle}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (fullyStaged) {
+            onUnstagePath(entry.path)
+          } else {
+            onStagePath(entry.path)
+          }
+        }}
+      >
+        {fullyStaged ? (
+          <Check className="size-3.5 text-primary" aria-hidden />
+        ) : partial ? (
+          <Minus className="size-3.5 opacity-90" aria-hidden />
+        ) : (
+          <Square className="size-3.5 opacity-50" aria-hidden />
+        )}
+      </button>
       <button
         type="button"
         className={cn(
@@ -297,11 +354,15 @@ function ChangesList({
   loading,
   selectedPath,
   onOpenDiff,
+  onStagePath,
+  onUnstagePath,
 }: {
   overview: GitChangesOverview | null
   loading: boolean
   selectedPath: string | null
   onOpenDiff: (entry: GitChangeRow) => void
+  onStagePath: (path: string) => void
+  onUnstagePath: (path: string) => void
 }) {
   if (loading && !overview) {
     return <p className={changesPanelHintClass}>Loading changes…</p>
@@ -329,6 +390,8 @@ function ChangesList({
           entry={e}
           selected={selectedPath === e.path}
           onOpenDiff={onOpenDiff}
+          onStagePath={onStagePath}
+          onUnstagePath={onUnstagePath}
         />
       ))}
     </div>
@@ -339,12 +402,15 @@ export const FileTree = track(function FileTree() {
   const editor = useEditor()
   const repoPath = getRepoPath()
   const worktrees = useWorktrees()
-  const { activeTab, activeTabId, openDiffTab } = useDiffPreviewTabs()
+  const { activeTab, openDiffTab } = useDiffPreviewTabs()
   const [panelTab, setPanelTab] = useState<FilesPanelTab>("files")
   const [sidebarTerminalState, setSidebarTerminalState] =
     useState<SidebarTerminalState>(() => {
       const id = crypto.randomUUID()
-      return { ids: [id], activeId: id }
+      return {
+        terminalIds: [id],
+        activeMain: { kind: "terminal", id },
+      }
     })
   const [gitOverview, setGitOverview] = useState<GitChangesOverview | null>(
     null
@@ -648,6 +714,38 @@ export const FileTree = track(function FileTree() {
   const changeCount =
     gitOverview && !gitOverview.error ? gitOverview.entries.length : 0
 
+  const hasStagedChanges = Boolean(
+    gitOverview &&
+      !gitOverview.error &&
+      gitOverview.entries.some((e) => changeEntryStagingFlags(e).hasStaged)
+  )
+
+  const stageChangePath = useCallback(
+    async (relPath: string) => {
+      const norm = normalizeFsRoot(filesRootPath)
+      if (!norm) return
+      try {
+        await window.electron.git.stagePaths(norm, [relPath])
+      } finally {
+        await refreshGitOverview({ showLoading: false })
+      }
+    },
+    [filesRootPath, refreshGitOverview]
+  )
+
+  const unstageChangePath = useCallback(
+    async (relPath: string) => {
+      const norm = normalizeFsRoot(filesRootPath)
+      if (!norm) return
+      try {
+        await window.electron.git.unstagePaths(norm, [relPath])
+      } finally {
+        await refreshGitOverview({ showLoading: false })
+      }
+    },
+    [filesRootPath, refreshGitOverview]
+  )
+
   const refreshPanel = useCallback(() => {
     void refreshGitOverview({ showLoading: true })
     setReloadSeq((s) => s + 1)
@@ -656,29 +754,44 @@ export const FileTree = track(function FileTree() {
   const addSidebarTerminal = useCallback(() => {
     setSidebarTerminalState((t) => {
       const id = crypto.randomUUID()
-      return { ids: [...t.ids, id], activeId: id }
+      return {
+        terminalIds: [...t.terminalIds, id],
+        activeMain: { kind: "terminal", id },
+      }
     })
   }, [])
 
   const removeSidebarTerminal = useCallback((id: string) => {
     setSidebarTerminalState((t) => {
-      if (t.ids.length === 1 && t.ids[0] === id) {
+      if (t.terminalIds.length === 1 && t.terminalIds[0] === id) {
         const newId = crypto.randomUUID()
-        return { ids: [newId], activeId: newId }
+        const nextActive: SidebarLowerMainTab =
+          t.activeMain.kind === "terminal" && t.activeMain.id === id
+            ? { kind: "terminal", id: newId }
+            : t.activeMain
+        return { terminalIds: [newId], activeMain: nextActive }
       }
-      const idx = t.ids.indexOf(id)
+      const idx = t.terminalIds.indexOf(id)
       if (idx < 0) return t
-      const ids = t.ids.filter((x) => x !== id)
-      const activeId =
-        t.activeId === id ? ids[Math.min(idx, ids.length - 1)]! : t.activeId
-      return { ids, activeId }
+      const terminalIds = t.terminalIds.filter((x) => x !== id)
+      let activeMain = t.activeMain
+      if (t.activeMain.kind === "terminal" && t.activeMain.id === id) {
+        activeMain = {
+          kind: "terminal",
+          id: terminalIds[Math.min(idx, terminalIds.length - 1)]!,
+        }
+      }
+      return { terminalIds, activeMain }
     })
   }, [])
 
-  const selectSidebarTerminalTab = useCallback((id: string) => {
-    setSidebarTerminalState((t) =>
-      t.ids.includes(id) ? { ...t, activeId: id } : t
-    )
+  const selectSidebarLowerTab = useCallback((next: SidebarLowerMainTab) => {
+    setSidebarTerminalState((t) => {
+      if (next.kind === "terminal" && !t.terminalIds.includes(next.id)) {
+        return t
+      }
+      return { ...t, activeMain: next }
+    })
   }, [])
 
   if (!repoPath) return null
@@ -696,7 +809,7 @@ export const FileTree = track(function FileTree() {
   )
 
   const safeArea = (
-    <Sidebar.SectionHeader className="h-full border-b border-border/20 bg-gradient-to-b from-muted/8 to-transparent">
+    <Sidebar.SectionHeader className="ateli-surface-input-stripe h-full min-h-9">
       {/* The outer titlebar (z-[999]) is the drag region. Interactive
           elements in the safe zone must sit above it AND be marked
           no-drag, otherwise clicks fall through to the drag handler. */}
@@ -796,29 +909,39 @@ export const FileTree = track(function FileTree() {
               )
             ) : (
               <div className="flex h-full min-h-0 flex-col overflow-hidden px-2 py-1">
+                <ChangesCommitPanel
+                  repoPath={normalizeFsRoot(filesRootPath)}
+                  gitReady={Boolean(gitOverview && !gitOverview.error)}
+                  hasStagedChanges={hasStagedChanges}
+                  changeCount={changeCount}
+                  onGitMutated={() =>
+                    void refreshGitOverview({ showLoading: false })
+                  }
+                />
                 <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
                   <ChangesList
                     overview={gitOverview}
                     loading={gitOverviewLoading}
                     selectedPath={selectedChangePath}
                     onOpenDiff={openDiffPreview}
+                    onStagePath={(p) => {
+                      void stageChangePath(p)
+                    }}
+                    onUnstagePath={(p) => {
+                      void unstageChangePath(p)
+                    }}
                   />
                 </div>
-                {activeTabId === "canvas" ? (
-                  <p className="border-t border-border/70 pt-2 pl-1 text-xs text-muted-foreground">
-                    Select a changed file to open its diff in a canvas tab.
-                  </p>
-                ) : null}
               </div>
             )}
           </Sidebar.Section>
-          <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden border-t border-border/35">
+          <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden">
             <SidebarTerminalTabs
               cwd={normalizeFsRoot(repoPath)}
-              tabIds={sidebarTerminalState.ids}
-              activeTabId={sidebarTerminalState.activeId}
-              onSelectTab={selectSidebarTerminalTab}
-              onCloseTab={removeSidebarTerminal}
+              terminalIds={sidebarTerminalState.terminalIds}
+              activeMain={sidebarTerminalState.activeMain}
+              onSelectMain={selectSidebarLowerTab}
+              onCloseTerminal={removeSidebarTerminal}
               onSessionEnded={removeSidebarTerminal}
               onAddTab={addSidebarTerminal}
             />

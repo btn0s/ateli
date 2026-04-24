@@ -83,6 +83,26 @@ contextBridge.exposeInMainWorld("electron", {
         patch: string | null
         error: string | null
       }>,
+    commit: (request: { repoPath: string; message: string; amend?: boolean }) =>
+      ipcRenderer.invoke("git:commit", request) as Promise<
+        { ok: true } | { ok: false; error: string }
+      >,
+    push: (repoPath: string) =>
+      ipcRenderer.invoke("git:push", { repoPath }) as Promise<
+        { ok: true } | { ok: false; error: string }
+      >,
+    generateCommitMessage: (repoPath: string) =>
+      ipcRenderer.invoke("git:generate-commit-message", {
+        repoPath,
+      }) as Promise<{ message: string | null; error: string | null }>,
+    stagePaths: (repoPath: string, paths: string[]) =>
+      ipcRenderer.invoke("git:stage-paths", { repoPath, paths }) as Promise<
+        { ok: true } | { ok: false; error: string }
+      >,
+    unstagePaths: (repoPath: string, paths: string[]) =>
+      ipcRenderer.invoke("git:unstage-paths", { repoPath, paths }) as Promise<
+        { ok: true } | { ok: false; error: string }
+      >,
   },
   worktree: {
     list: (repoPath: string) =>

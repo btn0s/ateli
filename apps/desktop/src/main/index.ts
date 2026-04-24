@@ -22,11 +22,20 @@ import { readProjectDirectory, startFsWatch, fsWatchKey } from "./file-tree"
 import { isPathInside } from "./path-utils"
 import { getGitChangesOverview, getGitFilePatch } from "./git-status"
 import {
+  gitGenerateCommitMessage,
+  gitPush,
+  gitStageAllCommit,
+  gitStagePaths,
+  gitUnstagePaths,
+} from "./git-ops"
+import {
   assertRecord,
+  expectBooleanKey,
   expectGitDiffRequest,
   expectNumber,
   expectOptionalString,
   expectString,
+  expectStringArray,
   parseManagementPolicyPatch,
   requireStringValue,
 } from "./ipc-payloads"
@@ -298,6 +307,40 @@ ipcMain.handle("worktree:rename-branch", async (_event, payload) => {
 
 ipcMain.handle("git:diff", async (_event, payload) => {
   return getGitFilePatch(expectGitDiffRequest(payload))
+})
+
+ipcMain.handle("git:commit", async (_event, payload) => {
+  const r = assertRecord(payload, "git:commit")
+  const repoPath = expectString(r, "repoPath", "git:commit")
+  const message = requireStringValue(r, "message", "git:commit")
+  const amend = expectBooleanKey(r, "amend") === true
+  return gitStageAllCommit(repoPath, message, { amend })
+})
+
+ipcMain.handle("git:push", async (_event, payload) => {
+  const r = assertRecord(payload, "git:push")
+  const repoPath = expectString(r, "repoPath", "git:push")
+  return gitPush(repoPath)
+})
+
+ipcMain.handle("git:generate-commit-message", async (_event, payload) => {
+  const r = assertRecord(payload, "git:generate-commit-message")
+  const repoPath = expectString(r, "repoPath", "git:generate-commit-message")
+  return gitGenerateCommitMessage(repoPath)
+})
+
+ipcMain.handle("git:stage-paths", async (_event, payload) => {
+  const r = assertRecord(payload, "git:stage-paths")
+  const repoPath = expectString(r, "repoPath", "git:stage-paths")
+  const paths = expectStringArray(r, "paths", "git:stage-paths")
+  return gitStagePaths(repoPath, paths)
+})
+
+ipcMain.handle("git:unstage-paths", async (_event, payload) => {
+  const r = assertRecord(payload, "git:unstage-paths")
+  const repoPath = expectString(r, "repoPath", "git:unstage-paths")
+  const paths = expectStringArray(r, "paths", "git:unstage-paths")
+  return gitUnstagePaths(repoPath, paths)
 })
 
 ipcMain.handle("management:get-policy", async () => {
