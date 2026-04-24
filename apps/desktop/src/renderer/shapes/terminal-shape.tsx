@@ -102,6 +102,21 @@ function TerminalComponent({
   const sessions = useTerminalSessionStore()
   const { requestKill, dialog } = useTerminalKillConfirmation()
 
+  const lastTouchRef = useRef(0)
+  const touchLastUsed = () => {
+    const now = Date.now()
+    if (now - lastTouchRef.current < 5000) return
+    lastTouchRef.current = now
+    editor.updateShape<TerminalShape>({
+      id: shape.id,
+      type: TERMINAL_SHAPE_TYPE,
+      meta: {
+        ...((shape.meta ?? {}) as Record<string, unknown>),
+        lastUsedAt: now,
+      },
+    })
+  }
+
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -170,6 +185,7 @@ function TerminalComponent({
       const onDataDisposable = term.onData((data) => {
         if (!state.disposed && state.sessionId) {
           sessions.write(state.sessionId, data)
+          touchLastUsed()
         }
       })
       state.disposeTermData = () => onDataDisposable.dispose()
@@ -291,6 +307,7 @@ function TerminalComponent({
   useEffect(() => {
     if (isInteractive) {
       termRef.current?.focus()
+      touchLastUsed()
     } else {
       termRef.current?.blur()
     }
