@@ -465,10 +465,10 @@ describe("scoreCluster", () => {
   })
 
   it("applies recency boost within cap", () => {
-    const stale = scoreCluster(cluster(["x"], 0), "x", 10 * RECENCY_HALF_LIFE_MS)
+    const stale = scoreCluster(cluster(["x"], 0), "x", 40 * RECENCY_HALF_LIFE_MS)
     const fresh = scoreCluster(cluster(["x"], 10 * RECENCY_HALF_LIFE_MS), "x", 10 * RECENCY_HALF_LIFE_MS)
-    // Stale: decay→0, boost→1, score = 1
-    // Fresh: decay→1, boost→1 + LAMBDA, score = 1 + LAMBDA
+    // Stale: decay ≈ 2^-40 ≈ 0, boost ≈ 1, score ≈ 1
+    // Fresh: age = 0, decay = 1, boost = 1 + LAMBDA, score = 1 + LAMBDA
     expect(stale).toBeCloseTo(1, 4)
     expect(fresh).toBeCloseTo(1 + RECENCY_LAMBDA, 4)
   })
