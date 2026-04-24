@@ -1,7 +1,7 @@
 import { createShapeId, type Editor, type TLShapeId } from "tldraw"
 import { TerminalSquare, GitBranch, LayoutGrid } from "lucide-react"
 import { registerAction } from "./tool-registry"
-import { placeTerminal } from "./layout"
+import { placeTerminal, organizeShapes, clusterShapeIdsFor } from "./layout"
 import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
 
 const DEFAULT_TERMINAL_W = 600
@@ -65,4 +65,34 @@ registerAction({
   showInCommandMenu: true,
   showInContextMenu: true,
   openPaletteRoute: { kind: "new-worktree" },
+})
+
+registerAction({
+  id: "organize-selection",
+  label: "Organize",
+  icon: LayoutGrid,
+  tldrawIcon: "grid",
+  showInCommandMenu: true,
+  showInContextMenu: true,
+  when: ({ editor }) => {
+    const ids = editor.getSelectedShapeIds()
+    if (ids.length === 0) return false
+    const shapes = ids
+      .map((id) => editor.getShape(id))
+      .filter((s): s is NonNullable<typeof s> => s != null)
+    const terminals = shapes.filter((s) => s.type === "terminal")
+    return terminals.length >= 1
+  },
+  execute: ({ editor, worktrees }) => {
+    const ids = editor.getSelectedShapeIds()
+    if (ids.length === 0) return
+    const firstId = ids[0]
+    const firstIsTerminal =
+      firstId != null && editor.getShape(firstId)?.type === "terminal"
+    const targets =
+      ids.length === 1 && firstIsTerminal && firstId != null
+        ? clusterShapeIdsFor(editor, firstId, worktrees)
+        : ids
+    organizeShapes(editor, targets)
+  },
 })
