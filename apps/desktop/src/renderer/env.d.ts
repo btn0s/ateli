@@ -22,7 +22,7 @@ interface Window {
         sessionKey: string,
         cols: number,
         rows: number
-      ) => Promise<void>
+      ) => Promise<{ reconnected: boolean }>
       rename: (
         sessionKey: string,
         name?: string

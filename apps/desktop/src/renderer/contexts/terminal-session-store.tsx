@@ -64,7 +64,14 @@ class RendererTerminalSessionStore implements TerminalSessionStore {
         return this.toHandle(existing)
       }
 
-      await window.electron.terminal.reconnect(existingSessionId, cols, rows)
+      const { reconnected } = await window.electron.terminal.reconnect(
+        existingSessionId,
+        cols,
+        rows
+      )
+      if (!reconnected) {
+        throw new Error(`Session no longer available: ${existingSessionId}`)
+      }
       const entry = this.createEntry({
         sessionId: existingSessionId,
         ipcSessionKey: existingSessionId,
