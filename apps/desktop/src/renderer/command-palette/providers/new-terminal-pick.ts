@@ -41,7 +41,7 @@ export function createNewTerminalPickCommands(env: Env): CommandDefinition[] {
       when: () => true,
       run: (ctx) => {
         const cwd = wt.isMain ? repoPath : wt.path
-        addTerminalAtCenter(ctx.editor, { cwd })
+        addTerminalAtCenter(ctx.editor, { cwd }, env.worktrees)
       },
     } satisfies CommandDefinition
   })
@@ -70,7 +70,7 @@ export function createNewTerminalPickCommands(env: Env): CommandDefinition[] {
       const { path } = await window.electron.worktree.create(repoPath, branch, {
         startPoint: getDefaultWorktreeStartRef(env.worktrees),
       })
-      addTerminalAtCenter(ctx.editor, { cwd: path })
+      addTerminalAtCenter(ctx.editor, { cwd: path }, env.worktrees)
     },
   } satisfies CommandDefinition
 

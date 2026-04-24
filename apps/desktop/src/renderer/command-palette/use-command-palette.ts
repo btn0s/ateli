@@ -44,7 +44,7 @@ function buildCommands(
   },
 ): CommandDefinition[] {
   return [
-    ...createStaticRegistryCommands(),
+    ...createStaticRegistryCommands(env.worktrees),
     ...createSelectionActionCommands({
       worktrees: env.worktrees,
       policy: env.policy,

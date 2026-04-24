@@ -28,6 +28,8 @@ import { DiffPreviewTabsProvider } from "@/contexts/diff-preview-tabs-context"
 import {
   WorktreeIndexProvider,
   useRepoPath,
+  useWorktrees,
+  type WorktreeIndexEntry,
 } from "@/contexts/worktree-index-context"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { cwdUnderRemovedWorktree } from "@/lib/terminal-worktree-title"
@@ -37,6 +39,7 @@ import {
   type ToolAction,
 } from "@/lib/tool-registry"
 import { addTerminalAtCenter } from "@/lib/default-actions"
+import { placeTerminal } from "@/lib/layout"
 import "@/lib/default-actions"
 import { CommandPalette } from "../command-palette/CommandPalette"
 import {
@@ -98,21 +101,23 @@ const toolButtonActiveClass =
 function runToolAction(
   action: ToolAction,
   editor: ReturnType<typeof useEditor>,
+  worktrees: WorktreeIndexEntry[],
   palette: PaletteController,
 ) {
   if (action.openPaletteRoute) {
     palette.openRoute(action.openPaletteRoute)
     return
   }
-  action.execute?.(editor)
+  action.execute?.({ editor, worktrees })
 }
 
 const CustomToolbar = track(() => {
   const editor = useEditor()
   const palette = usePaletteController()
+  const worktrees = useWorktrees()
   const tools = useTools()
   const currentToolId = editor.getCurrentToolId()
-  const customActions = getToolbarActions()
+  const customActions = getToolbarActions({ editor, worktrees })
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[300] font-sans antialiased">
@@ -148,7 +153,7 @@ const CustomToolbar = track(() => {
               <button
                 key={action.id}
                 className={toolButtonClass}
-                onClick={() => runToolAction(action, editor, palette)}
+                onClick={() => runToolAction(action, editor, worktrees, palette)}
                 title={action.label}
               >
                 <action.icon className="size-4" />
@@ -164,7 +169,12 @@ const CustomToolbar = track(() => {
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
   const palette = usePaletteController()
-  const customActions = getContextMenuActions()
+  const worktrees = useWorktrees()
+  const customActions = useValue(
+    "custom-context-menu-actions",
+    () => getContextMenuActions({ editor, worktrees }),
+    [editor, worktrees]
+  )
   const { requestKill, dialog } = useTerminalKillConfirmation()
   const selectedTerminal = useValue(
     "terminal-context-menu-kill-action",
@@ -205,7 +215,7 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
                 label={action.label as any}
                 icon={action.tldrawIcon as any}
                 readonlyOk
-                onSelect={() => runToolAction(action, editor, palette)}
+                onSelect={() => runToolAction(action, editor, worktrees, palette)}
               />
             ))}
           </TldrawUiMenuGroup>
@@ -443,17 +453,26 @@ const components: TLComponents = {
 
 function RpcBridge() {
   const editor = useEditor()
+  const worktrees = useWorktrees()
 
   useEffect(() => {
     if (!window.electron?.rpc) return
 
     const removeCreateTerminal = window.electron.rpc.onCreateTerminal(
       ({ shapeId, x, y, w, h }) => {
+        const callerSuppliedPosition = x !== 0 || y !== 0
+        const pos = callerSuppliedPosition
+          ? { x, y }
+          : placeTerminal(editor, {
+              cwd: "",
+              worktrees,
+              size: { w, h },
+            })
         editor.createShape({
           id: shapeId as TLShapeId,
           type: "terminal",
-          x,
-          y,
+          x: pos.x,
+          y: pos.y,
           props: { w, h },
         })
       }
@@ -475,11 +494,17 @@ function RpcBridge() {
     const removeNotifications = window.electron.rpc.onNotification(
       ({ method, params }) => {
         if (method === "terminal.created") {
-          addTerminalAtCenter(editor, {
-            sessionId: params.sessionKey as string,
-          })
+          addTerminalAtCenter(
+            editor,
+            { sessionId: params.sessionKey as string },
+            worktrees,
+          )
         } else if (method === "worktree.created") {
-          addTerminalAtCenter(editor, { cwd: params.path as string })
+          addTerminalAtCenter(
+            editor,
+            { cwd: params.path as string },
+            worktrees,
+          )
         } else if (method === "worktree.removed") {
           const removedPath = params.path as string
           const terminals = editor
@@ -503,7 +528,7 @@ function RpcBridge() {
       removeGetShapes()
       removeNotifications()
     }
-  }, [editor])
+  }, [editor, worktrees])
 
   return null
 }

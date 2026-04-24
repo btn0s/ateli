@@ -1,6 +1,12 @@
 import type { LucideIcon } from "lucide-react"
 import type { Editor } from "tldraw"
 import type { PaletteRoute } from "@/command-palette/types"
+import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
+
+export interface ActionContext {
+  editor: Editor
+  worktrees: WorktreeIndexEntry[]
+}
 
 export interface ToolAction {
   id: string
@@ -18,7 +24,9 @@ export interface ToolAction {
    */
   openPaletteRoute?: PaletteRoute
   /** Invoked when `openPaletteRoute` is not set. */
-  execute?: (editor: Editor) => void | Promise<void>
+  execute?: (ctx: ActionContext) => void | Promise<void>
+  /** Gate visibility in toolbar / menus. Default: always visible. */
+  when?: (ctx: ActionContext) => boolean
 }
 
 const registry: ToolAction[] = []
@@ -27,14 +35,20 @@ export function registerAction(action: ToolAction): void {
   registry.push(action)
 }
 
-export function getToolbarActions(): ToolAction[] {
-  return registry.filter((a) => a.showInToolbar)
+export function getToolbarActions(ctx?: ActionContext): ToolAction[] {
+  return registry.filter(
+    (a) => a.showInToolbar && (!a.when || !ctx || a.when(ctx))
+  )
 }
 
-export function getCommandMenuActions(): ToolAction[] {
-  return registry.filter((a) => a.showInCommandMenu)
+export function getCommandMenuActions(ctx?: ActionContext): ToolAction[] {
+  return registry.filter(
+    (a) => a.showInCommandMenu && (!a.when || !ctx || a.when(ctx))
+  )
 }
 
-export function getContextMenuActions(): ToolAction[] {
-  return registry.filter((a) => a.showInContextMenu)
+export function getContextMenuActions(ctx?: ActionContext): ToolAction[] {
+  return registry.filter(
+    (a) => a.showInContextMenu && (!a.when || !ctx || a.when(ctx))
+  )
 }
