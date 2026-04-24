@@ -26,10 +26,6 @@ export function ChangesCommitPanel({
 }: ChangesCommitPanelProps) {
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState<null | "gen" | "commit" | "push">(null)
-  const [notice, setNotice] = useState<{
-    kind: "error" | "success"
-    text: string
-  } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const hasStagedChanges = stagedPaths.length > 0
   const changeCount = changedPaths.length
@@ -59,7 +55,6 @@ export function ChangesCommitPanel({
   }, [message])
 
   const runGenerate = useCallback(async () => {
-    setNotice(null)
     setBusy("gen")
     try {
       const r = await window.electron.git.generateCommitMessage(
@@ -67,12 +62,10 @@ export function ChangesCommitPanel({
         hasStagedChanges ? stagedPaths : undefined
       )
       if (r.error) {
-        setNotice({ kind: "error", text: r.error })
         return
       }
       if (r.message) {
         setMessage(r.message)
-        setNotice(null)
       }
     } finally {
       setBusy(null)
@@ -81,18 +74,12 @@ export function ChangesCommitPanel({
 
   const runStageAll = useCallback(async () => {
     if (changeCount === 0) return
-    setNotice(null)
     setBusy("commit")
     try {
       const r = await window.electron.git.stagePaths(repoPath, changedPaths)
       if (!r.ok) {
-        setNotice({ kind: "error", text: r.error })
         return
       }
-      setNotice({
-        kind: "success",
-        text: `Staged ${changeCount} file${changeCount === 1 ? "" : "s"}.`,
-      })
       onGitMutated()
     } finally {
       setBusy(null)
@@ -100,7 +87,6 @@ export function ChangesCommitPanel({
   }, [changeCount, changedPaths, onGitMutated, repoPath])
 
   const runCommit = useCallback(async () => {
-    setNotice(null)
     setBusy("commit")
     try {
       const r = await window.electron.git.commit({
@@ -108,11 +94,9 @@ export function ChangesCommitPanel({
         message,
       })
       if (!r.ok) {
-        setNotice({ kind: "error", text: r.error })
         return
       }
       setMessage("")
-      setNotice({ kind: "success", text: "Committed." })
       onGitMutated()
     } finally {
       setBusy(null)
@@ -120,15 +104,12 @@ export function ChangesCommitPanel({
   }, [message, onGitMutated, repoPath])
 
   const runPush = useCallback(async () => {
-    setNotice(null)
     setBusy("push")
     try {
       const r = await window.electron.git.push(repoPath)
       if (!r.ok) {
-        setNotice({ kind: "error", text: r.error })
         return
       }
-      setNotice({ kind: "success", text: "Pushed." })
       onGitMutated()
     } finally {
       setBusy(null)
@@ -212,19 +193,6 @@ export function ChangesCommitPanel({
           </Button>
         </div>
       </div>
-
-      {notice ? (
-        <div
-          className={cn(
-            "mt-2 rounded-md border px-2 py-1.5 text-xs leading-snug ateli-skeuo-well",
-            notice.kind === "error"
-              ? "border-destructive/35 bg-destructive/10 text-destructive"
-              : "border-border/35 bg-muted/14 text-muted-foreground ateli-specular-hairline"
-          )}
-        >
-          {notice.text}
-        </div>
-      ) : null}
     </div>
   )
 }
