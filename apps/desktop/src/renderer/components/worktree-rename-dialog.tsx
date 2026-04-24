@@ -87,7 +87,7 @@ export function useWorktreeRenameConfirmation(): {
 
   const dialog = (
     <Dialog open={pending !== null} onOpenChange={(next) => !next && cancel()}>
-      <DialogContent showCloseButton={false} className="gap-3">
+      <DialogContent showCloseButton={false}>
         <form onSubmit={submit} className="contents">
           <DialogHeader className="gap-1">
             <DialogTitle>
@@ -99,7 +99,10 @@ export function useWorktreeRenameConfirmation(): {
               ) : null}
             </DialogTitle>
             <DialogDescription>
-              Runs <code className="rounded-none border border-border bg-muted/60 px-1 py-px text-[0.95em] text-foreground">git branch -m</code>{" "}
+              Runs{" "}
+              <code className="rounded-sm border border-border/80 bg-muted/50 px-1.5 py-0.5 font-mono text-[0.95em] text-foreground">
+                git branch -m
+              </code>{" "}
               inside the worktree. The remote tracking branch is left unchanged.
             </DialogDescription>
           </DialogHeader>

@@ -54,7 +54,7 @@ export function useTerminalKillConfirmation(): {
 
   const dialog = (
     <Dialog open={pending !== null} onOpenChange={(next) => !next && cancel()}>
-      <DialogContent showCloseButton={false} className="gap-3">
+      <DialogContent showCloseButton={false}>
         <DialogHeader className="gap-1">
           <DialogTitle>Kill session?</DialogTitle>
           <DialogDescription>

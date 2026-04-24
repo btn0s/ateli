@@ -312,7 +312,7 @@ function TerminalDeleteDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
-      <DialogContent showCloseButton={false} className="gap-3">
+      <DialogContent showCloseButton={false}>
         <DialogHeader className="gap-1">
           <DialogTitle>Delete Terminal?</DialogTitle>
           <DialogDescription>
