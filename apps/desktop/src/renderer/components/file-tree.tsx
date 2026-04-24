@@ -696,7 +696,7 @@ export const FileTree = track(function FileTree() {
   )
 
   const safeArea = (
-    <Sidebar.SectionHeader className="h-full">
+    <Sidebar.SectionHeader className="h-full border-b border-border/20 bg-gradient-to-b from-muted/8 to-transparent">
       {/* The outer titlebar (z-[999]) is the drag region. Interactive
           elements in the safe zone must sit above it AND be marked
           no-drag, otherwise clicks fall through to the drag handler. */}
@@ -812,7 +812,7 @@ export const FileTree = track(function FileTree() {
               </div>
             )}
           </Sidebar.Section>
-          <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden border-t border-border">
+          <div className="flex min-h-0 min-w-0 flex-[1] flex-col overflow-hidden border-t border-border/35">
             <SidebarTerminalTabs
               cwd={normalizeFsRoot(repoPath)}
               tabIds={sidebarTerminalState.ids}

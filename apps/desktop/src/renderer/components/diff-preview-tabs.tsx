@@ -116,7 +116,7 @@ function DiffPreviewPane({ tab }: { tab: DiffPreviewTab }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-4 py-2">
+      <div className="ateli-surface-slab flex shrink-0 items-center justify-between gap-3 border-b border-border/20 bg-gradient-to-b from-muted/12 to-transparent px-4 py-2">
         <div className="min-w-0">
           <p className="truncate font-mono text-xs text-foreground">
             {tab.path}
@@ -172,7 +172,7 @@ export function DiffPreviewTabs() {
 
   return (
     <div className="pointer-events-auto flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 border-b border-border bg-card/96 text-card-foreground backdrop-blur-md">
+      <div className="ateli-chrome-ledger flex shrink-0 text-card-foreground">
         <div
           role="tablist"
           aria-label="Center panel"
@@ -194,10 +194,10 @@ export function DiffPreviewTabs() {
               <div
                 key={tab.id}
                 className={cn(
-                  "group/tab flex max-w-[20rem] min-w-0 items-center gap-1 rounded-[3px] pr-1",
+                  "group/tab flex max-w-[20rem] min-w-0 items-center gap-1 rounded-md pr-1",
                   selected
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 )}
               >
                 <SidebarTabButton
@@ -211,7 +211,7 @@ export function DiffPreviewTabs() {
                 </SidebarTabButton>
                 <button
                   type="button"
-                  className="flex size-5 shrink-0 items-center justify-center rounded-[2px] hover:bg-foreground/10"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-sm transition-[background-color,transform] duration-150 active:scale-[0.95] hover:bg-foreground/10"
                   aria-label={`Close ${name}`}
                   title={`Close ${dir}${name}`}
                   onClick={() => closeTab(tab.id)}
@@ -224,7 +224,7 @@ export function DiffPreviewTabs() {
         </div>
       </div>
       {activeTab ? (
-        <div className="min-h-0 flex-1 overflow-hidden border-r border-l border-border bg-card/96 text-card-foreground backdrop-blur-md">
+        <div className="ateli-surface-slab min-h-0 flex-1 overflow-hidden border-r border-l border-border/30 bg-gradient-to-b from-card/95 to-card/90 text-card-foreground">
           <div className="h-full min-h-0 overflow-auto">
             <DiffPreviewPane tab={activeTab} />
           </div>

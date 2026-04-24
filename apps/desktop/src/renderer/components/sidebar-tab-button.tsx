@@ -20,11 +20,11 @@ export function SidebarTabButton({
       role="tab"
       aria-selected={selected}
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-[3px] px-2 text-xs transition-colors duration-150 ease-out",
+        "inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-[color,background-color,transform,box-shadow] duration-150 ease-out",
         "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         selected
-          ? "bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+          ? "ateli-skeuo-pill-inset bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground active:scale-[0.98]",
         className,
       )}
       {...props}
@@ -52,7 +52,7 @@ export function SidebarTabStrip({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="flex w-full min-w-0 shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5"
+      className="ateli-surface-input-stripe flex w-full min-w-0 shrink-0 items-center gap-1 px-2 py-1.5"
     >
       {children}
       {trailing ? <div className="ml-auto flex items-center">{trailing}</div> : null}

@@ -120,6 +120,91 @@
     --font-sans: var(--font-sans);
 }
 
+/* --- Ateli “luminous” + skeuo-lite (see AGENTS.md → UI) ---
+   Specular (top) + often a soft “bite” (bottom) + ambient drop (floaters/modals) + blur. */
+
+:root {
+  /* Stacked: inner top-edge specular, then deep ambient shadow. Slightly “lit” vs flat UI. */
+  --ateli-surface-luminous-shadow: 0 0 0 1px rgb(255 255 255 / 0.06) inset,
+    0 1px 0 0 rgb(255 255 255 / 0.08) inset, 0 -0.5px 0 0 rgb(0 0 0 / 0.12) inset,
+    0 28px 64px -18px rgb(0 0 0 / 0.65), 0 12px 24px -8px rgb(0 0 0 / 0.4);
+  /* Modal scrim: soft vertical banding so flat black never reads as a hole */
+  --ateli-overlay-scrim: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.5),
+    rgb(0 0 0 / 0.48),
+    rgb(0 0 0 / 0.55)
+  );
+  /* Bottom toolbar / small floating chips */
+  --ateli-surface-floater-shadow: 0 0 0 1px rgb(255 255 255 / 0.06) inset,
+    0 1px 0 0 rgb(255 255 255 / 0.1) inset, 0 -1px 0 0 rgb(0 0 0 / 0.24) inset,
+    0 12px 36px -8px rgb(0 0 0 / 0.45), 0 4px 12px -3px rgb(0 0 0 / 0.3);
+  /* Full-bleed / docked glass — beveled “slab” face, no big cast shadow. */
+  --ateli-surface-slab-shadow: 0 0 0 1px rgb(255 255 255 / 0.04) inset,
+    0 1px 0 0 rgb(255 255 255 / 0.07) inset, 0 -1px 0 0 rgb(0 0 0 / 0.2) inset;
+  /* Inset / notice wells (errors, keylines) */
+  --ateli-skeuo-well-shadow: 0 1px 0 0 rgb(255 255 255 / 0.04) inset,
+    0 -0.5px 0 0 rgb(0 0 0 / 0.15) inset;
+  /* Search & compact fields: shallow dish */
+  --ateli-skeuo-input-dish: 0 1px 0 0 rgb(255 255 255 / 0.04) inset,
+    0 0 0 1px rgb(0 0 0 / 0.12) inset, 0 1px 3px rgb(0 0 0 / 0.12) inset;
+}
+
+@utility ateli-surface-luminous {
+  box-shadow: var(--ateli-surface-luminous-shadow);
+  @apply supports-backdrop-filter:backdrop-blur-md;
+}
+
+@utility ateli-surface-luminous-floater {
+  box-shadow: var(--ateli-surface-floater-shadow);
+  @apply supports-backdrop-filter:backdrop-blur-md;
+}
+
+@utility ateli-surface-slab {
+  box-shadow: var(--ateli-surface-slab-shadow);
+  @apply supports-backdrop-filter:backdrop-blur-sm;
+}
+
+/** Docked sidebars: subtle top “sky” that fades into card, still reads as a thick glass pane. */
+@utility ateli-skeuo-dock {
+  @apply bg-gradient-to-b from-muted/12 via-card/96 to-card/95;
+}
+
+/** Center / wide chrome rows (e.g. diff tab strip) — lit ledger + beveled face. */
+@utility ateli-chrome-ledger {
+  box-shadow: var(--ateli-surface-slab-shadow);
+  @apply border-b border-border/20 bg-gradient-to-b from-muted/20 to-card/90 text-card-foreground supports-backdrop-filter:backdrop-blur-sm;
+}
+
+@utility ateli-overlay-scrim {
+  background: var(--ateli-overlay-scrim);
+  @apply supports-backdrop-filter:backdrop-blur-[2px];
+}
+
+@utility ateli-surface-input-stripe {
+  @apply border-b border-border/20 bg-gradient-to-b from-muted/25 to-transparent;
+}
+
+@utility ateli-specular-hairline {
+  box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.05);
+}
+
+@utility ateli-skeuo-divider {
+  @apply h-px bg-gradient-to-r from-transparent via-border/50 to-transparent;
+}
+
+@utility ateli-skeuo-well {
+  box-shadow: var(--ateli-skeuo-well-shadow);
+}
+
+@utility ateli-skeuo-input-dish {
+  box-shadow: var(--ateli-skeuo-input-dish);
+}
+
+@utility ateli-skeuo-pill-inset {
+  box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.1) inset, 0 2px 3px -1px rgb(0 0 0 / 0.2) inset;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

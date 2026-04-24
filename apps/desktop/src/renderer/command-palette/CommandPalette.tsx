@@ -47,7 +47,7 @@ function commandRow(
       {def.contextBadge ? (
         <Badge
           variant="secondary"
-          className="h-5 min-w-0 max-w-[5.5rem] shrink-0 truncate text-[0.625rem] font-medium uppercase leading-none"
+          className="ateli-specular-hairline h-5 min-w-0 max-w-[5.5rem] shrink-0 truncate border border-border/40 text-[0.625rem] font-medium uppercase leading-none"
         >
           {def.contextBadge}
         </Badge>
@@ -188,13 +188,16 @@ export const CommandPalette = track(function CommandPalette() {
       className="pointer-events-auto fixed inset-0 z-[999999] flex items-start justify-center pt-[20vh] antialiased"
     >
       <div
-        className="absolute inset-0 bg-black/50"
+        className="ateli-overlay-scrim absolute inset-0"
         onClick={() => close()}
         aria-hidden
       />
       <Command
         shouldFilter={false}
-        className="relative z-[1] h-fit w-full max-w-md overflow-hidden rounded-lg bg-background text-popover-foreground ring-1 ring-border/50 shadow-2xl"
+        role="dialog"
+        aria-modal
+        aria-label="Command palette"
+        className="ateli-surface-luminous relative z-[1] h-fit w-full max-w-md overflow-hidden rounded-xl border border-border/35 bg-popover/95 text-popover-foreground"
         loop
       >
         <CommandInput
@@ -214,7 +217,7 @@ export const CommandPalette = track(function CommandPalette() {
         />
         <CommandList className="max-h-80">
           {error ? (
-            <div className="border-b border-border/50 px-2.5 py-2 text-center text-pretty text-xs text-amber-600">
+            <div className="ateli-skeuo-well border-b border-dashed border-amber-500/30 bg-amber-500/6 px-2.5 py-2.5 text-center text-pretty text-xs leading-relaxed text-amber-600 dark:text-amber-500/90">
               {error}
             </div>
           ) : null}

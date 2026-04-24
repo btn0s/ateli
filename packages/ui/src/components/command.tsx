@@ -71,18 +71,18 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div data-slot="command-input-wrapper" className="border-b pb-0">
-      <InputGroup className="h-8 border-none border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
+    <div data-slot="command-input-wrapper" className="ateli-surface-input-stripe pb-0">
+      <InputGroup className="ateli-skeuo-input-dish h-9 min-h-9 rounded-md border border-border/15 bg-input/20 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
-            "w-full text-xs outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            "w-full text-xs tracking-tight text-foreground/95 outline-hidden placeholder:text-muted-foreground/65 disabled:cursor-not-allowed disabled:opacity-50",
             className
           )}
           {...props}
         />
         <InputGroupAddon>
-          <SearchIcon className="size-4 shrink-0 opacity-50" />
+          <SearchIcon className="size-4 shrink-0 text-muted-foreground/55" />
         </InputGroupAddon>
       </InputGroup>
     </div>
@@ -97,7 +97,7 @@ function CommandList({
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn(
-        "no-scrollbar flex max-h-72 flex-col scroll-py-1 overflow-x-hidden overflow-y-auto py-0.5 outline-none",
+        "no-scrollbar flex max-h-72 flex-col gap-0.5 scroll-py-1.5 overflow-x-hidden overflow-y-auto px-1.5 py-1.5 outline-none",
         className
       )}
       {...props}
@@ -126,7 +126,7 @@ function CommandGroup({
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        "overflow-hidden text-foreground **:[[cmdk-group-heading]]:px-2.5 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-balance **:[[cmdk-group-heading]]:text-muted-foreground",
+        "overflow-hidden text-foreground **:[[cmdk-group-heading]]:px-0.5 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-[0.65rem] **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-balance **:[[cmdk-group-heading]]:text-muted-foreground/80",
         className
       )}
       {...props}
@@ -141,7 +141,7 @@ function CommandSeparator({
   return (
     <CommandPrimitive.Separator
       data-slot="command-separator"
-      className={cn("-mx-0.5 my-0.5 h-px bg-border/45", className)}
+      className={cn("ateli-skeuo-divider -mx-0.5 my-0.5", className)}
       {...props}
     />
   )
@@ -156,7 +156,7 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "group/command-item relative flex min-h-10 w-full cursor-default select-none items-center gap-2 rounded-sm px-2.5 text-xs leading-snug -outline-offset-1 outline-hidden transition-[background-color,color,opacity] duration-100 ease-out motion-reduce:transition-none in-data-[slot=dialog-content]:rounded-sm! data-[disabled=true]:pointer-events-none data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground data-selected:active:bg-muted active:bg-muted/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
+        "group/command-item relative flex min-h-10 w-full cursor-default select-none items-center gap-2.5 rounded-md px-2.5 text-xs leading-snug -outline-offset-1 outline-hidden transition-[background-color,color,opacity,transform] duration-100 ease-out motion-reduce:transition-none in-data-[slot=dialog-content]:rounded-md! data-[disabled=true]:pointer-events-none data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50 data-selected:bg-muted/90 data-selected:text-foreground data-selected:ring-1 data-selected:ring-inset data-selected:ring-ring/20 data-selected:active:bg-muted active:scale-[0.96] active:bg-muted/50 data-[disabled=true]:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
         className
       )}
       {...props}
@@ -175,7 +175,7 @@ function CommandShortcut({
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground group-data-selected/command-item:text-foreground",
+        "ml-auto text-xs tabular-nums tracking-widest text-muted-foreground group-data-selected/command-item:text-foreground",
         className
       )}
       {...props}

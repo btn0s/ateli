@@ -16,11 +16,12 @@ import { useManagementPolicy } from "@/contexts/management-policy-context"
 
 function terminalTabSurfaceClass(selected: boolean) {
   return cn(
-    "group/tab inline-flex h-7 shrink-0 items-center gap-1 rounded-[3px] outline-none transition-colors duration-150 ease-out",
+    "group/tab inline-flex h-7 shrink-0 items-center gap-1 rounded-md outline-none",
+    "transition-[color,background-color,transform,box-shadow] duration-150 ease-out",
     "focus-within:ring-1 focus-within:ring-ring",
     selected
-      ? "bg-accent text-accent-foreground"
-      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+      ? "ateli-skeuo-pill-inset bg-accent text-accent-foreground"
+      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground active:scale-[0.98]",
   )
 }
 
@@ -123,8 +124,8 @@ export function SidebarTerminalTabs({
   )
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border/60">
-      <div className="flex shrink-0 items-center gap-1 px-2 pt-2 pb-0">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-border/35">
+      <div className="ateli-surface-input-stripe flex shrink-0 items-center gap-1 px-2 py-1.5">
         <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-gutter:stable]">
           <div
             role="tablist"
@@ -162,7 +163,7 @@ export function SidebarTerminalTabs({
                     {canClose ? (
                       <button
                         type="button"
-                        className="flex size-5 shrink-0 items-center justify-center rounded-[2px] text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                        className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-[color,background-color,transform] duration-150 active:scale-[0.95] hover:bg-foreground/10 hover:text-foreground"
                         title={`Close ${label}`}
                         aria-label={`Close ${label}`}
                         onClick={(e) => {
@@ -209,7 +210,7 @@ export function SidebarTerminalTabs({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="shrink-0 text-muted-foreground"
+          className="shrink-0 text-muted-foreground transition-[color,background-color,transform] duration-150 active:scale-[0.96] hover:text-foreground"
           title="New terminal"
           aria-label="New terminal"
           onClick={onAddTab}

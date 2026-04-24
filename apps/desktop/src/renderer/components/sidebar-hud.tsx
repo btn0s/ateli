@@ -6,7 +6,7 @@ interface SidebarHudProps {
   center?: ReactNode | null
   /** Overlay rendered only in the center region (between sidebars). */
   centerOverlay?: ReactNode | null
-  /** Omitted or null: right sidebar is not mounted (no panel chrome or width). */
+  /** Omitted or null: right slot not rendered (e.g. no `FileTree` when no repo). */
   right?: ReactNode | null
 }
 

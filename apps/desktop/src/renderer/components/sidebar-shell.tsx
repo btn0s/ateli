@@ -115,8 +115,11 @@ export function SidebarShell({
       {!collapsed && (
         <div
           className={cn(
-            "flex h-full min-h-0 w-full flex-col overflow-hidden border-border bg-card text-card-foreground backdrop-blur-md",
-            side === "left" ? "border-r" : "border-l",
+            "ateli-surface-luminous ateli-skeuo-dock flex h-full min-h-0 w-full flex-col overflow-hidden antialiased",
+            "text-card-foreground",
+            side === "left"
+              ? "border-r border-border/35"
+              : "border-l border-border/35",
           )}
         >
           {/* Safe zone: top 40px, matches the macOS hiddenInset titlebar.
@@ -143,7 +146,8 @@ export function SidebarShell({
 
       <div
         className={cn(
-          "absolute top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors duration-150 ease-out hover:bg-border/60 active:bg-border",
+          "absolute top-0 z-10 h-full w-1.5 cursor-col-resize transition-[background-color] duration-150 ease-out",
+          "hover:bg-muted/35 active:bg-muted/50",
           side === "left" ? "right-0" : "left-0",
         )}
         onPointerDown={onPointerDown}

@@ -42,7 +42,7 @@ import { FileTree } from "./file-tree"
 import { LeftSidebarTabs } from "./left-sidebar-tabs"
 import { useTerminalKillConfirmation } from "./terminal-kill-dialog"
 import { Button } from "@workspace/ui/components/button"
-import { ZOOM_ANIMATION } from "@/lib/canvas-camera"
+import { cn } from "@workspace/ui/lib/utils"
 import { deleteCanvasShapesAsSync } from "@/lib/canvas-delete-shapes"
 import {
   Dialog,
@@ -77,95 +77,15 @@ const TOOLBAR_TOOL_IDS = [
   "note",
 ]
 
-const ZoomControls = track(() => {
-  const editor = useEditor()
-  const zoom = useValue("canvas-zoom-level", () => editor.getZoomLevel(), [editor])
+/** Glassy skeuo-lite bar (see `ateli-surface-luminous-floater` in globals.css). */
+const TOOLBAR_FLOATER =
+  "ateli-surface-luminous-floater inline-flex items-center gap-0.5 rounded-xl border border-border/35 bg-popover/95 p-1.5 text-popover-foreground antialiased"
 
-  const zoomSteps = editor.getCameraOptions().zoomSteps
-  const minZoom = zoomSteps[0] ?? 0.1
-  const maxZoom = zoomSteps[zoomSteps.length - 1] ?? 8
-  const clampedZoom = Math.min(maxZoom, Math.max(minZoom, zoom))
-  const zoomPercent = Math.round(clampedZoom * 100)
-  const isAtMinZoom = clampedZoom <= minZoom + 0.001
-  const isAtMaxZoom = clampedZoom >= maxZoom - 0.001
+const toolButtonClass =
+  "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-150 ease-out hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
 
-  function getLaneScreenRect() {
-    const lane = document.querySelector("[data-center-lane]")
-    const rect = lane?.getBoundingClientRect()
-    if (rect && rect.width > 0 && rect.height > 0) {
-      return {
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height,
-      }
-    }
-
-    const viewport = editor.getViewportScreenBounds()
-    return {
-      left: viewport.x,
-      top: viewport.y,
-      width: viewport.w,
-      height: viewport.h,
-    }
-  }
-
-  function getLaneScreenCenter() {
-    const rect = getLaneScreenRect()
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    }
-  }
-
-  function getLaneScreenPoint() {
-    const center = getLaneScreenCenter()
-    const point = editor.getViewportScreenCenter().clone()
-    point.x = center.x
-    point.y = center.y
-    return point
-  }
-
-  return (
-    <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
-        <button
-          className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={isAtMinZoom}
-          onClick={() =>
-            editor.zoomOut(getLaneScreenPoint(), {
-              animation: ZOOM_ANIMATION,
-            })
-          }
-          title="Zoom out"
-        >
-          -
-        </button>
-        <button
-          className="min-w-12 rounded-sm px-2 py-1 text-center text-xs font-medium tabular-nums text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
-          onClick={() =>
-            editor.resetZoom(getLaneScreenPoint(), {
-              animation: ZOOM_ANIMATION,
-            })
-          }
-          title="Reset zoom to 100%"
-        >
-          {zoomPercent}%
-        </button>
-        <button
-          className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={isAtMaxZoom}
-          onClick={() =>
-            editor.zoomIn(getLaneScreenPoint(), {
-              animation: ZOOM_ANIMATION,
-            })
-          }
-          title="Zoom in"
-        >
-          +
-        </button>
-    </div>
-  )
-})
+const toolButtonActiveClass =
+  "flex size-8 items-center justify-center rounded-md bg-accent text-accent-foreground transition-[color,background-color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:scale-[0.96]"
 
 const CustomToolbar = track(() => {
   const editor = useEditor()
@@ -174,10 +94,10 @@ const CustomToolbar = track(() => {
   const customActions = getToolbarActions()
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[300] font-sans">
+    <div className="pointer-events-none absolute inset-0 z-[300] font-sans antialiased">
       <div className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center p-3">
-        <div className="pointer-events-auto flex items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-popover/90 p-1 shadow-lg backdrop-blur-md">
+        <div className="pointer-events-auto flex items-center justify-center">
+          <div className={cn(TOOLBAR_FLOATER)}>
             {TOOLBAR_TOOL_IDS.map((id) => {
               const tool = tools[id]
               if (!tool) return null
@@ -185,11 +105,9 @@ const CustomToolbar = track(() => {
               return (
                 <button
                   key={id}
-                  className={`flex size-8 items-center justify-center rounded-sm transition-colors ${
-                    isActive
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
+                  className={cn(
+                    isActive ? toolButtonActiveClass : toolButtonClass
+                  )}
                   onClick={() => tool.onSelect("toolbar")}
                   title={`${id}${tool.kbd ? ` (${tool.kbd.split(",")[0]})` : ""}`}
                 >
@@ -201,11 +119,14 @@ const CustomToolbar = track(() => {
                 </button>
               )
             })}
-            <div className="mx-0.5 h-5 w-px bg-border" />
+            <div
+              className="mx-0.5 h-5 w-px shrink-0 bg-gradient-to-b from-border/20 via-border/50 to-border/20"
+              aria-hidden
+            />
             {customActions.map((action) => (
               <button
                 key={action.id}
-                className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                className={toolButtonClass}
                 onClick={() => action.execute(editor)}
                 title={action.label}
               >
@@ -213,7 +134,6 @@ const CustomToolbar = track(() => {
               </button>
             ))}
           </div>
-          <ZoomControls />
         </div>
       </div>
     </div>
@@ -336,27 +256,20 @@ function TerminalDeleteDialog() {
   )
 }
 
-const SidebarHudWithSelection = track(function SidebarHudWithSelection() {
-  const editor = useEditor()
-  const hasCanvasSelection = useValue(
-    "right-sidebar-selection",
-    () => editor.getSelectedShapeIds().length > 0,
-    [editor]
-  )
-
+function CanvasSidebarHud() {
   return (
     <SidebarHud
       left={<LeftSidebarTabs repoPath={getRepoPath()} />}
       center={<DiffPreviewTabs />}
-      right={hasCanvasSelection ? <FileTree /> : undefined}
+      right={<FileTree />}
     />
   )
-})
+}
 
 function CanvasOverlay() {
   return (
     <>
-      <SidebarHudWithSelection />
+      <CanvasSidebarHud />
       <CommandPalette />
       <TerminalDeleteDialog />
     </>
