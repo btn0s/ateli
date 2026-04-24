@@ -201,10 +201,7 @@ async function collectTreeSubtree(
   return { directoryPaths, pathMap, paths }
 }
 
-function directoryPrefixForAbsTree(
-  treeRoot: string,
-  absDir: string
-): string {
+function directoryPrefixForAbsTree(treeRoot: string, absDir: string): string {
   const normRoot = normalizeFsRoot(treeRoot)
   const rel = path.relative(normRoot, path.resolve(absDir))
   if (!rel || rel === "") {
@@ -221,9 +218,7 @@ function isPathUnderStaleSubtree(
   if (!staleDirPrefix) {
     return false
   }
-  const p = staleDirPrefix.endsWith("/")
-    ? staleDirPrefix
-    : `${staleDirPrefix}/`
+  const p = staleDirPrefix.endsWith("/") ? staleDirPrefix : `${staleDirPrefix}/`
   return (
     treePath === staleDirPrefix.replace(/\/$/, "") || treePath.startsWith(p)
   )
@@ -291,7 +286,7 @@ function ChangeFileRow({
         type="button"
         className={cn(
           workspaceIconButtonClass,
-          "ateli-skeuo-input-dish size-7 shrink-0 rounded-md border border-border/20",
+          "size-7 shrink-0 rounded-md border border-border/20 ateli-skeuo-input-dish",
           "bg-muted/12 text-muted-foreground",
           "focus-visible:ring-1 focus-visible:ring-ring"
         )}
@@ -714,11 +709,17 @@ export const FileTree = track(function FileTree() {
   const changeCount =
     gitOverview && !gitOverview.error ? gitOverview.entries.length : 0
 
-  const hasStagedChanges = Boolean(
-    gitOverview &&
-      !gitOverview.error &&
-      gitOverview.entries.some((e) => changeEntryStagingFlags(e).hasStaged)
-  )
+  const changedPaths =
+    gitOverview && !gitOverview.error
+      ? gitOverview.entries.map((entry) => entry.path)
+      : []
+
+  const stagedPaths =
+    gitOverview && !gitOverview.error
+      ? gitOverview.entries
+          .filter((entry) => changeEntryStagingFlags(entry).hasStaged)
+          .map((entry) => entry.path)
+      : []
 
   const stageChangePath = useCallback(
     async (relPath: string) => {
@@ -809,7 +810,7 @@ export const FileTree = track(function FileTree() {
   )
 
   const safeArea = (
-    <Sidebar.SectionHeader className="ateli-surface-input-stripe h-full min-h-9">
+    <Sidebar.SectionHeader className="h-full min-h-9 ateli-surface-input-stripe">
       {/* The outer titlebar (z-[999]) is the drag region. Interactive
           elements in the safe zone must sit above it AND be marked
           no-drag, otherwise clicks fall through to the drag handler. */}
@@ -912,8 +913,8 @@ export const FileTree = track(function FileTree() {
                 <ChangesCommitPanel
                   repoPath={normalizeFsRoot(filesRootPath)}
                   gitReady={Boolean(gitOverview && !gitOverview.error)}
-                  hasStagedChanges={hasStagedChanges}
-                  changeCount={changeCount}
+                  stagedPaths={stagedPaths}
+                  changedPaths={changedPaths}
                   onGitMutated={() =>
                     void refreshGitOverview({ showLoading: false })
                   }

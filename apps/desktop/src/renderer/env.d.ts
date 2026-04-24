@@ -86,10 +86,13 @@ interface Window {
         message: string
         amend?: boolean
       }) => Promise<{ ok: true } | { ok: false; error: string }>
-      push: (repoPath: string) => Promise<
-        { ok: true } | { ok: false; error: string }
-      >
-      generateCommitMessage: (repoPath: string) => Promise<{
+      push: (
+        repoPath: string
+      ) => Promise<{ ok: true } | { ok: false; error: string }>
+      generateCommitMessage: (
+        repoPath: string,
+        stagedPaths?: string[]
+      ) => Promise<{
         message: string | null
         error: string | null
       }>

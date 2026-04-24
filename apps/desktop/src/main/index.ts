@@ -33,6 +33,7 @@ import {
   expectBooleanKey,
   expectGitDiffRequest,
   expectNumber,
+  expectOptionalStringArray,
   expectOptionalString,
   expectString,
   expectStringArray,
@@ -326,7 +327,12 @@ ipcMain.handle("git:push", async (_event, payload) => {
 ipcMain.handle("git:generate-commit-message", async (_event, payload) => {
   const r = assertRecord(payload, "git:generate-commit-message")
   const repoPath = expectString(r, "repoPath", "git:generate-commit-message")
-  return gitGenerateCommitMessage(repoPath)
+  const stagedPaths = expectOptionalStringArray(
+    r,
+    "stagedPaths",
+    "git:generate-commit-message"
+  )
+  return gitGenerateCommitMessage(repoPath, { stagedPaths })
 })
 
 ipcMain.handle("git:stage-paths", async (_event, payload) => {
