@@ -27,6 +27,7 @@ import { collectExpandedDirectoryPaths } from "@/lib/pierre-tree-expanded"
 import { SIDEBAR_PIERRE_TREE_STYLE } from "@/lib/sidebar-pierre-tree-style"
 import {
   buildWorktreePierrePaths,
+  removableWorktreesFromSelection,
   resolveWorktreeFromMenuPath,
   terminalShapeIdFromLeafPath,
 } from "@/lib/worktree-pierre-tree"
@@ -59,6 +60,7 @@ function WorktreePierreContextPortal({
   item,
   context,
   mapsRef,
+  treeModel,
   repoPath,
   editor,
   policy,
@@ -67,12 +69,13 @@ function WorktreePierreContextPortal({
   onCopyText,
   onReveal,
   onRename,
-  onRemove,
+  onRemoveWorktrees,
   onKillSession,
 }: {
   item: PierreContextMenuItem
   context: PierreContextMenuOpenContext
   mapsRef: MutableRefObject<WorktreeMapsRef>
+  treeModel: PierreWorktreeTreeModel
   repoPath: string
   editor: ReturnType<typeof useEditor>
   policy: { user: { renameBranch: boolean } }
@@ -81,7 +84,7 @@ function WorktreePierreContextPortal({
   onCopyText: (text: string) => void
   onReveal: (path: string) => void
   onRename: (wt: WorktreeIndexEntry) => void
-  onRemove: (wt: WorktreeIndexEntry) => void
+  onRemoveWorktrees: (wts: WorktreeIndexEntry[]) => void
   onKillSession: (sessionId: string) => void
 }) {
   const { anchorRect, close } = context
@@ -122,6 +125,22 @@ function WorktreePierreContextPortal({
 
   if (item.kind === "directory" && wt) {
     const worktree = wt
+    const removableWts = removableWorktreesFromSelection(
+      treeModel,
+      dirPathToWt,
+      worktree,
+    )
+    const renameTarget =
+      removableWts.length === 1 && !removableWts[0]!.isMain
+        ? removableWts[0]!
+        : null
+    const showRename = Boolean(renameTarget?.id && policy.user.renameBranch)
+    const showRemove = removableWts.length >= 1
+    const showManagement = showRename || showRemove
+    const isMultiSelection = treeModel.getSelectedPaths().length > 1
+    /** Per-row actions only target the clicked row; hide them when batch actions are available. */
+    const hidePerRowActions = isMultiSelection && showManagement
+
     function onDirectoryMenuPointerDown(e: React.PointerEvent) {
       if (e.pointerType === "mouse" && e.button !== 0) return
       const n = e.target as Node
@@ -154,13 +173,13 @@ function WorktreePierreContextPortal({
           finish()
           break
         case "rename-branch":
-          if (!worktree.id || !policy.user.renameBranch) return
-          onRename(worktree)
+          if (!renameTarget?.id || !policy.user.renameBranch) return
+          onRename(renameTarget)
           finish()
           break
         case "remove-worktree":
-          if (!worktree.id) return
-          onRemove(worktree)
+          if (removableWts.length === 0) return
+          onRemoveWorktrees(removableWts)
           finish()
           break
         default:
@@ -189,39 +208,55 @@ function WorktreePierreContextPortal({
           role="menu"
           onPointerDown={onDirectoryMenuPointerDown}
         >
-          <button
-            type="button"
-            className={MENU_BTN}
-            data-wt-menu="new-terminal"
-          >
-            New terminal here
-          </button>
-          <div className="my-1 h-px bg-border" role="separator" />
-          <button type="button" className={MENU_BTN} data-wt-menu="copy-path">
-            Copy path
-          </button>
-          <button type="button" className={MENU_BTN} data-wt-menu="reveal-path">
-            Reveal in Finder
-          </button>
-          {!worktree.isMain ? (
+          {!hidePerRowActions ? (
             <>
+              <button
+                type="button"
+                className={MENU_BTN}
+                data-wt-menu="new-terminal"
+              >
+                New terminal here
+              </button>
               <div className="my-1 h-px bg-border" role="separator" />
-              <button
-                type="button"
-                className={cn(MENU_BTN, !worktree.id || !policy.user.renameBranch ? "pointer-events-none opacity-50" : "")}
-                disabled={!worktree.id || !policy.user.renameBranch}
-                data-wt-menu="rename-branch"
-              >
-                Rename branch…
+              <button type="button" className={MENU_BTN} data-wt-menu="copy-path">
+                Copy path
               </button>
-              <button
-                type="button"
-                className={cn(MENU_BTN, MENU_BTN_DESTRUCTIVE, !worktree.id ? "pointer-events-none opacity-50" : "")}
-                disabled={!worktree.id}
-                data-wt-menu="remove-worktree"
-              >
-                Remove worktree
+              <button type="button" className={MENU_BTN} data-wt-menu="reveal-path">
+                Reveal in Finder
               </button>
+            </>
+          ) : null}
+          {showManagement ? (
+            <>
+              {!hidePerRowActions ? (
+                <div className="my-1 h-px bg-border" role="separator" />
+              ) : null}
+              {showRename ? (
+                <button
+                  type="button"
+                  className={cn(
+                    MENU_BTN,
+                    !renameTarget?.id || !policy.user.renameBranch
+                      ? "pointer-events-none opacity-50"
+                      : "",
+                  )}
+                  disabled={!renameTarget?.id || !policy.user.renameBranch}
+                  data-wt-menu="rename-branch"
+                >
+                  Rename branch…
+                </button>
+              ) : null}
+              {showRemove ? (
+                <button
+                  type="button"
+                  className={cn(MENU_BTN, MENU_BTN_DESTRUCTIVE)}
+                  data-wt-menu="remove-worktree"
+                >
+                  {removableWts.length === 1
+                    ? "Remove worktree"
+                    : `Remove ${removableWts.length} worktrees`}
+                </button>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -437,14 +472,17 @@ export const WorktreeList = track(function WorktreeList({
     addTerminalAtCenter(editor, { cwd })
   }
 
-  function removeWorktree(wt: WorktreeIndexEntry) {
-    if (!wt.id || wt.isMain) return
-    requestRemove({
-      repoPath,
-      id: wt.id,
-      branch: wt.branch,
-      path: wt.path,
-    })
+  function removeWorktrees(wts: WorktreeIndexEntry[]) {
+    const reqs = wts
+      .filter((w) => w.id && !w.isMain)
+      .map((w) => ({
+        repoPath,
+        id: w.id!,
+        branch: w.branch,
+        path: w.path,
+      }))
+    if (reqs.length === 0) return
+    requestRemove(reqs)
   }
 
   function renameBranch(wt: WorktreeIndexEntry) {
@@ -497,6 +535,7 @@ export const WorktreeList = track(function WorktreeList({
           item={item}
           context={context}
           mapsRef={mapsRef}
+          treeModel={treeModel}
           repoPath={repoPath}
           editor={editor}
           policy={policy}
@@ -505,11 +544,20 @@ export const WorktreeList = track(function WorktreeList({
           onCopyText={copyText}
           onReveal={revealInFinder}
           onRename={renameBranch}
-          onRemove={removeWorktree}
+          onRemoveWorktrees={removeWorktrees}
           onKillSession={(sessionId) => requestKill({ sessionId })}
         />
       ) as ReactNode,
-    [repoPath, editor, policy, navigateToShape, requestKill, mapsRef, terminalFingerprint],
+    [
+      repoPath,
+      editor,
+      policy,
+      navigateToShape,
+      requestKill,
+      mapsRef,
+      treeModel,
+      terminalFingerprint,
+    ],
   )
 
   return (

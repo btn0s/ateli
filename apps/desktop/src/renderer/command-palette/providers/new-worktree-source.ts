@@ -10,7 +10,7 @@ type Env = {
 }
 
 /**
- * Step 2 for “New Git worktree”: main / Linear (stub) / branch·PR (stub).
+ * Step 2 for “New Worktree”: main / Linear (stub) / branch·PR (stub).
  */
 export function createNewWorktreeSourceCommands(
   env: Env,

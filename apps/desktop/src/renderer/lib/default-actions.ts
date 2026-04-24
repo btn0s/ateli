@@ -55,7 +55,7 @@ export function randomAteliWorktreeBranchName(): string {
 
 registerAction({
   id: "add-worktree",
-  label: "New Git worktree",
+  label: "New Worktree",
   icon: GitBranch,
   tldrawIcon: "plus",
   showInToolbar: true,

@@ -124,6 +124,25 @@ export function resolveWorktreeFromMenuPath(
   return dirPathToWt.get(parent) ?? null
 }
 
+/** Non-main worktrees from multi-selected directory rows, plus the row that was right-clicked. */
+export function removableWorktreesFromSelection(
+  treeModel: { getSelectedPaths(): readonly string[] },
+  dirPathToWt: Map<string, WorktreeIndexEntry>,
+  clicked: WorktreeIndexEntry,
+): WorktreeIndexEntry[] {
+  const byId = new Map<string, WorktreeIndexEntry>()
+  for (const p of treeModel.getSelectedPaths()) {
+    const dir = p.endsWith("/") ? p : `${p}/`
+    const w = dirPathToWt.get(dir)
+    if (!w || w.isMain || !w.id) continue
+    byId.set(w.id, w)
+  }
+  if (clicked.id && !clicked.isMain) {
+    byId.set(clicked.id, clicked)
+  }
+  return [...byId.values()]
+}
+
 export function terminalShapeIdFromLeafPath(
   path: string,
   leafPathToShapeId: Map<string, TLShapeId>,

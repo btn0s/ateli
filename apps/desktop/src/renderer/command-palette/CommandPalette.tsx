@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { track, useEditor } from "tldraw"
 import { Badge } from "@workspace/ui/components/badge"
 import {
@@ -169,7 +170,9 @@ export const CommandPalette = track(function CommandPalette() {
     [close, run, setError],
   )
 
-  if (!open) return null
+  if (!open) {
+    return null
+  }
 
   const hasRows =
     display.mode === "search"
@@ -179,8 +182,11 @@ export const CommandPalette = track(function CommandPalette() {
             section.items.length > 0,
         )
 
-  return (
-    <div className="pointer-events-auto absolute inset-0 z-[400] flex items-start justify-center pt-[20vh] antialiased">
+  const layer = (
+    <div
+      data-ateli-command-palette-overlay
+      className="pointer-events-auto fixed inset-0 z-[999999] flex items-start justify-center pt-[20vh] antialiased"
+    >
       <div
         className="absolute inset-0 bg-black/50"
         onClick={() => close()}
@@ -230,4 +236,6 @@ export const CommandPalette = track(function CommandPalette() {
       </Command>
     </div>
   )
+
+  return createPortal(layer, document.body)
 })
