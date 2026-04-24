@@ -60,8 +60,8 @@ function largestFreeRect(
   ys.sort((a, b) => a - b)
   let best: Rect | null = null
   for (let i = 0; i < ys.length - 1; i++) {
-    const top = ys[i]
-    const bot = ys[i + 1]
+    const top = ys[i]!
+    const bot = ys[i + 1]!
     const height = bot - top
     if (height < size.h + GUTTER * 2) continue
     const bandRect: Rect = {

@@ -9,9 +9,9 @@ export function detectClusters(shapes: ShapeRect[]): Cluster[] {
 
   const parent = Array.from({ length: n }, (_, i) => i)
   const find = (i: number): number => {
-    while (parent[i] !== i) {
-      parent[i] = parent[parent[i]]
-      i = parent[i]
+    while (parent[i]! !== i) {
+      parent[i] = parent[parent[i]!]!
+      i = parent[i]!
     }
     return i
   }
@@ -26,7 +26,7 @@ export function detectClusters(shapes: ShapeRect[]): Cluster[] {
 
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      if (rectsOverlap(inflated[i], inflated[j])) union(i, j)
+      if (rectsOverlap(inflated[i]!, inflated[j]!)) union(i, j)
     }
   }
 
@@ -34,7 +34,7 @@ export function detectClusters(shapes: ShapeRect[]): Cluster[] {
   for (let i = 0; i < n; i++) {
     const root = find(i)
     const list = groups.get(root) ?? []
-    list.push(shapes[i])
+    list.push(shapes[i]!)
     groups.set(root, list)
   }
 
