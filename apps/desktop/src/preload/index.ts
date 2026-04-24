@@ -91,9 +91,10 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.invoke("git:push", { repoPath }) as Promise<
         { ok: true } | { ok: false; error: string }
       >,
-    generateCommitMessage: (repoPath: string) =>
+    generateCommitMessage: (repoPath: string, stagedPaths?: string[]) =>
       ipcRenderer.invoke("git:generate-commit-message", {
         repoPath,
+        stagedPaths,
       }) as Promise<{ message: string | null; error: string | null }>,
     stagePaths: (repoPath: string, paths: string[]) =>
       ipcRenderer.invoke("git:stage-paths", { repoPath, paths }) as Promise<
@@ -120,7 +121,7 @@ contextBridge.exposeInMainWorld("electron", {
     create: (
       repoPath: string,
       branch: string,
-      options?: { startPoint?: string },
+      options?: { startPoint?: string }
     ) =>
       ipcRenderer.invoke("worktree:create", {
         repoPath,

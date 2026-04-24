@@ -71,6 +71,24 @@ export function expectStringArray(
   return v as string[]
 }
 
+export function expectOptionalStringArray(
+  r: Record<string, unknown>,
+  key: string,
+  label: string
+): string[] | undefined {
+  const v = r[key]
+  if (v === undefined) return undefined
+  if (!Array.isArray(v)) {
+    throw new Error(`Invalid ${label}: ${key} must be an array`)
+  }
+  for (let i = 0; i < v.length; i++) {
+    if (typeof v[i] !== "string") {
+      throw new Error(`Invalid ${label}: ${key}[${i}] must be a string`)
+    }
+  }
+  return v as string[]
+}
+
 export function expectBooleanKey(
   r: Record<string, unknown>,
   key: string
@@ -124,9 +142,7 @@ export function parseManagementPolicyPatch(x: unknown): {
   return out
 }
 
-export function expectGitDiffRequest(
-  x: unknown
-): {
+export function expectGitDiffRequest(x: unknown): {
   repoPath: string
   path: string
   absPath: string

@@ -46,16 +46,22 @@ function parseOptionalCommitMessageCli():
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as unknown
-      if (!Array.isArray(parsed) || !parsed.every((x) => typeof x === "string")) {
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every((x) => typeof x === "string")
+      ) {
         return {
           mode: "error",
           error:
-            "ATELI_COMMIT_MSG_CLI_ARGS must be a JSON array of strings, e.g. [\"run\",\"llama3.2\",\"--no-stream\"].",
+            'ATELI_COMMIT_MSG_CLI_ARGS must be a JSON array of strings, e.g. ["run","llama3.2","--no-stream"].',
         }
       }
       return { mode: "cli", exe, args: parsed as string[] }
     } catch {
-      return { mode: "error", error: "ATELI_COMMIT_MSG_CLI_ARGS is not valid JSON." }
+      return {
+        mode: "error",
+        error: "ATELI_COMMIT_MSG_CLI_ARGS is not valid JSON.",
+      }
     }
   }
   if (looksLikeOllamaExecutable(exe)) {
@@ -73,14 +79,21 @@ function normGitPath(p: string): string {
 }
 
 async function gitDiffShortstatHead(repoPath: string): Promise<string | null> {
+  return gitDiffShortstat(repoPath, [
+    "-c",
+    "core.quotepath=false",
+    "diff",
+    "--shortstat",
+    "HEAD",
+  ])
+}
+
+async function gitDiffShortstat(
+  repoPath: string,
+  args: string[]
+): Promise<string | null> {
   try {
-    const out = await gitStdout(repoPath, [
-      "-c",
-      "core.quotepath=false",
-      "diff",
-      "--shortstat",
-      "HEAD",
-    ])
+    const out = await gitStdout(repoPath, args)
     const s = out.trim()
     return s.length > 0 ? s : null
   } catch {
@@ -111,6 +124,17 @@ async function gitChangedPathsRelative(repoPath: string): Promise<string[]> {
   for (const line of untracked.split("\n")) {
     const t = normGitPath(line)
     if (t) set.add(t)
+  }
+  return [...set].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  )
+}
+
+function normalizeSelectedPaths(paths: string[] | undefined): string[] {
+  const set = new Set<string>()
+  for (const path of paths ?? []) {
+    const normalized = normGitPath(path)
+    if (normalized) set.add(normalized)
   }
   return [...set].sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: "base" })
@@ -398,11 +422,11 @@ export async function gitStagePaths(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (paths.length === 0) return { ok: true }
   try {
-    await exec(
-      "git",
-      ["-c", "core.quotepath=false", "add", "--", ...paths],
-      { cwd: repoPath, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }
-    )
+    await exec("git", ["-c", "core.quotepath=false", "add", "--", ...paths], {
+      cwd: repoPath,
+      encoding: "utf8",
+      maxBuffer: 10 * 1024 * 1024,
+    })
     return { ok: true }
   } catch (e) {
     return { ok: false, error: gitErrorMessage(e) }
@@ -468,7 +492,12 @@ export async function gitWorkingTreeDiffContext(
 ): Promise<{ text: string; error: string | null }> {
   try {
     const [porcelain, staged, unstaged] = await Promise.all([
-      gitStdout(repoPath, ["-c", "core.quotepath=false", "status", "--porcelain"]),
+      gitStdout(repoPath, [
+        "-c",
+        "core.quotepath=false",
+        "status",
+        "--porcelain",
+      ]),
       gitStdout(
         repoPath,
         ["-c", "core.quotepath=false", "diff", "--cached"],
@@ -523,19 +552,76 @@ export async function gitWorkingTreeDiffContext(
   }
 }
 
+async function gitStagedDiffContext(
+  repoPath: string,
+  paths: string[]
+): Promise<{ text: string; error: string | null }> {
+  if (paths.length === 0) {
+    return { text: "", error: null }
+  }
+
+  try {
+    const staged = await gitStdout(
+      repoPath,
+      ["-c", "core.quotepath=false", "diff", "--cached", "--", ...paths],
+      DIFF_CONTEXT_MAX
+    ).catch(() => "")
+
+    if (!staged.trim()) {
+      return { text: "", error: null }
+    }
+
+    let text = "### Staged\n"
+    text += staged
+    if (!text.endsWith("\n")) text += "\n"
+
+    const trimmed = text.trim()
+    if (trimmed.length > DIFF_CONTEXT_MAX) {
+      return {
+        text: `${trimmed.slice(0, DIFF_CONTEXT_MAX)}\n\n[diff truncated]`,
+        error: null,
+      }
+    }
+
+    return { text: trimmed, error: null }
+  } catch (e) {
+    return {
+      text: "",
+      error: e instanceof Error ? e.message : String(e),
+    }
+  }
+}
+
 export async function gitGenerateCommitMessage(
-  repoPath: string
+  repoPath: string,
+  options?: { stagedPaths?: string[] }
 ): Promise<{ message: string | null; error: string | null }> {
   const cliOpt = parseOptionalCommitMessageCli()
   if (cliOpt.mode === "error") {
     return { message: null, error: cliOpt.error }
   }
 
+  const stagedPaths = normalizeSelectedPaths(options?.stagedPaths)
+  const usingStagedScope = stagedPaths.length > 0
   const [recentRes, diffCtx, relPaths, shortstat] = await Promise.all([
     gitRecentSubjects(repoPath, 18),
-    gitWorkingTreeDiffContext(repoPath),
-    gitChangedPathsRelative(repoPath),
-    gitDiffShortstatHead(repoPath),
+    usingStagedScope
+      ? gitStagedDiffContext(repoPath, stagedPaths)
+      : gitWorkingTreeDiffContext(repoPath),
+    usingStagedScope
+      ? Promise.resolve(stagedPaths)
+      : gitChangedPathsRelative(repoPath),
+    usingStagedScope
+      ? gitDiffShortstat(repoPath, [
+          "-c",
+          "core.quotepath=false",
+          "diff",
+          "--cached",
+          "--shortstat",
+          "--",
+          ...stagedPaths,
+        ])
+      : gitDiffShortstatHead(repoPath),
   ])
 
   if (recentRes.error) {
@@ -641,7 +727,10 @@ export async function gitStageAllCommit(
 
   try {
     if (amend && !(await hasHead(repoPath))) {
-      return { ok: false, error: "Cannot amend: repository has no commits yet." }
+      return {
+        ok: false,
+        error: "Cannot amend: repository has no commits yet.",
+      }
     }
 
     const staged = await hasStagedDiff(repoPath)
