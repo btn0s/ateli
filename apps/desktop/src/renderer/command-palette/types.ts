@@ -30,6 +30,18 @@ export type CommandExecutionContext = {
   palette: CommandPaletteContext
 }
 
+export type PaletteRoute =
+  | { kind: "root" }
+  | { kind: "new-terminal" }
+  | { kind: "new-worktree" }
+  | {
+      kind: "actions"
+      sourceId: string
+      sourceTitle: string
+      sourceSubtitle?: string
+      actions: CommandDefinition[]
+    }
+
 export type CommandPaletteContext = {
   selectionShapeIds: readonly TLShapeId[]
   /** Distinct tldraw shape `type` strings for the current selection. */
@@ -63,8 +75,13 @@ export type CommandDefinition = {
   /** Optional contextual score boost for ranking (0–1). */
   score?: (ctx: CommandExecutionContext) => number
   /**
+   * When set, selecting the row pushes this route onto the palette stack
+   * instead of invoking `run`. Use for multi-step flows.
+   */
+  push?: PaletteRoute
+  /**
    * Return `"continue"` to keep the palette open and advance a multi-step
-   * flow (e.g. new terminal → pick folder). Default success closes the sheet.
+   * flow. Default success closes the sheet. Ignored when `push` is set.
    */
   run: (
     ctx: CommandExecutionContext,
@@ -74,10 +91,7 @@ export type CommandDefinition = {
   /** Reserved for a later confirm dialog pass. */
   confirm?: { title: string; body?: string }
   alternateRun?: (ctx: CommandExecutionContext) => void | Promise<void>
-  /**
-   * Right-side group label in search mode; defaults from `group` if omitted.
-   */
-  contextBadge?: string
+  actions?: (ctx: CommandExecutionContext) => CommandDefinition[]
   /**
    * When true, the row is non-interactive and sorts after available commands.
    */
@@ -92,3 +106,14 @@ export type ScoredCommand = {
   band: number
   sortKey: string
 }
+
+export type PaletteDisplay =
+  | {
+      mode: "search"
+      list: CommandDefinition[]
+      groupHeading: string
+    }
+  | {
+      mode: "empty"
+      sections: { section: string; items: CommandDefinition[] }[]
+    }

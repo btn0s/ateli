@@ -18,6 +18,7 @@ export type WorktreeIndexEntry = {
 }
 
 const WorktreeIndexContext = createContext<WorktreeIndexEntry[]>([])
+const RepoPathContext = createContext<string>("")
 
 export function WorktreeIndexProvider({
   repoPath,
@@ -53,12 +54,18 @@ export function WorktreeIndexProvider({
   }, [refresh])
 
   return (
-    <WorktreeIndexContext.Provider value={worktrees}>
-      {children}
-    </WorktreeIndexContext.Provider>
+    <RepoPathContext.Provider value={repoPath}>
+      <WorktreeIndexContext.Provider value={worktrees}>
+        {children}
+      </WorktreeIndexContext.Provider>
+    </RepoPathContext.Provider>
   )
 }
 
 export function useWorktrees(): WorktreeIndexEntry[] {
   return useContext(WorktreeIndexContext)
+}
+
+export function useRepoPath(): string {
+  return useContext(RepoPathContext)
 }

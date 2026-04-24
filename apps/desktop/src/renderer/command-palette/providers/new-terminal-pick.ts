@@ -1,7 +1,6 @@
 import { GitBranch } from "lucide-react"
 import {
   addTerminalAtCenter,
-  getRepoPath,
   randomAteliWorktreeBranchName,
 } from "@/lib/default-actions"
 import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
@@ -13,6 +12,7 @@ import type { CommandDefinition } from "../types"
 
 type Env = {
   onUnavailable: (message: string) => void
+  repoPath: string
   worktrees: WorktreeIndexEntry[]
 }
 
@@ -21,15 +21,15 @@ type Env = {
  * new terminal from the command palette.
  */
 export function createNewTerminalPickCommands(env: Env): CommandDefinition[] {
-  const repo = getRepoPath()
-  if (!repo) {
+  const { repoPath } = env
+  if (!repoPath) {
     return []
   }
 
-  const rows = buildNewTerminalWorktreeRows(repo, env.worktrees)
+  const rows = buildNewTerminalWorktreeRows(repoPath, env.worktrees)
 
   const worktreeOptions: CommandDefinition[] = rows.map((wt) => {
-    const key = wt.isMain ? (repo ?? "main") : wt.path
+    const key = wt.isMain ? repoPath : wt.path
     const label = wt.isMain ? "main" : wt.branch
     return {
       id: `new-terminal:wt:${key}`,
@@ -37,11 +37,10 @@ export function createNewTerminalPickCommands(env: Env): CommandDefinition[] {
       icon: GitBranch,
       keywords: [label, wt.branch, wt.path, "worktree", "folder", "cwd", "root"],
       group: "worktree" as const,
-      contextBadge: "Folder",
       emptyQuerySection: "suggested" as const,
       when: () => true,
       run: (ctx) => {
-        const cwd = wt.isMain ? repo! : wt.path
+        const cwd = wt.isMain ? repoPath : wt.path
         addTerminalAtCenter(ctx.editor, { cwd })
       },
     } satisfies CommandDefinition
@@ -59,18 +58,16 @@ export function createNewTerminalPickCommands(env: Env): CommandDefinition[] {
       "add",
     ],
     group: "create" as const,
-    contextBadge: "New",
     emptyQuerySection: "suggested" as const,
     when: () => true,
     mutatesState: true,
     run: async (ctx) => {
-      if (!getRepoPath()) {
+      if (!repoPath) {
         env.onUnavailable("No repository is open for this worktree action.")
         return
       }
-      const r = getRepoPath()!
       const branch = randomAteliWorktreeBranchName()
-      const { path } = await window.electron.worktree.create(r, branch, {
+      const { path } = await window.electron.worktree.create(repoPath, branch, {
         startPoint: getDefaultWorktreeStartRef(env.worktrees),
       })
       addTerminalAtCenter(ctx.editor, { cwd: path })

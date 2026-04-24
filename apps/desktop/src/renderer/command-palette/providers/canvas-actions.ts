@@ -21,7 +21,6 @@ export function createCanvasActionCommands(): CommandDefinition[] {
       icon: Maximize2,
       keywords: ["fit", "zoom", "page", "view", "all"],
       group: "canvas",
-      contextBadge: "Canvas",
       emptyQuerySection: "actions",
       when: (ctx: CommandExecutionContext) =>
         ctx.editor.getCurrentPageBounds() != null,
@@ -39,7 +38,6 @@ export function createCanvasActionCommands(): CommandDefinition[] {
       icon: Scan,
       keywords: ["selection", "sel", "zoom", "frame", "focus"],
       group: "canvas",
-      contextBadge: "Selection",
       emptyQuerySection: "suggested",
       when: (ctx: CommandExecutionContext) =>
         ctx.editor.getSelectionPageBounds() != null,
@@ -62,7 +60,6 @@ export function createCanvasActionCommands(): CommandDefinition[] {
       icon: Plus,
       keywords: ["larger", "bigger", "magnify", "zoom"],
       group: "canvas",
-      contextBadge: "Canvas",
       emptyQuerySection: "actions",
       when: () => true,
       run: (ctx: CommandExecutionContext) => {
@@ -76,7 +73,6 @@ export function createCanvasActionCommands(): CommandDefinition[] {
       icon: Minus,
       keywords: ["smaller", "zoom"],
       group: "canvas",
-      contextBadge: "Canvas",
       emptyQuerySection: "actions",
       when: () => true,
       run: (ctx: CommandExecutionContext) => {
@@ -90,7 +86,6 @@ export function createCanvasActionCommands(): CommandDefinition[] {
       icon: SquareDashed,
       keywords: ["100", "reset", "actual", "one", "to", "pixel"],
       group: "canvas",
-      contextBadge: "Canvas",
       emptyQuerySection: "actions",
       when: () => true,
       run: (ctx: CommandExecutionContext) => {

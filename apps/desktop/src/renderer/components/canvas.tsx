@@ -25,17 +25,25 @@ import type {
 } from "tldraw"
 import "tldraw/tldraw.css"
 import { DiffPreviewTabsProvider } from "@/contexts/diff-preview-tabs-context"
-import { WorktreeIndexProvider } from "@/contexts/worktree-index-context"
+import {
+  WorktreeIndexProvider,
+  useRepoPath,
+} from "@/contexts/worktree-index-context"
 import { TerminalShapeUtil, setTerminalCwd } from "@/shapes/terminal-shape"
 import { cwdUnderRemovedWorktree } from "@/lib/terminal-worktree-title"
-import { getToolbarActions, getContextMenuActions } from "@/lib/tool-registry"
 import {
-  setRepoPath,
-  getRepoPath,
-  addTerminalAtCenter,
-} from "@/lib/default-actions"
+  getToolbarActions,
+  getContextMenuActions,
+  type ToolAction,
+} from "@/lib/tool-registry"
+import { addTerminalAtCenter } from "@/lib/default-actions"
 import "@/lib/default-actions"
 import { CommandPalette } from "../command-palette/CommandPalette"
+import {
+  PaletteControllerProvider,
+  usePaletteController,
+  type PaletteController,
+} from "../command-palette/palette-controller"
 import { DiffPreviewTabs } from "./diff-preview-tabs"
 import { SidebarHud } from "./sidebar-hud"
 import { FileTree } from "./file-tree"
@@ -87,8 +95,21 @@ const toolButtonClass =
 const toolButtonActiveClass =
   "flex size-8 items-center justify-center rounded-md bg-accent text-accent-foreground transition-[color,background-color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:scale-[0.96]"
 
+function runToolAction(
+  action: ToolAction,
+  editor: ReturnType<typeof useEditor>,
+  palette: PaletteController,
+) {
+  if (action.openPaletteRoute) {
+    palette.openRoute(action.openPaletteRoute)
+    return
+  }
+  action.execute?.(editor)
+}
+
 const CustomToolbar = track(() => {
   const editor = useEditor()
+  const palette = usePaletteController()
   const tools = useTools()
   const currentToolId = editor.getCurrentToolId()
   const customActions = getToolbarActions()
@@ -127,7 +148,7 @@ const CustomToolbar = track(() => {
               <button
                 key={action.id}
                 className={toolButtonClass}
-                onClick={() => action.execute(editor)}
+                onClick={() => runToolAction(action, editor, palette)}
                 title={action.label}
               >
                 <action.icon className="size-4" />
@@ -142,6 +163,7 @@ const CustomToolbar = track(() => {
 
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
+  const palette = usePaletteController()
   const customActions = getContextMenuActions()
   const { requestKill, dialog } = useTerminalKillConfirmation()
   const selectedTerminal = useValue(
@@ -183,7 +205,7 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
                 label={action.label as any}
                 icon={action.tldrawIcon as any}
                 readonlyOk
-                onSelect={() => action.execute(editor)}
+                onSelect={() => runToolAction(action, editor, palette)}
               />
             ))}
           </TldrawUiMenuGroup>
@@ -257,9 +279,10 @@ function TerminalDeleteDialog() {
 }
 
 function CanvasSidebarHud() {
+  const repoPath = useRepoPath()
   return (
     <SidebarHud
-      left={<LeftSidebarTabs repoPath={getRepoPath()} />}
+      left={<LeftSidebarTabs repoPath={repoPath} />}
       center={<DiffPreviewTabs />}
       right={<FileTree />}
     />
@@ -487,24 +510,25 @@ function RpcBridge() {
 
 export function Canvas({ folderPath }: { folderPath: string }) {
   setTerminalCwd(folderPath)
-  setRepoPath(folderPath)
 
   return (
     <div className="h-screen w-screen">
       <WorktreeIndexProvider repoPath={folderPath}>
         <DiffPreviewTabsProvider>
-          <Tldraw
-            persistenceKey={`ateli:canvas:${folderPath}`}
-            components={components}
-            shapeUtils={customShapeUtils}
-            options={{ gridSteps: [{ min: 1, mid: 1, step: 20 }] }}
-            onMount={(editor) => {
-              editor.user.updateUserPreferences({ colorScheme: "dark" })
-              editor.updateInstanceState({ isGridMode: true })
-            }}
-          >
-            <RpcBridge />
-          </Tldraw>
+          <PaletteControllerProvider>
+            <Tldraw
+              persistenceKey={`ateli:canvas:${folderPath}`}
+              components={components}
+              shapeUtils={customShapeUtils}
+              options={{ gridSteps: [{ min: 1, mid: 1, step: 20 }] }}
+              onMount={(editor) => {
+                editor.user.updateUserPreferences({ colorScheme: "dark" })
+                editor.updateInstanceState({ isGridMode: true })
+              }}
+            >
+              <RpcBridge />
+            </Tldraw>
+          </PaletteControllerProvider>
         </DiffPreviewTabsProvider>
       </WorktreeIndexProvider>
     </div>

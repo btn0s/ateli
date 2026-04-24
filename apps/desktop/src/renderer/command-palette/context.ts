@@ -2,7 +2,6 @@ import type { Editor } from "tldraw"
 import type { CommandPaletteContext } from "./types"
 import { buildWorktreeListForPalette } from "./worktree-entries"
 import type { WorktreeIndexEntry } from "@/contexts/worktree-index-context"
-import { getRepoPath } from "@/lib/default-actions"
 import { getCenterLaneScreenRect } from "@/lib/canvas-camera"
 import type { TLShapeId } from "tldraw"
 
@@ -16,6 +15,7 @@ function selectionSummary(
 
 export function buildCommandPaletteContext(
   editor: Editor,
+  repoPath: string,
   worktrees: WorktreeIndexEntry[],
 ): CommandPaletteContext {
   const all = editor.getCurrentPageShapes()
@@ -25,7 +25,6 @@ export function buildCommandPaletteContext(
 
   const terminalShapeIds = all.filter((s) => s.type === "terminal").map((s) => s.id)
   const frameShapeIds = all.filter((s) => s.type === "frame").map((s) => s.id)
-  const repoPath = getRepoPath()
 
   return {
     selectionShapeIds: shapeIds,

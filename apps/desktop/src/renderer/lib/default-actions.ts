@@ -1,18 +1,6 @@
 import type { Editor } from "tldraw"
 import { TerminalSquare, GitBranch } from "lucide-react"
-import { openNewTerminalWorktreePicker } from "../command-palette/new-terminal-flow"
-import { openNewWorktreeSourcePicker } from "../command-palette/new-worktree-flow"
 import { registerAction } from "./tool-registry"
-
-let _repoPath = ""
-
-export function setRepoPath(repoPath: string) {
-  _repoPath = repoPath
-}
-
-export function getRepoPath(): string {
-  return _repoPath
-}
 
 export function addTerminalAtCenter(editor: Editor, props?: Record<string, unknown>) {
   const center = editor.getViewportPageBounds().center
@@ -32,9 +20,7 @@ registerAction({
   showInToolbar: true,
   showInCommandMenu: true,
   showInContextMenu: true,
-  execute: (_editor: Editor) => {
-    openNewTerminalWorktreePicker()
-  },
+  openPaletteRoute: { kind: "new-terminal" },
 })
 
 const adjectives = [
@@ -61,7 +47,5 @@ registerAction({
   showInToolbar: true,
   showInCommandMenu: true,
   showInContextMenu: true,
-  execute: (_editor: Editor) => {
-    openNewWorktreeSourcePicker()
-  },
+  openPaletteRoute: { kind: "new-worktree" },
 })

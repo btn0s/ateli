@@ -17,7 +17,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Input } from "@workspace/ui/components/input"
 
-type TerminalRenameRequest = {
+export type TerminalRenameRequest = {
   sessionKey: string
   currentName?: string
   fallbackLabel: string

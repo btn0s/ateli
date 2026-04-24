@@ -17,7 +17,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Input } from "@workspace/ui/components/input"
 
-type WorktreeRenameRequest = {
+export type WorktreeRenameRequest = {
   repoPath: string
   id: string
   currentBranch: string

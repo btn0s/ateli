@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import type { Editor } from "tldraw"
+import type { PaletteRoute } from "@/command-palette/types"
 
 export interface ToolAction {
   id: string
@@ -11,7 +12,13 @@ export interface ToolAction {
   showInToolbar?: boolean
   showInCommandMenu?: boolean
   showInContextMenu?: boolean
-  execute: (editor: Editor) => void | Promise<void>
+  /**
+   * When set, triggering this action opens the command palette at this route
+   * (toolbar, context menu, command palette itself).
+   */
+  openPaletteRoute?: PaletteRoute
+  /** Invoked when `openPaletteRoute` is not set. */
+  execute?: (editor: Editor) => void | Promise<void>
 }
 
 const registry: ToolAction[] = []
