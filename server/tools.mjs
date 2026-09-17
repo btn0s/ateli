@@ -8,7 +8,7 @@ const aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4']
 const imageModels = ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gemini-3.1-flash-image']
 const faceAxes = ['-Y', '+Y', '-X', '+X', '-Z', '+Z']
 
-/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh'|'Output'|'Utility', runtime: 'none'|'image'|'imgen'|'blender'|'meshy'|'gltf', inputs: object[], outputs: object[]}>} */
+/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh'|'Video'|'Output'|'Utility', runtime: 'none'|'image'|'imgen'|'blender'|'meshy'|'gltf'|'uthana'|'fal', inputs: object[], outputs: object[]}>} */
 export const tools = [
   {
     id: 'input.text', version: 1, title: 'Input Text', category: 'Input', runtime: 'none',
@@ -34,6 +34,11 @@ export const tools = [
     id: 'input.mesh', version: 1, title: 'Input Mesh', category: 'Input', runtime: 'none',
     inputs: [param('file', 'File', 'mesh')],
     outputs: [param('mesh', 'Mesh', 'mesh')],
+  },
+  {
+    id: 'input.video', version: 1, title: 'Input Video', category: 'Input', runtime: 'none',
+    inputs: [param('file', 'File', 'video')],
+    outputs: [param('video', 'Video', 'video')],
   },
   {
     id: 'input.meshes', version: 1, title: 'Input Meshes', category: 'Input', runtime: 'none',
@@ -68,14 +73,23 @@ export const tools = [
     outputs: [param('image', 'Image', 'image')],
   },
   {
-    id: 'image.edit', version: 1, title: 'Edit Image with Text', category: 'Image', runtime: 'imgen',
+    id: 'image.edit', version: 1, title: 'Edit Image', category: 'Image', runtime: 'fal',
     inputs: [
       param('image', 'Image', 'image'),
-      param('prompt', 'Prompt', 'text'),
-      param('model', 'Model', 'enum', { options: imageModels, advanced: true }),
-      param('seed', 'Seed', 'number', { advanced: true }),
+      param('prompt', 'Prompt', 'text', { multiline: true }),
+      param('model', 'Model', 'enum', { options: ['fal-ai/nano-banana-2/edit', 'openai/gpt-image-2/edit'], default: 'fal-ai/nano-banana-2/edit' }),
     ],
     outputs: [param('image', 'Image', 'image')],
+  },
+  {
+    id: 'video.fromImage', version: 1, title: 'Image to Video', category: 'Video', runtime: 'fal',
+    inputs: [
+      param('image', 'Image', 'image'),
+      param('prompt', 'Prompt', 'text', { multiline: true }),
+      param('model', 'Model', 'enum', { options: ['fal-ai/kling-video/v3/pro/image-to-video', 'bytedance/seedance-2.0/us/image-to-video'], default: 'fal-ai/kling-video/v3/pro/image-to-video' }),
+      param('duration', 'Duration', 'enum', { options: ['5', '10'], default: '5' }),
+    ],
+    outputs: [param('video', 'Video', 'video')],
   },
   {
     id: 'image.extend', version: 1, title: 'Extend Image', category: 'Image', runtime: 'imgen',
@@ -244,6 +258,37 @@ export const tools = [
     outputs: [param('mesh', 'Mesh', 'mesh')],
   },
   {
+    id: 'character.rig', version: 1, title: 'Rig Character', category: 'Mesh', runtime: 'uthana',
+    inputs: [
+      param('mesh', 'Mesh', 'mesh'),
+      param('includeFingers', 'Include Fingers', 'boolean', { default: false }),
+      param('frontFacing', 'Front Facing', 'boolean', { default: true }),
+    ],
+    outputs: [param('character', 'Character', 'text'), param('mesh', 'Mesh', 'mesh')],
+  },
+  {
+    id: 'motion.fromText', version: 1, title: 'Motion from Text', category: 'Mesh', runtime: 'uthana',
+    inputs: [
+      param('character', 'Character', 'text'),
+      param('prompt', 'Prompt', 'text', { multiline: true }),
+      param('clipName', 'Clip Name', 'text', { default: 'clip' }),
+      param('inPlace', 'In Place', 'boolean', { default: true }),
+      param('fps', 'FPS', 'number', { default: 30, min: 1, max: 120 }),
+    ],
+    outputs: [param('mesh', 'Mesh', 'mesh')],
+  },
+  {
+    id: 'motion.fromVideo', version: 1, title: 'Motion from Video', category: 'Mesh', runtime: 'uthana',
+    inputs: [
+      param('character', 'Character', 'text'),
+      param('video', 'Video', 'video'),
+      param('clipName', 'Clip Name', 'text', { default: 'clip' }),
+      param('inPlace', 'In Place', 'boolean', { default: true }),
+      param('fps', 'FPS', 'number', { default: 30, min: 1, max: 120 }),
+    ],
+    outputs: [param('mesh', 'Mesh', 'mesh')],
+  },
+  {
     id: 'mesh.compress', version: 1, title: 'Compress for Web', category: 'Mesh', runtime: 'gltf',
     inputs: [
       param('mesh', 'Mesh', 'mesh'),
@@ -255,6 +300,11 @@ export const tools = [
       param('simplify', 'Simplify Ratio', 'number', { min: 0, max: 1, default: 0, advanced: true }),
       param('flatten', 'Flatten', 'boolean', { default: true, advanced: true }),
     ],
+    outputs: [param('mesh', 'Mesh', 'mesh')],
+  },
+  {
+    id: 'mesh.mergeAnimations', version: 1, title: 'Merge Animations', category: 'Mesh', runtime: 'gltf',
+    inputs: [param('base', 'Base', 'mesh'), param('clips', 'Clips', 'mesh[]')],
     outputs: [param('mesh', 'Mesh', 'mesh')],
   },
 
@@ -392,6 +442,7 @@ export const tools = [
     inputs: [
       param('mesh', 'Mesh', 'mesh', { required: false }),
       param('image', 'Image', 'image', { required: false }),
+      param('video', 'Video', 'video', { required: false }),
       param('folder', 'Folder', 'enum', { options: [] }),
       param('name', 'Name', 'text'),
     ],

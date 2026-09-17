@@ -57,3 +57,9 @@ Category `Video` is new. Read each model's `/api` page on fal for exact input na
 
 - Ateli: worker tests with recorded fixtures for uthana/fal request shapes (no live calls in the suite; one `LIVE=1`-gated live test each, like the Meshy one). Router: `video` type validation and preview extraction with a tiny generated mp4 (`ffmpeg -f lavfi`). Merge test: two skinned GLBs → one with two named animations.
 - Last Light: vitest for clip selection from behaviour (pure function); browser check of the fixture character walking in place and swinging when sent at the dummy.
+
+## Ateli implementation notes
+
+- `list.collectMeshes` and `list.collectImages` are variadic aggregation seams: repeated scalar edges may target their `item` port. Other input ports still reject duplicate incoming edges. This is required for the three motion nodes in the character-motion seed to feed one `Collect Meshes` node.
+- Named clip animations retain their names during `mesh.mergeAnimations`. The checked-in renderer fixtures contain unnamed animations, so an unnamed clip receives its source filename stem (`idle`, `walk`, or `attack`); additional unnamed animations in the same file receive `-2`, `-3`, and so on.
+- The fixture-generation prompts were not stored with the GLBs. The seed makes the intended actions explicit: “Standing idle, breathing naturally with subtle shifts of weight.”, “Walk forward at a steady relaxed pace.”, and “Raise a rifle to the shoulder, fire once, and recover to a ready stance.”

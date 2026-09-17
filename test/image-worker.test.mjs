@@ -275,7 +275,7 @@ test('deterministic image tools produce real PNG results', async t => {
   assert.deepEqual(pixel(inspectImage(outputPath(converted, 'normal')), 0, 0), [10, 235, 30, 255])
 })
 
-test('image.generate.fast writes a PNG when imgen is healthy', { skip: !imgenAvailable }, async t => {
+test('image.generate.fast writes a PNG when LIVE=1 and imgen is healthy', { skip: process.env.LIVE !== '1' || !imgenAvailable }, async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'ateli-image-imgen-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const generated = await runWorker(

@@ -54,6 +54,7 @@ const errorHeight = 34
 const portColor: Record<AteliValueType, string> = {
 	mesh:'#a78bfa', 'mesh[]':'#a78bfa',
 	image:'#facc15', 'image[]':'#facc15',
+	video:'#f472b6', 'video[]':'#f472b6',
 	text:'#60a5fa', 'text[]':'#60a5fa',
 	number:'#fb923c', 'number[]':'#fb923c',
 	boolean:'#f87171', 'boolean[]':'#f87171',
@@ -62,7 +63,7 @@ const portColor: Record<AteliValueType, string> = {
 type ListValueType = Extract<AteliValueType, `${string}[]`>
 const isListType = (type: AteliValueType): type is ListValueType => type.endsWith('[]')
 const baseType = (type: AteliValueType) => isListType(type) ? type.slice(0, -2) : type
-const isFileType = (type: AteliValueType) => baseType(type) === 'mesh' || baseType(type) === 'image'
+const isFileType = (type: AteliValueType) => ['mesh', 'image', 'video'].includes(baseType(type))
 
 interface StoredResultItem {
 	resultId: string
@@ -169,7 +170,9 @@ function canConnect(editor: Editor, source: EdgeSource, targetNodeId: TLShapeId,
 
 export function connectPorts(editor: Editor, source: EdgeSource, to: TLShapeId, target: AteliParam, rewiredEdgeId?: TLShapeId) {
 	if (!canConnect(editor, source, to, target, rewiredEdgeId)) return false
-	const occupied = edgesOf(editor).find(edge => edge.id !== rewiredEdgeId && edge.props.to === to && edge.props.toPort === target.id)
+	const occupied = (getTool(editor.getShape<AteliNodeShape>(to)?.props.toolId ?? '')?.id.startsWith('list.collect') ?? false)
+		? undefined
+		: edgesOf(editor).find(edge => edge.id !== rewiredEdgeId && edge.props.to === to && edge.props.toPort === target.id)
 	editor.markHistoryStoppingPoint('Connect Ateli ports')
 	const replaced = [rewiredEdgeId, occupied?.id].filter((id): id is TLShapeId => Boolean(id))
 	console.info('[ateli] connect', `${source.shapeId}.${source.port.id} → ${to}.${target.id}`, replaced.length ? `(replaced ${replaced.join(', ')})` : '')
@@ -397,7 +400,7 @@ function InputRow({ shape, editor, param, readonly, drag, onValues, onUpload }: 
 	const compatible = drag ? canConnect(editor, drag.source, shape.id, param, drag.edgeId) : false
 	const dim = Boolean(drag) && !compatible
 	const multiFile = (shape.props.toolId === 'input.meshes' || shape.props.toolId === 'input.images') && param.id === 'files'
-	const singleFile = (shape.props.toolId === 'input.image' || shape.props.toolId === 'input.mesh') && param.id === 'file'
+	const singleFile = (shape.props.toolId === 'input.image' || shape.props.toolId === 'input.mesh' || shape.props.toolId === 'input.video') && param.id === 'file'
 	const fileInput = singleFile || multiFile
 	const storedFiles = shape.props.values[param.id]
 	const fileCount = Array.isArray(storedFiles) ? storedFiles.length : 0
@@ -421,7 +424,7 @@ function InputRow({ shape, editor, param, readonly, drag, onValues, onUpload }: 
 				<div className={cn('ui-well pointer-events-auto flex h-[18px] min-w-0 flex-1 items-center rounded text-[10px] text-muted-foreground', readonly && 'pointer-events-none opacity-50')} onPointerDown={stop}>
 					<label className="flex min-w-0 flex-1 cursor-pointer items-center truncate px-1.5">
 						{multiFile ? (fileCount ? `${fileCount} files` : 'Choose files') : (typeof storedFiles === 'string' ? 'Replace file' : 'Choose file')}
-						<input type="file" className="hidden" accept={baseType(param.type) === 'mesh' ? '.glb,.gltf' : 'image/*'} multiple={multiFile} disabled={readonly} onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; if (files.length) onUpload(files, param) }} />
+						<input type="file" className="hidden" accept={baseType(param.type) === 'mesh' ? '.glb,.gltf' : baseType(param.type) === 'video' ? 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov' : 'image/*'} multiple={multiFile} disabled={readonly} onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; if (files.length) onUpload(files, param) }} />
 					</label>
 					{multiFile && fileCount ? <button type="button" className="h-full shrink-0 border-0 bg-transparent px-1.5 text-xs leading-none text-muted-foreground" title="Clear files" aria-label="Clear files" onPointerDown={stop} onClick={event => { stop(event); onValues({ [param.id]:[] }) }}>×</button> : null}
 				</div>
@@ -450,7 +453,7 @@ function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
 		const result = storedResult(results[output.id])
 		return result ? [{ output, result }] : []
 	})
-	let visualResults = resolved.filter(({ result }) => result.kind === 'mesh' || result.kind === 'image' || result.kind === 'mesh[]' || result.kind === 'image[]')
+	let visualResults = resolved.filter(({ result }) => ['mesh', 'image', 'video', 'mesh[]', 'image[]', 'video[]'].includes(result.kind))
 	// A node that only passes a file through (Export) shows what it exported: the connected upstream result.
 	if (!visualResults.length && resolved.length) {
 		for (const input of tool.inputs) {
@@ -458,7 +461,7 @@ function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
 			const edge = edgesOf(editor).find(candidate => candidate.props.to === shape.id && candidate.props.toPort === input.id)
 			const upstream = edge && editor.getShape<AteliNodeShape>(edge.props.from)
 			const result = upstream && storedResult(upstream.props.results[edge.props.fromPort])
-			if (result && (result.kind === 'mesh' || result.kind === 'image' || result.kind === 'mesh[]' || result.kind === 'image[]')) {
+			if (result && ['mesh', 'image', 'video', 'mesh[]', 'image[]', 'video[]'].includes(result.kind)) {
 				visualResults = [{ output:input, result }]
 				break
 			}
@@ -468,13 +471,13 @@ function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
 	const visual: Array<{
 		key: string
 		label: string
-		kind: 'mesh' | 'image'
+		kind: 'mesh' | 'image' | 'video'
 		result?: StoredSingleResult | StoredResultItem
 		previewUrl?: string
 	}> = []
 	for (const { output, result } of visualResults) {
 		if ('items' in result) {
-			const kind = result.kind === 'mesh[]' ? 'mesh' as const : 'image' as const
+			const kind = result.kind.slice(0, -2) as 'mesh' | 'image' | 'video'
 			for (const [index, item] of result.items.entries()) {
 				visual.push({
 					key:`${output.id}:${index}`,
@@ -489,12 +492,12 @@ function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
 		visual.push({
 			key:output.id,
 			label:output.label,
-			kind:result.kind === 'mesh' ? 'mesh' : 'image',
+			kind:result.kind as 'mesh' | 'image' | 'video',
 			result,
 			previewUrl:result.previewUrl,
 		})
 	}
-	async function show(label: string, kind: 'mesh' | 'image', result: StoredSingleResult | StoredResultItem) {
+	async function show(label: string, kind: 'mesh' | 'image' | 'video', result: StoredSingleResult | StoredResultItem) {
 		const loaded = await client.result(result.resultId)
 		if ('items' in loaded) throw new Error('Expected a single result')
 		openLightbox({
@@ -827,6 +830,44 @@ export function seedAteliGraph(editor: Editor) {
 	connect(imageInput, 'image', filter, 'image')
 	connect(filter, 'image', apply, 'baseColor')
 	editor.select(meshInput, optimize, extract, apply, imageInput, filter)
+	editor.zoomToSelection({ animation:{ duration:0 } })
+	editor.selectNone()
+}
+
+export function seedCharacterMotionGraph(editor: Editor) {
+	if (editor.getIsReadonly()) return
+	editor.markHistoryStoppingPoint('Create character motion graph')
+	const existing = editor.getCurrentPageShapes().filter(shape => shape.type === 'ateli-node' || shape.type === 'ateli-edge')
+	if (existing.length) editor.deleteShapes(existing.map(shape => shape.id))
+	const center = editor.getViewportPageBounds().center
+	const at = (x: number, y: number) => ({ x:center.x + x, y:center.y + y })
+	const meshInput = createAteliNode(editor, 'input.mesh', at(-1000, 0))
+	const rig = createAteliNode(editor, 'character.rig', at(-680, 0))
+	const idle = createAteliNode(editor, 'motion.fromText', at(-340, -300))
+	const walk = createAteliNode(editor, 'motion.fromText', at(-340, 0))
+	const attack = createAteliNode(editor, 'motion.fromText', at(-340, 300))
+	const collect = createAteliNode(editor, 'list.collectMeshes', at(20, 280))
+	const merge = createAteliNode(editor, 'mesh.mergeAnimations', at(340, 0))
+	const compress = createAteliNode(editor, 'mesh.compress', at(680, 0))
+	const exportNode = createAteliNode(editor, 'output.export', at(1020, 0))
+	const node = (id: TLShapeId) => editor.getShape<AteliNodeShape>(id)!
+	const setValues = (id: TLShapeId, values: Record<string, JsonValue>) => editor.updateShape<AteliNodeShape>({ id, type:'ateli-node', props:{ values:{ ...node(id).props.values, ...values } } })
+	const connect = (from: TLShapeId, fromPort: string, to: TLShapeId, toPort: string) => connectPorts(editor, { shapeId:from, port:toolPort(node(from), fromPort, 'outputs') }, to, toolPort(node(to), toPort, 'inputs'))
+	setValues(idle, { clipName:'idle', prompt:'Standing idle, breathing naturally with subtle shifts of weight.' })
+	setValues(walk, { clipName:'walk', prompt:'Walk forward at a steady relaxed pace.' })
+	setValues(attack, { clipName:'attack', prompt:'Raise a rifle to the shoulder, fire once, and recover to a ready stance.' })
+	setValues(exportNode, { name:'{dir}' })
+	connect(meshInput, 'mesh', rig, 'mesh')
+	for (const motion of [idle, walk, attack]) connect(rig, 'character', motion, 'character')
+	connect(idle, 'mesh', collect, 'item')
+	connect(walk, 'mesh', collect, 'item')
+	connect(attack, 'mesh', collect, 'item')
+	connect(walk, 'mesh', merge, 'base')
+	connect(collect, 'list', merge, 'clips')
+	connect(merge, 'mesh', compress, 'mesh')
+	connect(compress, 'mesh', exportNode, 'mesh')
+	const nodes = [meshInput, rig, idle, walk, attack, collect, merge, compress, exportNode]
+	editor.select(...nodes)
 	editor.zoomToSelection({ animation:{ duration:0 } })
 	editor.selectNone()
 }

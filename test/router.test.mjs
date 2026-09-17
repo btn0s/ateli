@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import { access, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -543,7 +544,7 @@ test('output.export validation requires one file input and rejects unsafe names'
       graph: graph([
         { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: 'asset' } },
       ]),
-      error: /requires exactly one of mesh or image/,
+      error: /requires exactly one of mesh, image or video/,
     },
     {
       name: 'both inputs',
@@ -555,7 +556,7 @@ test('output.export validation requires one file input and rejects unsafe names'
         edge('mesh-export', 'mesh-input', 'mesh', 'export', 'mesh'),
         edge('image-export', 'image-input', 'image', 'export', 'image'),
       ]),
-      error: /requires exactly one of mesh or image/,
+      error: /requires exactly one of mesh, image or video/,
     },
     {
       name: 'path traversal',
@@ -794,4 +795,54 @@ test('list utilities collect pick and count without subprocesses', async t => {
   const count = await request(harness.origin, `/ateli/results/${run.nodes.count.outputs.count}`)
   assert.equal(count.body.value, 3)
   assert.equal((await harness.calls()).filter(toolId => toolId !== 'mesh.render').length, 0)
+})
+
+function runProcess(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { shell: false, stdio: ['ignore', 'ignore', 'pipe'] })
+    let stderr = ''
+    child.stderr.on('data', chunk => { stderr += chunk })
+    child.once('error', reject)
+    child.once('exit', (code, signal) => code === 0 && signal === null ? resolve() : reject(new Error(`${command} failed (${signal ?? code}): ${stderr}`)))
+  })
+}
+
+test('video sources validate their type and expose an extracted PNG preview', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const videoPath = path.join(harness.allowedRoot, 'tiny.mp4')
+  await runProcess('/opt/homebrew/bin/ffmpeg', [
+    '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=16x16:d=0.5',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', videoPath,
+  ])
+  const source = await addSource(harness, videoPath)
+  assert.equal(source.kind, 'video')
+  const videoGraph = graph([{ id: 'video', toolId: 'input.video', toolVersion: 1, parameters: { file: source.sourceId } }])
+  const run = await waitForRun(harness.origin, (await submit(harness, videoGraph)).body.runId)
+  assert.equal(run.status, 'completed')
+  const result = await request(harness.origin, `/ateli/results/${run.nodes.video.outputs.video}`)
+  assert.equal(result.body.kind, 'video')
+  assert.match(result.body.previewUrl, /\/preview$/)
+  const previewResponse = await fetch(`${harness.origin}${result.body.previewUrl}`)
+  assert.equal(previewResponse.status, 200)
+  const preview = Buffer.from(await previewResponse.arrayBuffer())
+  assert.deepEqual(preview.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  const imageSource = await addSource(harness, harness.imagePath)
+  const invalid = await submit(harness, graph([{ id: 'video', toolId: 'input.video', toolVersion: 1, parameters: { file: imageSource.sourceId } }]))
+  assert.equal(invalid.status, 400)
+  assert.match(invalid.body.error, /type mismatch for video\.file/)
+})
+
+test('Collect Meshes accepts several scalar edges on its aggregate input', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const sourceIds = await addMeshSources(harness)
+  const nodes = sourceIds.map((sourceId, index) => inputMesh(sourceId, `mesh-${index}`))
+  nodes.push({ id: 'collect', toolId: 'list.collectMeshes', toolVersion: 1, parameters: {} })
+  const edges = sourceIds.map((_, index) => edge(`collect-${index}`, `mesh-${index}`, 'mesh', 'collect', 'item'))
+  const run = await waitForRun(harness.origin, (await submit(harness, graph(nodes, edges))).body.runId)
+  assert.equal(run.status, 'completed')
+  const result = await request(harness.origin, `/ateli/results/${run.nodes.collect.outputs.list}`)
+  assert.equal(result.body.kind, 'mesh[]')
+  assert.equal(result.body.items.length, 3)
 })

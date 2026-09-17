@@ -13,15 +13,18 @@ const IMAGE_WORKER = fileURLToPath(new URL('../executor/image-worker.py', import
 const MESH_WORKER = fileURLToPath(new URL('../executor/mesh-worker.py', import.meta.url))
 const MESHY_WORKER = fileURLToPath(new URL('../executor/meshy-worker.mjs', import.meta.url))
 const GLTF_WORKER = fileURLToPath(new URL('../executor/gltf-worker.mjs', import.meta.url))
+const UTHANA_WORKER = fileURLToPath(new URL('../executor/uthana-worker.mjs', import.meta.url))
+const FAL_WORKER = fileURLToPath(new URL('../executor/fal-worker.mjs', import.meta.url))
 const MAX_JSON_BYTES = 1024 * 1024
 const MAX_UPLOAD_BYTES = 256 * 1024 * 1024
 const MAX_PARAMETER_BYTES = 64 * 1024
 const STDERR_TAIL_BYTES = 16 * 1024
 const SAFE_ID = /^[A-Za-z0-9_:-]{1,160}$/
-const FILE_TYPES = new Set(['image', 'mesh'])
+const FILE_TYPES = new Set(['image', 'mesh', 'video'])
 const SCALAR_TYPES = new Set(['text', 'number', 'boolean', 'enum'])
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff'])
 const MESH_EXTENSIONS = new Set(['.glb', '.gltf', '.fbx', '.obj'])
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov'])
 const LIST_SUFFIX = '[]'
 
 function baseType(type) {
@@ -101,6 +104,9 @@ function mimeType(filePath) {
     case '.webp': return 'image/webp'
     case '.tif':
     case '.tiff': return 'image/tiff'
+    case '.mp4': return 'video/mp4'
+    case '.webm': return 'video/webm'
+    case '.mov': return 'video/quicktime'
     case '.json': return 'application/json; charset=utf-8'
     case '.txt':
     case '.log': return 'text/plain; charset=utf-8'
@@ -112,6 +118,7 @@ function sourceKind(fileName) {
   const extension = path.extname(fileName).toLowerCase()
   if (IMAGE_EXTENSIONS.has(extension)) return 'image'
   if (MESH_EXTENSIONS.has(extension)) return 'mesh'
+  if (VIDEO_EXTENSIONS.has(extension)) return 'video'
   throw new Error(`unsupported source type ${extension || '(none)'}`)
 }
 
@@ -201,11 +208,12 @@ export function validateGraph(graph, catalog = tools, scope = { kind: 'graph' })
     const sourceNode = nodesById.get(edge.source?.nodeId)
     const targetNode = nodesById.get(edge.target?.nodeId)
     if (!sourceNode || !targetNode) throw new Error('invalid edge node')
+    const targetTool = catalogMap.get(targetNode.toolId)
     const sourcePort = catalogMap.get(sourceNode.toolId).outputs.find(output => output.id === edge.source?.portId)
-    const targetPort = catalogMap.get(targetNode.toolId).inputs.find(input => input.id === edge.target?.portId)
+    const targetPort = targetTool.inputs.find(input => input.id === edge.target?.portId)
     if (!sourcePort || !targetPort || baseType(sourcePort.type) !== baseType(targetPort.type)) throw new Error('type mismatch on edge')
     const targetKey = `${targetNode.id}\0${targetPort.id}`
-    if (occupiedTargets.has(targetKey)) throw new Error(`duplicate target port ${targetNode.id}.${targetPort.id}`)
+    if (occupiedTargets.has(targetKey) && !isCollectTool(targetTool)) throw new Error(`duplicate target port ${targetNode.id}.${targetPort.id}`)
     edgeIds.add(edge.id)
     occupiedTargets.add(targetKey)
     normalizedEdges.push({
@@ -241,8 +249,8 @@ export function validateGraph(graph, catalog = tools, scope = { kind: 'graph' })
       else if (!supplied && input.required !== false) throw new Error(`missing required input ${node.id}.${input.id}`)
     }
     if (tool.id === 'output.export') {
-      const connectedFiles = ['mesh', 'image'].filter(inputId => occupiedTargets.has(`${node.id}\0${inputId}`))
-      if (connectedFiles.length !== 1) throw new Error(`${node.id} requires exactly one of mesh or image`)
+      const connectedFiles = ['mesh', 'image', 'video'].filter(inputId => occupiedTargets.has(`${node.id}\0${inputId}`))
+      if (connectedFiles.length !== 1) throw new Error(`${node.id} requires exactly one of mesh, image or video`)
       const name = node.parameters.name
       if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) {
         throw new Error(`invalid export name ${node.id}.name`)
@@ -395,12 +403,15 @@ export function createAteliRouter(options = {}) {
     stagingRoot: path.resolve(options.stagingRoot ?? DEFAULT_STAGING_ROOT),
     allowedSourceRoots: options.allowedSourceRoots ?? [DEFAULT_SOURCE_ROOT],
     blenderPath: options.blenderPath ?? '/opt/homebrew/bin/blender',
+    ffmpegPath: options.ffmpegPath ?? '/opt/homebrew/bin/ffmpeg',
     pythonPath: options.pythonPath ?? 'python3',
     imageWorkerPath: options.imageWorkerPath ?? IMAGE_WORKER,
     meshWorkerPath: options.meshWorkerPath ?? MESH_WORKER,
     nodePath: options.nodePath ?? process.execPath,
     meshyWorkerPath: options.meshyWorkerPath ?? MESHY_WORKER,
     gltfWorkerPath: options.gltfWorkerPath ?? GLTF_WORKER,
+    uthanaWorkerPath: options.uthanaWorkerPath ?? UTHANA_WORKER,
+    falWorkerPath: options.falWorkerPath ?? FAL_WORKER,
     exportRoots: { ...exportRoots },
     workerCommand: options.workerCommand,
     maxUploadBytes: options.maxUploadBytes ?? MAX_UPLOAD_BYTES,
@@ -509,11 +520,33 @@ export function createAteliRouter(options = {}) {
     return result
   }
 
+  async function renderVideoPreview(nodeDirectory, videoPath, outputId, itemIndex) {
+    const name = `${outputId}${itemIndex === undefined ? '' : `-${itemIndex}`}.preview.png`
+    const destination = path.join(nodeDirectory, name)
+    await new Promise((resolve, reject) => {
+      const child = spawn(config.ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-ss', '0', '-i', videoPath, '-frames:v', '1', '-y', destination], {
+        shell: false,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      })
+      let stderr = ''
+      child.stderr.on('data', chunk => { stderr = `${stderr}${chunk}`.slice(-STDERR_TAIL_BYTES) })
+      child.once('error', error => reject(new Error(`video preview failed to start: ${error.message}`)))
+      child.once('exit', (code, signal) => {
+        if (code === 0 && signal === null) resolve()
+        else reject(new Error(`video preview failed${signal ? ` (${signal})` : ` with exit code ${code}`}${stderr.trim() ? `: ${stderr.trim()}` : ''}`))
+      })
+    })
+    return name
+  }
+
   async function registerSingleOutput(run, node, tool, nodeDirectory, output, relativeOutput, previewOutput, metadataOutput, options) {
     const outputFile = await pathForRelative(nodeDirectory, relativeOutput)
     const kind = baseType(output.type)
     let previewRelativePath
-    if (kind === 'mesh' && (tool.runtime !== 'none' || previewOutput)) {
+    if (kind === 'video' && previewOutput === undefined) {
+      previewOutput = await renderVideoPreview(nodeDirectory, outputFile.absolutePath, output.id, options.itemIndex)
+    }
+    if ((kind === 'mesh' || kind === 'video') && (tool.runtime !== 'none' || previewOutput)) {
       const previewFile = await pathForRelative(nodeDirectory, previewOutput)
       previewRelativePath = path.relative(run.directory, previewFile.absolutePath)
     } else if (kind === 'image') {
@@ -625,9 +658,10 @@ export function createAteliRouter(options = {}) {
     }
   }
 
-  async function checkedSource(sourceId) {
+  async function checkedSource(sourceId, type) {
     const source = sources.get(sourceId)
     if (!source) throw new Error(`unknown source ${sourceId}`)
+    if (source.kind !== baseType(type)) throw new Error(`source type mismatch: expected ${baseType(type)}, got ${source.kind}`)
     const info = await stat(source.path).catch(() => null)
     if (!info?.isFile()) throw new Error(`source is unavailable ${sourceId}`)
     const currentHash = await fileDigest(source.path)
@@ -648,14 +682,17 @@ export function createAteliRouter(options = {}) {
     const resolved = {}
     const fanoutLengths = []
     for (const input of tool.inputs) {
-      const edge = run.graph.edges.find(candidate => candidate.target.nodeId === node.id && candidate.target.portId === input.id)
-      if (edge) {
-        const upstream = run.artifacts[edge.source.nodeId]?.[edge.source.portId]
-        if (!upstream) throw new Error(`missing upstream output ${edge.source.nodeId}.${edge.source.portId}`)
-        const upstreamItems = isListResult(upstream) ? upstream.items : [upstream]
+      const incoming = run.graph.edges.filter(candidate => candidate.target.nodeId === node.id && candidate.target.portId === input.id)
+      if (incoming.length) {
+        const upstreamItems = []
+        for (const edge of incoming) {
+          const upstream = run.artifacts[edge.source.nodeId]?.[edge.source.portId]
+          if (!upstream) throw new Error(`missing upstream output ${edge.source.nodeId}.${edge.source.portId}`)
+          upstreamItems.push(...(isListResult(upstream) ? upstream.items : [upstream]))
+        }
         if (isListType(input.type) || isCollectTool(tool)) {
           resolved[input.id] = { mode: 'list', records: upstreamItems }
-        } else if (isListResult(upstream)) {
+        } else if (isListResult(run.artifacts[incoming[0].source.nodeId]?.[incoming[0].source.portId])) {
           resolved[input.id] = { mode: 'fanout', records: upstreamItems }
           fanoutLengths.push([input.id, upstreamItems.length])
         } else {
@@ -668,10 +705,10 @@ export function createAteliRouter(options = {}) {
       if (isFileType(input.type)) {
         if (isListType(input.type)) {
           const records = []
-          for (const sourceId of value) records.push(await checkedSource(sourceId))
+          for (const sourceId of value) records.push(await checkedSource(sourceId, input.type))
           resolved[input.id] = { mode: 'list', records }
         } else {
-          resolved[input.id] = { mode: 'single', records: [await checkedSource(value)] }
+          resolved[input.id] = { mode: 'single', records: [await checkedSource(value, input.type)] }
         }
       } else {
         resolved[input.id] = { mode: 'value', value }
@@ -824,7 +861,7 @@ export function createAteliRouter(options = {}) {
   }
 
   async function resolveExportNode(run, node, nodeDirectory, inputs, inputArtifacts, index) {
-    const inputPort = inputs.mesh ? 'mesh' : 'image'
+    const inputPort = inputs.mesh ? 'mesh' : inputs.image ? 'image' : 'video'
     const source = inputArtifacts[inputPort]
     if (!source) throw new Error(`missing export input ${node.id}.${inputPort}`)
     const root = config.exportRoots[inputs.folder]
@@ -872,7 +909,7 @@ export function createAteliRouter(options = {}) {
     await mkdir(path.dirname(outputPath), { recursive: true })
     await copyFile(record.absolutePath, outputPath)
     let relativePreview
-    if (baseType(record.kind) === 'mesh' && record.previewPath) {
+    if (record.previewPath) {
       relativePreview = path.posix.join(relativeDirectory, `${outputId}.preview.png`)
       await copyFile(record.previewPath, path.join(nodeDirectory, relativePreview))
     }
@@ -957,6 +994,8 @@ export function createAteliRouter(options = {}) {
     }
     if (runtime === 'meshy') return { executable: config.nodePath, args: [config.meshyWorkerPath, context.requestPath] }
     if (runtime === 'gltf') return { executable: config.nodePath, args: [config.gltfWorkerPath, context.requestPath] }
+    if (runtime === 'uthana') return { executable: config.nodePath, args: [config.uthanaWorkerPath, context.requestPath] }
+    if (runtime === 'fal') return { executable: config.nodePath, args: [config.falWorkerPath, context.requestPath] }
     if (runtime === 'image' || runtime === 'imgen') {
       return { executable: config.pythonPath, args: [config.imageWorkerPath, context.requestPath] }
     }

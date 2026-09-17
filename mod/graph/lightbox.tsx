@@ -18,7 +18,7 @@ function createGltfLoader() {
 
 export interface LightboxResult {
 	title: string
-	kind: 'image' | 'mesh'
+	kind: 'image' | 'mesh' | 'video'
 	previewUrl: string
 	downloadUrl: string
 }
@@ -313,7 +313,11 @@ export function AteliLightbox() {
 				<a className="ui-key inline-flex h-7 items-center gap-1.5 px-2 text-[11px] no-underline" href={result.downloadUrl} download><ExternalLink size={13} />Open file</a>
 				<button type="button" className="ui-icon-button" aria-label="Close lightbox" onClick={close}><X /></button>
 			</div>
-			{result.kind === 'mesh' ? <MeshViewer key={result.downloadUrl} url={result.downloadUrl} mode={mode} /> : (
+			{result.kind === 'mesh' ? <MeshViewer key={result.downloadUrl} url={result.downloadUrl} mode={mode} /> : result.kind === 'video' ? (
+				<div className="inline-flex max-h-[86vh] max-w-[92vw] items-center justify-center overflow-hidden rounded-lg bg-black">
+					<video src={result.downloadUrl} controls className="max-h-[86vh] max-w-[92vw]" />
+				</div>
+			) : (
 				<div className="inline-flex max-h-[86vh] max-w-[92vw] items-center justify-center overflow-hidden rounded-lg" style={checkerboard}>
 					<img src={result.downloadUrl || result.previewUrl} alt={result.title} className="max-h-[86vh] max-w-[92vw] object-contain" />
 				</div>

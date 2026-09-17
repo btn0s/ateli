@@ -85,7 +85,7 @@ export const client = {
 	uploadSource(file: File) {
 		const body = new FormData()
 		body.append('file', file)
-		return request<{ sourceId: string; sha256: string; size: number; name: string; kind: 'image' | 'mesh' }>('/sources', { method:'POST', body })
+		return request<{ sourceId: string; sha256: string; size: number; name: string; kind: 'image' | 'mesh' | 'video' }>('/sources', { method:'POST', body })
 	},
 	run(graph: AteliGraph, scope: AteliRunScope, cache?: boolean) {
 		return request<{ runId: string; status: 'queued' }>('/runs', {

@@ -4,7 +4,7 @@ import { access, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/p
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { NodeIO, Primitive } from '@gltf-transform/core'
+import { Document, NodeIO, Primitive } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
 import { getGLPrimitiveCount } from '@gltf-transform/functions'
 import draco3d from 'draco3dgltf'
@@ -124,4 +124,66 @@ test('glTF worker preserves PNG texture payloads when size and geometry are kept
   const preview = await sharp(path.join(outputDir, 'mesh.preview.png')).metadata()
   assert.equal(preview.width, 512)
   assert.equal(preview.height, 512)
+})
+
+async function writeSkinnedFixture(filePath, animationName) {
+  const document = new Document()
+  const buffer = document.createBuffer()
+  const root = document.createNode('Root')
+  const skin = document.createSkin('Skin').addJoint(root).setSkeleton(root)
+  const positions = document.createAccessor().setType('VEC3').setArray(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0])).setBuffer(buffer)
+  const joints = document.createAccessor().setType('VEC4').setArray(new Uint16Array(12)).setBuffer(buffer)
+  const weights = document.createAccessor().setType('VEC4').setArray(new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])).setBuffer(buffer)
+  const indices = document.createAccessor().setType('SCALAR').setArray(new Uint16Array([0, 1, 2])).setBuffer(buffer)
+  const inverseBind = document.createAccessor().setType('MAT4').setArray(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])).setBuffer(buffer)
+  skin.setInverseBindMatrices(inverseBind)
+  const primitive = document.createPrimitive().setAttribute('POSITION', positions).setAttribute('JOINTS_0', joints).setAttribute('WEIGHTS_0', weights).setIndices(indices)
+  const mesh = document.createMesh('Body').addPrimitive(primitive)
+  const body = document.createNode('Body').setMesh(mesh).setSkin(skin)
+  document.createScene('Scene').addChild(root).addChild(body)
+  if (animationName) {
+    const input = document.createAccessor().setType('SCALAR').setArray(new Float32Array([0, 1])).setBuffer(buffer)
+    const output = document.createAccessor().setType('VEC3').setArray(new Float32Array([0, 0, 0, 0, animationName === 'idle' ? 0.02 : 0.5, 0])).setBuffer(buffer)
+    const sampler = document.createAnimationSampler().setInput(input).setOutput(output)
+    const channel = document.createAnimationChannel().setSampler(sampler).setTargetNode(root).setTargetPath('translation')
+    document.createAnimation(animationName).addSampler(sampler).addChannel(channel)
+  }
+  await writeFile(filePath, await new NodeIO().writeBinary(document))
+}
+
+test('glTF worker merges named animations from skinned clips onto one base', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'ateli-gltf-merge-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const base = path.join(root, 'base.glb')
+  const idle = path.join(root, 'idle.glb')
+  const walk = path.join(root, 'walk.glb')
+  await Promise.all([
+    writeSkinnedFixture(base),
+    writeSkinnedFixture(idle, 'idle'),
+    writeSkinnedFixture(walk, 'walk'),
+  ])
+  const outputDir = path.join(root, 'output')
+  await mkdir(outputDir, { recursive: true })
+  const requestPath = path.join(root, 'merge-request.json')
+  await writeFile(requestPath, JSON.stringify({
+    runId: 'merge-test', nodeId: 'merge', toolId: 'mesh.mergeAnimations',
+    inputs: { base: { path: base }, clips: [{ path: idle }, { path: walk }] }, outputDir,
+  }))
+  const child = spawn(process.execPath, [WORKER, requestPath], {
+    cwd: path.resolve('.'), env: { ...process.env, ATELI_SKIP_MESH_PREVIEW: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stderr = ''
+  child.stderr.on('data', chunk => { stderr += chunk })
+  const result = await new Promise((resolve, reject) => {
+    child.once('error', reject)
+    child.once('exit', (code, signal) => resolve({ code, signal }))
+  })
+  assert.deepEqual(result, { code: 0, signal: null }, stderr)
+  const merged = await new NodeIO().read(path.join(outputDir, 'mesh.glb'))
+  assert.equal(merged.getRoot().listSkins().length, 1)
+  assert.deepEqual(merged.getRoot().listAnimations().map(animation => animation.getName()), ['idle', 'walk'])
+  for (const animation of merged.getRoot().listAnimations()) {
+    assert.equal(animation.listChannels()[0].getTargetNode().getName(), 'Root')
+  }
+  assert.deepEqual(JSON.parse(await readFile(path.join(outputDir, 'merge.json'), 'utf8')), { animations: ['idle', 'walk'] })
 })

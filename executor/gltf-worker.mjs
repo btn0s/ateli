@@ -33,6 +33,7 @@ const BLENDER = process.env.ATELI_BLENDER_PATH || '/opt/homebrew/bin/blender'
 const MESH_WORKER = path.resolve('executor/mesh-worker.py')
 const GEOMETRY_OPTIONS = new Set(['meshopt', 'draco', 'none'])
 const TEXTURE_SIZE_OPTIONS = new Set(['256', '512', '1024', '2048', 'keep'])
+const TEST_PREVIEW = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8dKAAAAAElFTkSuQmCC', 'base64')
 const TEXTURE_FORMAT_OPTIONS = new Set(['webp', 'jpeg', 'png', 'ktx2'])
 const TRIANGLE_MODES = new Set([Primitive.Mode.TRIANGLES, Primitive.Mode.TRIANGLE_STRIP, Primitive.Mode.TRIANGLE_FAN])
 const GLTF_EXTENSIONS = [...new Set([
@@ -217,6 +218,10 @@ function textureMetadata(document) {
 }
 
 async function renderPreview(outputDir, meshBytes) {
+  if (process.env.ATELI_SKIP_MESH_PREVIEW === '1') {
+    await writeFile(path.join(outputDir, 'mesh.preview.png'), TEST_PREVIEW)
+    return
+  }
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'ateli-gltf-preview-'))
   try {
     const previewMeshPath = path.join(temporary, 'mesh.glb')
@@ -244,19 +249,101 @@ async function renderPreview(outputDir, meshBytes) {
   }
 }
 
+function absoluteMeshPath(input, name) {
+  const filePath = input?.path
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) throw new Error(`input '${name}' requires an absolute file path`)
+  if (!['.glb', '.gltf'].includes(path.extname(filePath).toLowerCase())) throw new Error(`input '${name}' requires a GLB or glTF file`)
+  return filePath
+}
+
+function nodeIndex(document) {
+  const byName = new Map()
+  for (const node of document.getRoot().listNodes()) {
+    const name = node.getName()
+    if (!name) continue
+    if (byName.has(name)) throw new Error(`base mesh has duplicate node name '${name}'`)
+    byName.set(name, node)
+  }
+  return byName
+}
+
+function cloneAccessor(document, buffer, accessor) {
+  const source = accessor.getArray()
+  if (!source) throw new Error('animation accessor has no data')
+  return document.createAccessor(accessor.getName())
+    .setType(accessor.getType())
+    .setNormalized(accessor.getNormalized())
+    .setArray(new source.constructor(source))
+    .setBuffer(buffer)
+}
+
+async function mergeAnimations(io, basePath, clipPaths, outputDir) {
+  const document = await io.read(basePath)
+  const nodes = nodeIndex(document)
+  const buffer = document.getRoot().listBuffers()[0] ?? document.createBuffer('animation-buffer')
+  for (const animation of document.getRoot().listAnimations()) animation.dispose()
+  const names = []
+  for (const clipPath of clipPaths) {
+    const clip = await io.read(clipPath)
+    for (const [animationIndex, sourceAnimation] of clip.getRoot().listAnimations().entries()) {
+      const name = sourceAnimation.getName() || `${path.parse(clipPath).name}${animationIndex ? `-${animationIndex + 1}` : ''}`
+      const animation = document.createAnimation(name)
+      names.push(name)
+      for (const sourceChannel of sourceAnimation.listChannels()) {
+        const targetName = sourceChannel.getTargetNode()?.getName()
+        const target = nodes.get(targetName)
+        if (!target) throw new Error(`clip '${path.basename(clipPath)}' targets unknown joint '${targetName || '<unnamed>'}'`)
+        const sourceSampler = sourceChannel.getSampler()
+        const sampler = document.createAnimationSampler()
+          .setInterpolation(sourceSampler.getInterpolation())
+          .setInput(cloneAccessor(document, buffer, sourceSampler.getInput()))
+          .setOutput(cloneAccessor(document, buffer, sourceSampler.getOutput()))
+        const channel = document.createAnimationChannel()
+          .setSampler(sampler)
+          .setTargetNode(target)
+          .setTargetPath(sourceChannel.getTargetPath())
+        animation.addSampler(sampler).addChannel(channel)
+      }
+    }
+  }
+  const bytes = await io.writeBinary(document)
+  await writeFile(path.join(outputDir, 'mesh.glb'), bytes)
+  await writeFile(path.join(outputDir, 'merge.json'), `${JSON.stringify({ animations: names }, null, 2)}\n`)
+  await renderPreview(outputDir, bytes)
+  await writeFile(path.join(outputDir, 'outputs.json'), `${JSON.stringify({
+    mesh: 'mesh.glb',
+    preview: { mesh: 'mesh.preview.png' },
+    meta: { mesh: 'merge.json' },
+    log: 'worker.log',
+  }, null, 2)}\n`)
+  await log(`animations=${names.join(',')}`)
+}
+
 async function main() {
   const requestPath = process.argv[2]
   if (!requestPath) throw new Error('usage: gltf-worker.mjs <request.json>')
   const job = JSON.parse(await readFile(requestPath, 'utf8'))
-  if (job.toolId !== 'mesh.compress') throw new Error(`unsupported glTF tool: ${job.toolId}`)
+  if (!['mesh.compress', 'mesh.mergeAnimations'].includes(job.toolId)) throw new Error(`unsupported glTF tool: ${job.toolId}`)
   if (typeof job.outputDir !== 'string' || !job.outputDir) throw new Error('request.outputDir is required')
-
-  const meshPath = job.inputs?.mesh?.path
-  if (typeof meshPath !== 'string' || !path.isAbsolute(meshPath)) throw new Error("input 'mesh' requires an absolute file path")
-  await access(meshPath)
-  if (!['.glb', '.gltf'].includes(path.extname(meshPath).toLowerCase())) throw new Error('mesh.compress requires a GLB or glTF input')
-
+  const outputDir = path.resolve(job.outputDir)
+  await mkdir(outputDir, { recursive: true })
+  logPath = path.join(outputDir, 'worker.log')
+  await writeFile(logPath, '')
+  await log(`tool=${job.toolId} node=${job.nodeId ?? '<unknown>'}`)
+  const io = await createIO()
   const inputs = job.inputs ?? {}
+
+  if (job.toolId === 'mesh.mergeAnimations') {
+    const basePath = absoluteMeshPath(inputs.base, 'base')
+    if (!Array.isArray(inputs.clips) || inputs.clips.length === 0) throw new Error("input 'clips' requires at least one mesh")
+    const clipPaths = inputs.clips.map((input, index) => absoluteMeshPath(input, `clips[${index}]`))
+    await Promise.all([basePath, ...clipPaths].map(filePath => access(filePath)))
+    await mergeAnimations(io, basePath, clipPaths, outputDir)
+    return
+  }
+
+  const meshPath = absoluteMeshPath(inputs.mesh, 'mesh')
+  await access(meshPath)
   const geometry = enumInput(inputs, 'geometry', 'meshopt', GEOMETRY_OPTIONS)
   const textureSize = enumInput(inputs, 'textureSize', '1024', TEXTURE_SIZE_OPTIONS)
   const textureFormat = enumInput(inputs, 'textureFormat', 'webp', TEXTURE_FORMAT_OPTIONS)
@@ -264,16 +351,9 @@ async function main() {
   const quantizeEnabled = booleanInput(inputs, 'quantize', true)
   const simplifyRatio = numberInput(inputs, 'simplify', 0, 0, 1)
   const flattenEnabled = booleanInput(inputs, 'flatten', true)
-
-  const outputDir = path.resolve(job.outputDir)
-  await mkdir(outputDir, { recursive: true })
-  logPath = path.join(outputDir, 'worker.log')
-  await writeFile(logPath, '')
-  await log(`tool=mesh.compress node=${job.nodeId ?? '<unknown>'}`)
   await log(`options geometry=${geometry} textureSize=${textureSize} textureFormat=${textureFormat} quality=${quality} quantize=${quantizeEnabled} simplify=${simplifyRatio} flatten=${flattenEnabled}`)
 
   const bytesIn = (await stat(meshPath)).size
-  const io = await createIO()
   const document = await io.read(meshPath)
   await stage(io, document, 'input')
   await stage(io, document, flattenEnabled ? 'dedup' : 'dedup (skipped)', flattenEnabled ? dedup() : undefined)
@@ -303,8 +383,7 @@ async function main() {
     outputBytes = await stage(io, document, 'geometry (none)')
   }
 
-  const outputMeshPath = path.join(outputDir, 'mesh.glb')
-  await writeFile(outputMeshPath, outputBytes)
+  await writeFile(path.join(outputDir, 'mesh.glb'), outputBytes)
   const metadata = {
     bytesIn,
     bytesOut: outputBytes.byteLength,

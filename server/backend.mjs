@@ -56,6 +56,9 @@ const terminals = new Set()
 const jobs = new Map()
 const ateliRouter = createAteliRouter({
 	blenderPath: '/opt/homebrew/bin/blender',
+	ffmpegPath: '/opt/homebrew/bin/ffmpeg',
+	uthanaWorkerPath: new URL('../executor/uthana-worker.mjs', import.meta.url).pathname,
+	falWorkerPath: new URL('../executor/fal-worker.mjs', import.meta.url).pathname,
 	stagingRoot: '/Users/btnorris/dev/ateli/.scratch/last-light/staging',
 	allowedSourceRoots: ['/Users/btnorris/dev/ateli/.scratch/last-light', '/Users/btnorris/Downloads'],
 	exportRoots: {

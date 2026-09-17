@@ -1,7 +1,7 @@
 import { ChevronUp, Monitor, Moon, PanelsTopLeft, Sun } from 'lucide-react'
 import type { ConfigScriptContext } from 'tldraw-offline/script-context'
 import { ArrowToolbarItem, AssetToolbarItem, DefaultContextMenu, DefaultContextMenuContent, DefaultToolbar, DrawToolbarItem, EraserToolbarItem, HandToolbarItem, NoteToolbarItem, RectangleToolbarItem, SelectToolbarItem, TextToolbarItem, TldrawUiInFrontOfTheCanvas, TldrawUiMenuGroup, TldrawUiMenuItem, useDialogs, useEditor, type Editor, type TLUiContextMenuProps } from 'tldraw'
-import { AteliEdgeOverlay, AteliEdgeShapeUtil, AteliNodeShapeTool, AteliNodeShapeUtil, ateliNodeIcon, createAteliNode, seedAteliGraph } from './graph/ateli-node-shape'
+import { AteliEdgeOverlay, AteliEdgeShapeUtil, AteliNodeShapeTool, AteliNodeShapeUtil, ateliNodeIcon, createAteliNode, seedAteliGraph, seedCharacterMotionGraph } from './graph/ateli-node-shape'
 import { catalog, watchCatalog, type AteliCategory } from './graph/ateli-tools'
 import { AteliLightbox } from './graph/lightbox'
 import { BrowserShapeTool, BrowserShapeUtil } from './canvas/browser-shape'
@@ -27,12 +27,13 @@ const personalTools: Palette['personalTools'] = [
 	{ id: 'terminal', label: 'Terminal', icon: terminalIcon },
 ]
 
-const ateliCategories: AteliCategory[] = ['Input', 'Image', 'Mesh', 'Utility', 'Output']
+const ateliCategories: AteliCategory[] = ['Input', 'Image', 'Video', 'Mesh', 'Utility', 'Output']
 // "Add <tool>" entries come from the bridge catalog, so they are computed when the palette or context menu opens.
 function commands(): PaletteCommand[] {
 	const tools = catalog.get()
 	return [
 		{ id:'ateli-seed-graph', label:'Create sample graph', icon:ateliNodeIcon, run:seedAteliGraph },
+		{ id:'ateli-seed-character-motion', label:'Create character motion graph', icon:ateliNodeIcon, run:seedCharacterMotionGraph },
 		...ateliCategories.flatMap(category => tools.filter(tool => tool.category === category).map(tool => ({
 			id:`ateli-add-${tool.id}`,
 			label:`Add ${tool.title}`,
