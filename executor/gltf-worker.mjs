@@ -141,6 +141,7 @@ async function compressStandardTextures(document, textureFormat, textureSize, qu
 async function compressKTX2Textures(document, textureSize, quality) {
   await run('ktx', ['--version'], { label: 'ktx availability check' })
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'ateli-ktx2-'))
+  const previewImages = new Map()
   try {
     const limit = textureSize === 'keep' ? undefined : Number(textureSize)
     const qlevel = Math.round(1 + ((quality - 1) / 99) * 254)
@@ -154,6 +155,7 @@ async function compressKTX2Textures(document, textureSize, quality) {
       let pipeline = sharp(image)
       if (limit) pipeline = pipeline.resize({ width: limit, height: limit, fit: 'inside', withoutEnlargement: true })
       await pipeline.ensureAlpha().png().toFile(sourcePath)
+      previewImages.set(texture, await readFile(sourcePath))
       const colorSpace = getTextureColorSpace(texture) === 'srgb' ? 'SRGB' : 'UNORM'
       await run('ktx', [
         'create', '--format', `R8G8B8A8_${colorSpace}`, '--encode', 'basis-lz', '--qlevel', String(qlevel),
@@ -162,8 +164,31 @@ async function compressKTX2Textures(document, textureSize, quality) {
       texture.setImage(await readFile(outputPath)).setMimeType('image/ktx2').setURI(`${texture.getName() || `texture-${index + 1}`}.ktx2`)
     }
     document.createExtension(KHRTextureBasisu).setRequired(true)
+    return previewImages
   } finally {
     await rm(temporary, { recursive: true, force: true })
+  }
+}
+
+async function createKTX2PreviewBytes(io, document, previewImages) {
+  const states = [...previewImages].map(([texture, image]) => ({
+    texture,
+    image,
+    ktx2Image: texture.getImage(),
+    ktx2URI: texture.getURI(),
+  }))
+  const basisu = document.getRoot().listExtensionsUsed().find(extension => extension.extensionName === 'KHR_texture_basisu')
+  basisu?.dispose()
+  try {
+    for (const { texture, image } of states) {
+      texture.setImage(image).setMimeType('image/png').setURI(`${texture.getName() || 'texture'}.png`)
+    }
+    return await io.writeBinary(document)
+  } finally {
+    for (const { texture, ktx2Image, ktx2URI } of states) {
+      texture.setImage(ktx2Image).setMimeType('image/ktx2').setURI(ktx2URI)
+    }
+    document.createExtension(KHRTextureBasisu).setRequired(true)
   }
 }
 
@@ -257,14 +282,17 @@ async function main() {
   await stage(io, document, flattenEnabled ? 'join' : 'join (skipped)', flattenEnabled ? join() : undefined)
   await stage(io, document, 'resample', resample())
 
+  let ktx2PreviewImages
   if (textureFormat === 'ktx2') {
-    await compressKTX2Textures(document, textureSize, quality)
+    ktx2PreviewImages = await compressKTX2Textures(document, textureSize, quality)
   } else {
     await compressStandardTextures(document, textureFormat, textureSize, quality)
   }
   await stage(io, document, 'textureCompress')
   await stage(io, document, simplifyRatio === 0 ? 'simplify (skipped)' : 'simplify', simplifyRatio === 0 ? undefined : simplify({ simplifier: MeshoptSimplifier, ratio: simplifyRatio }))
-  const previewBytes = await stage(io, document, quantizeEnabled ? 'quantize' : 'quantize (skipped)', quantizeEnabled ? quantize() : undefined)
+  const transformedBytes = await stage(io, document, quantizeEnabled ? 'quantize' : 'quantize (skipped)', quantizeEnabled ? quantize() : undefined)
+  const previewBytes = ktx2PreviewImages ? await createKTX2PreviewBytes(io, document, ktx2PreviewImages) : transformedBytes
+  if (ktx2PreviewImages) await log(`preview source: ${previewBytes.byteLength} bytes`)
 
   let outputBytes
   if (geometry === 'meshopt') {
