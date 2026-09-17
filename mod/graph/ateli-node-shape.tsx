@@ -66,21 +66,20 @@ const isFileType = (type: AteliValueType) => baseType(type) === 'mesh' || baseTy
 
 interface StoredResultItem {
 	resultId: string
-	name: string
-	previewUrl: string
+	name?: string
+	previewUrl?: string
 	downloadUrl?: string
 	value?: JsonValue
 }
-interface StoredSingleResult { resultId: string; previewUrl: string; kind: string; value?: JsonValue }
+interface StoredSingleResult { resultId: string; previewUrl?: string; kind: string; value?: JsonValue }
 interface StoredListResult { resultId: string; kind: string; items: Array<StoredResultItem | null> }
 type StoredResult = StoredSingleResult | StoredListResult
 function storedResultItem(value: JsonValue): StoredResultItem | null | undefined {
 	if (value === null) return null
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
 	const candidate = value as Record<string, JsonValue>
-	return typeof candidate.resultId === 'string'
-		&& typeof candidate.name === 'string'
-		&& typeof candidate.previewUrl === 'string'
+	// Scalar items (text[], number[]) carry a value and no preview.
+	return typeof candidate.resultId === 'string' && (typeof candidate.previewUrl === 'string' || candidate.value !== undefined)
 		? candidate as unknown as StoredResultItem
 		: undefined
 }
@@ -94,7 +93,7 @@ function storedResult(value: JsonValue | undefined): StoredResult | undefined {
 			? { resultId:candidate.resultId, kind:candidate.kind, items:items as Array<StoredResultItem | null> }
 			: undefined
 	}
-	return typeof candidate.previewUrl === 'string' ? candidate as unknown as StoredSingleResult : undefined
+	return typeof candidate.previewUrl === 'string' || candidate.value !== undefined ? candidate as unknown as StoredSingleResult : undefined
 }
 
 function nodeError(shape: AteliNodeShape) {
@@ -344,9 +343,12 @@ function connectedInputValue(editor: Editor, nodeId: TLShapeId, portId: string) 
 	return { connected:true as const, value:result && !('items' in result) ? result.value : undefined }
 }
 
-function fanOutCardinality(editor: Editor, shape: AteliNodeShape) {
+// A node's fan-out width: a list result (or an Input's file count) on any single-typed input, propagated through
+// upstream nodes that are themselves fanned out. Visited ids guard against cycles the bridge would reject anyway.
+function fanOutCardinality(editor: Editor, shape: AteliNodeShape, visited = new Set<TLShapeId>()): number {
 	const tool = getTool(shape.props.toolId)
-	if (!tool) return 1
+	if (!tool || visited.has(shape.id)) return 1
+	visited.add(shape.id)
 	let cardinality = 1
 	for (const input of tool.inputs) {
 		if (isListType(input.type)) continue
@@ -354,8 +356,6 @@ function fanOutCardinality(editor: Editor, shape: AteliNodeShape) {
 		if (!edge) continue
 		const source = editor.getShape<AteliNodeShape>(edge.props.from)
 		if (!source) continue
-		const sourcePort = getTool(source.props.toolId)?.outputs.find(output => output.id === edge.props.fromPort)
-		if (!sourcePort || !isListType(sourcePort.type)) continue
 		const result = storedResult(source.props.results[edge.props.fromPort])
 		if (result && 'items' in result) {
 			cardinality = Math.max(cardinality, result.items.length)
@@ -364,7 +364,10 @@ function fanOutCardinality(editor: Editor, shape: AteliNodeShape) {
 		if (source.props.toolId === 'input.meshes' || source.props.toolId === 'input.images') {
 			const files = source.props.values.files
 			if (Array.isArray(files)) cardinality = Math.max(cardinality, files.length)
+			continue
 		}
+		const sourcePort = getTool(source.props.toolId)?.outputs.find(output => output.id === edge.props.fromPort)
+		if (sourcePort && !isListType(sourcePort.type)) cardinality = Math.max(cardinality, fanOutCardinality(editor, source, visited))
 	}
 	return cardinality
 }
