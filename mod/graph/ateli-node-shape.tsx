@@ -319,7 +319,7 @@ function InputControl({ shape, editor, param, readonly, onValues }: { shape: Ate
 	const value = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : ''
 	const shared = {
 		disabled,
-		className:'ui-well h-[18px] min-w-0 flex-1 rounded border-0 px-1.5 text-[10px] text-foreground outline-none disabled:opacity-70',
+		className:'ui-well pointer-events-auto h-[18px] min-w-0 flex-1 rounded border-0 px-1.5 text-[10px] text-foreground outline-none disabled:opacity-70',
 		onPointerDown:stop,
 		onKeyDown:stop,
 	}

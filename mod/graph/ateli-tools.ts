@@ -68,8 +68,12 @@ export function loadCatalog(): Promise<void> {
 				if (!response.ok) throw new Error(`catalog ${response.status}`)
 				const tools = await response.json() as AteliTool[]
 				if (!Array.isArray(tools) || !tools.length) throw new Error('catalog empty')
-				catalog.set(tools)
-				localStorage.setItem(storageKey, JSON.stringify(tools))
+				const serialized = JSON.stringify(tools)
+				if (serialized !== JSON.stringify(catalog.get())) {
+					catalog.set(tools)
+					localStorage.setItem(storageKey, serialized)
+					console.info('[ateli] catalog', tools.length, 'tools')
+				}
 				return
 			} catch {
 				const { promise, resolve } = Promise.withResolvers<void>()
@@ -79,4 +83,12 @@ export function loadCatalog(): Promise<void> {
 		}
 	})().finally(() => { loading = undefined })
 	return loading
+}
+
+const refreshMs = 15_000
+/** Load now and keep re-checking: the bridge can restart with a different catalog while a document stays open. */
+export function watchCatalog() {
+	void loadCatalog()
+	const timer = setInterval(() => { void loadCatalog() }, refreshMs)
+	return () => clearInterval(timer)
 }
