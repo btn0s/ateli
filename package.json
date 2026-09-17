@@ -7,7 +7,7 @@
     "ateli": "bin/ateli"
   },
   "scripts": {
-    "build": "node tools/build.mjs",
+    "build": "node build/build.mjs",
     "install-doc": "node bin/ateli install",
     "serve": "node bin/ateli serve",
     "smoke": "node bin/ateli smoke",

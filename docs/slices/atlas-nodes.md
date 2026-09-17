@@ -11,7 +11,7 @@ Amendment: `input.mesh` is resolved in-process but the bridge renders its previe
 
 ## Repos and hosts
 
-- Mod, bridge, and executors: `/Users/btnorris/dev/ateli` — `mod/{skin,canvas,graph}/`, `mod/config.tsx`, `server/`, `executor/`, `tools/`, `test/`, `bin/`
+- Mod, bridge, and executors: `/Users/btnorris/dev/ateli` — `mod/{skin,canvas,graph}/`, `mod/config.tsx`, `server/`, `executor/`, `build/`, `test/`, `bin/`
 - The bridge is `/Users/btnorris/dev/ateli/server/backend.mjs` at `http://127.0.0.1:7237/ateli/*`
 - Installed proof document: `/Users/btnorris/dev/tldraw-offline/Ateli POC.tldraw`
 - Blender 5.1.2: `/opt/homebrew/bin/blender`. Python: `/opt/homebrew/bin/python3` with Pillow 12 + numpy 2.

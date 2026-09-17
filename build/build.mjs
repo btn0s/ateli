@@ -22,7 +22,7 @@ export const buildOptions = {
 	loader: { '.png': 'dataurl' },
 }
 
-// `node tools/build.mjs`: bundle without an open document, as a syntax and import check.
+// `node build/build.mjs`: bundle without an open document, as a syntax and import check.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	const result = await build({ ...buildOptions, write: false, logLevel: 'warning' })
 	console.log(`bundle ok: mod/config.tsx → ${result.outputFiles[0].contents.length} bytes`)

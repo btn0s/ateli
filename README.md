@@ -36,7 +36,7 @@ mod/
 └── config.tsx  the composed document-script entry
 server/         backend, node-graph router and tool catalog, terminal + feedback services
 executor/       mesh-worker.py (Blender), image-worker.py (Pillow, imgen)
-tools/          esbuild + Tailwind build, installer
+build/          esbuild + Tailwind build, installer
 bin/ateli       install | serve | smoke
 docs/           architecture, ADRs, contracts, research, ideas
 ```

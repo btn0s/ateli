@@ -29,7 +29,7 @@ Repository ownership follows the runtime seams:
 - `mod/config.tsx` composes the document script from `mod/skin/`, `mod/canvas/`, and `mod/graph/`;
 - `server/backend.mjs` owns the loopback service and mounts `server/router.mjs`;
 - `executor/` contains the fixed image and Blender workers;
-- `tools/` contains the esbuild, installer, and Tailwind tooling;
+- `build/` contains the esbuild, installer, and Tailwind tooling;
 - `bin/ateli` exposes install, serve, and smoke commands; and
 - `test/` covers the router and workers.
 
