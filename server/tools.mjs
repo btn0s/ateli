@@ -318,6 +318,7 @@ export const tools = [
       param('bakeAO', 'Bake AO', 'boolean', { default: true }),
       param('aoSamples', 'AO Samples', 'number', { default: 32, advanced: true }),
       param('margin', 'Margin', 'number', { default: 16, advanced: true }),
+      param('rayDistance', 'Ray Distance (m, 0 = auto)', 'number', { min: 0, max: 1, default: 0, step: 0.005, advanced: true }),
     ],
     outputs: [
       param('mesh', 'Mesh', 'mesh'), param('baseColor', 'Base Color', 'image'),

@@ -367,7 +367,16 @@ class Worker:
         if hasattr(bpy.context.scene, "cycles"):
             bpy.context.scene.cycles.samples = max(1, ao_samples)
         minimum, maximum = bounds(high + low)
-        cage = max((maximum - minimum).length * 0.005, 0.001)
+        # How far outside the low surface rays start. Auto suits a low derived from this high; a low from a
+        # different model (a hand-made base) needs a few centimetres to reach past the mismatch.
+        cage = float(self.scalar("rayDistance", 0.0))
+        if cage <= 0.0:
+            cage = max((maximum - minimum).length * 0.005, 0.001)
+        self.log("bake cage extrusion %.4f" % cage)
+        # A hand-made low pokes outside the high in places (fingertips, chin, kneecaps); rays from there hit nothing
+        # and bake black. For the bake only, the low's vertices are shrinkwrapped onto the high surface so every ray
+        # lands, then the original geometry is restored — UVs never change, so the maps still fit the real low.
+        restore = conform_low_for_bake(low, high, self.log)
         baked = {}
         for channel, is_enabled in enabled.items():
             if not is_enabled:
@@ -396,6 +405,7 @@ class Worker:
                 pass
             baked[channel] = image
             self.log("baked %s at %d with margin %d" % (channel, resolution, margin))
+        restore()
         material_channels = dict(baked)
         apply_images_to_materials(low, material_channels, self.log)
         result = self.finish_mesh(low)
@@ -873,6 +883,48 @@ def restore_high_emission(changes):
         if original is not None:
             links.new(original, surface)
         material.node_tree.nodes.remove(emission)
+
+
+def conform_low_for_bake(low, high, logger):
+    if not high:
+        return lambda: None
+    target = high[0]
+    joined = None
+    if len(high) > 1:
+        copies = []
+        for obj in high:
+            copy = obj.copy()
+            copy.data = obj.data.copy()
+            bpy.context.scene.collection.objects.link(copy)
+            copies.append(copy)
+        select_only(copies[0])
+        for copy in copies[1:]:
+            copy.select_set(True)
+        bpy.ops.object.join()
+        joined = target = copies[0]
+    saved = []
+    for low_object in low:
+        coords = array.array("f", [0.0]) * (len(low_object.data.vertices) * 3)
+        low_object.data.vertices.foreach_get("co", coords)
+        saved.append((low_object, coords))
+        modifier = low_object.modifiers.new("ateli-conform", "SHRINKWRAP")
+        modifier.target = target
+        modifier.wrap_method = "NEAREST_SURFACEPOINT"
+        modifier.wrap_mode = "ON_SURFACE"
+        select_only(low_object)
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+        logger("low '%s' conformed to the high surface for baking" % low_object.name)
+
+    def restore():
+        for low_object, coords in saved:
+            low_object.data.vertices.foreach_set("co", coords)
+            low_object.data.update()
+        if joined is not None:
+            data = joined.data
+            bpy.data.objects.remove(joined)
+            if data.users == 0:
+                bpy.data.meshes.remove(data)
+    return restore
 
 
 def bake_channel(high, low, channel, image, margin, cage):
