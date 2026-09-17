@@ -287,7 +287,7 @@ async function mergeAnimations(io, basePath, clipPaths, outputDir) {
     const clip = await io.read(clipPath)
     for (const [animationIndex, sourceAnimation] of clip.getRoot().listAnimations().entries()) {
       const name = sourceAnimation.getName() || `${path.parse(clipPath).name}${animationIndex ? `-${animationIndex + 1}` : ''}`
-      const animation = document.createAnimation(name)
+      const animation = document.createAnimation(name).setExtras({ ...sourceAnimation.getExtras() })
       names.push(name)
       for (const sourceChannel of sourceAnimation.listChannels()) {
         const targetName = sourceChannel.getTargetNode()?.getName()
