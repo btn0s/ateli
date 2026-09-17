@@ -143,7 +143,10 @@ export async function runAteliGraph(editor: Editor, scope: AteliRunScope, cache?
 	activeRun.set({ runId:'', nodes:{} })
 	let runId: string | undefined
 	try {
-		const submitted = await client.run(serializeAteliGraph(editor), scope, cache)
+		const graph = serializeAteliGraph(editor)
+		console.info('[ateli] run', scope, `${graph.nodes.length} nodes, ${graph.edges.length} edges`, graph.edges.map(e => `${e.source.nodeId.slice(-6)}.${e.source.portId}→${e.target.nodeId.slice(-6)}.${e.target.portId}`))
+		const submitted = await client.run(graph, scope, cache)
+		console.info('[ateli] run accepted', submitted.runId)
 		runId = submitted.runId
 		activeRun.set({ runId, nodes:{} })
 		const loadedResults = new Map<string, AteliResult>()

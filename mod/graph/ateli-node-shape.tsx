@@ -3,7 +3,9 @@ import { Box, Boxes, ChevronRight, FastForward, MoreHorizontal, Play } from 'luc
 import {
 	BaseBoxShapeTool,
 	HTMLContainer,
+	Polyline2d,
 	Rectangle2d,
+	Vec,
 	ShapeUtil,
 	T,
 	createShapeId,
@@ -137,6 +139,7 @@ export function connectPorts(editor: Editor, source: EdgeSource, to: TLShapeId, 
 	const occupied = edgesOf(editor).find(edge => edge.id !== rewiredEdgeId && edge.props.to === to && edge.props.toPort === target.id)
 	editor.markHistoryStoppingPoint('Connect Ateli ports')
 	const replaced = [rewiredEdgeId, occupied?.id].filter((id): id is TLShapeId => Boolean(id))
+	console.info('[ateli] connect', `${source.shapeId}.${source.port.id} → ${to}.${target.id}`, replaced.length ? `(replaced ${replaced.join(', ')})` : '')
 	if (replaced.length) editor.deleteShapes(replaced)
 	const id = createShapeId()
 	editor.createShape<AteliEdgeShape>({ id, type:'ateli-edge', x:0, y:0, props:{ from:source.shapeId, fromPort:source.port.id, to, toPort:target.id, valueType:source.port.type } })
@@ -192,8 +195,9 @@ function finishDrag(editor: Editor, channel: DragChannel, point: { x: number; y:
 	if (target) connectPorts(editor, state.source, target.node.id, target.port, state.edgeId)
 	else if (state.edgeId && editor.getShape(state.edgeId)) {
 		editor.markHistoryStoppingPoint('Detach Ateli edge')
+		console.info('[ateli] detach', state.edgeId, 'dropped on empty canvas')
 		editor.deleteShape(state.edgeId)
-	}
+	} else console.info('[ateli] drag ended with no target', state.edgeId ? `(edge ${state.edgeId} kept)` : '')
 }
 
 function beginDrag(editor: Editor, source: EdgeSource, point: { x: number; y: number }, edgeId?: TLShapeId) {
@@ -331,9 +335,17 @@ function InputRow({ shape, editor, param, readonly, drag, onValues, onUpload }: 
 	const compatible = drag ? canConnect(editor, drag.source, shape.id, param, drag.edgeId) : false
 	const dim = Boolean(drag) && !compatible
 	const fileInput = (shape.props.toolId === 'input.image' || shape.props.toolId === 'input.mesh') && param.id === 'file'
+	const connectedEdge = edgesOf(editor).find(edge => edge.props.to === shape.id && edge.props.toPort === param.id)
 	return (
 		<div data-ateli-port="input" data-node-id={shape.id} data-port-id={param.id} className={cn('flex h-[22px] items-center gap-2 px-2.5 text-[11px] text-foreground', dim && 'opacity-30')}>
-			<span className="-ml-[14px] size-2 shrink-0 rounded-full" style={{ background:portColor[param.type], boxShadow:compatible ? `0 0 0 3px ${portColor[param.type]}66` : undefined }} />
+			<button
+				type="button"
+				aria-label={connectedEdge ? `Detach ${param.label} input` : `${param.label} input`}
+				className={cn('pointer-events-auto -ml-[14px] size-2 shrink-0 rounded-full border-0 p-0', connectedEdge ? 'cursor-grab' : 'cursor-default')}
+				style={{ background:portColor[param.type], boxShadow:compatible ? `0 0 0 3px ${portColor[param.type]}66` : undefined }}
+				disabled={readonly || !connectedEdge}
+				onPointerDown={event => { const source = connectedEdge && sourceForEdge(editor, connectedEdge); if (source) beginDomDrag(editor, source, event, connectedEdge.id) }}
+			/>
 			<span className="w-[72px] shrink-0 truncate">{param.label}</span>
 			{fileInput ? (
 				<label className={cn('ui-well pointer-events-auto flex h-[18px] min-w-0 flex-1 cursor-pointer items-center truncate rounded px-1.5 text-[10px] text-muted-foreground', readonly && 'pointer-events-none opacity-50')} onPointerDown={stop}>
@@ -525,9 +537,21 @@ function edgePoints(editor: Editor, edge: AteliEdgeShape) {
 	const end = portPagePoint(editor, to, edge.props.toPort, 'input')
 	return start && end ? { start, end } : undefined
 }
-function edgePath(start: { x: number; y: number }, end: { x: number; y: number }) {
+function edgeControls(start: { x: number; y: number }, end: { x: number; y: number }) {
 	const bend = Math.max(40, Math.abs(end.x - start.x) / 2)
-	return `M${start.x} ${start.y}C${start.x + bend} ${start.y} ${end.x - bend} ${end.y} ${end.x} ${end.y}`
+	return { c1:{ x:start.x + bend, y:start.y }, c2:{ x:end.x - bend, y:end.y } }
+}
+function edgePath(start: { x: number; y: number }, end: { x: number; y: number }) {
+	const { c1, c2 } = edgeControls(start, end)
+	return `M${start.x} ${start.y}C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${end.x} ${end.y}`
+}
+// The same cubic, sampled, so the curve itself is the hit target (click to select, Backspace to delete).
+function edgeSamples(start: { x: number; y: number }, end: { x: number; y: number }, steps = 24) {
+	const { c1, c2 } = edgeControls(start, end)
+	return Array.from({ length:steps + 1 }, (_, i) => {
+		const t = i / steps, u = 1 - t
+		return new Vec(u*u*u*start.x + 3*u*u*t*c1.x + 3*u*t*t*c2.x + t*t*t*end.x, u*u*u*start.y + 3*u*u*t*c1.y + 3*u*t*t*c2.y + t*t*t*end.y)
+	})
 }
 
 const shapeIdValidator = T.string.refine(value => value as TLShapeId)
@@ -555,8 +579,7 @@ export class AteliEdgeShapeUtil extends ShapeUtil<AteliEdgeShape> {
 	getGeometry(shape: AteliEdgeShape) {
 		const points = edgePoints(this.editor, shape)
 		if (!points) return new Rectangle2d({ width:1, height:1, isFilled:false })
-		const x = Math.min(points.start.x, points.end.x), y = Math.min(points.start.y, points.end.y)
-		return new Rectangle2d({ x, y, width:Math.max(1, Math.abs(points.end.x - points.start.x)), height:Math.max(1, Math.abs(points.end.y - points.start.y)), isFilled:false })
+		return new Polyline2d({ points:edgeSamples(points.start, points.end) })
 	}
 	component(shape: AteliEdgeShape) { dragChannel(this.editor); return <AteliEdgeView shape={shape} editor={this.editor} /> }
 	override getIndicatorPath(shape: AteliEdgeShape) { const path = new Path2D(); const points = edgePoints(this.editor, shape); if (points) path.addPath(new Path2D(edgePath(points.start, points.end))); return path }
