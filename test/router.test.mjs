@@ -338,6 +338,27 @@ test('node scope executes only the target and its ancestors', async t => {
   assert.equal(inputResult.body.previewUrl, `/ateli/results/${run.nodes.input.outputs.mesh}/preview`)
 })
 
+test('an unfinished node outside the scope does not block the run', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const source = await addSource(harness, harness.meshPath)
+  // A Bake left dangling on the board with nothing wired to its required inputs.
+  const runGraph = graph([
+    inputMesh(source.sourceId),
+    optimize(),
+    { id: 'bake', toolId: 'mesh.bake', toolVersion: 1, parameters: {} },
+  ], [edge('input-optimize', 'input', 'mesh', 'optimize', 'mesh')])
+  const scoped = await submit(harness, runGraph, { kind: 'downstream', nodeId: 'input' })
+  assert.equal(scoped.status, 202)
+  const run = await waitForRun(harness.origin, scoped.body.runId)
+  assert.equal(run.status, 'completed')
+  assert.deepEqual(Object.keys(run.nodes), ['input', 'optimize'])
+  // Running the whole board still asks for the Bake's inputs.
+  const whole = await submit(harness, runGraph)
+  assert.equal(whole.status, 400)
+  assert.match(whole.body.error, /missing required input bake\.high/)
+})
+
 test('a second identical run uses the per-node cache', async t => {
   const harness = await createHarness()
   t.after(() => harness.close())

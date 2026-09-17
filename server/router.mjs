@@ -161,7 +161,9 @@ function topologicalOrder(graph) {
   return ordered
 }
 
-export function validateGraph(graph, catalog = tools) {
+// Structure (ids, tools, edge types) is checked for the whole board; completeness (required inputs, export
+// shape) only for the nodes the scope will run, so an unfinished node elsewhere never blocks another branch.
+export function validateGraph(graph, catalog = tools, scope = { kind: 'graph' }) {
   if (!isPlainObject(graph) || (graph.schemaVersion !== undefined && graph.schemaVersion !== 1) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || graph.nodes.length === 0) {
     throw new Error('invalid graph schema')
   }
@@ -213,7 +215,8 @@ export function validateGraph(graph, catalog = tools) {
     })
   }
 
-  for (const node of normalizedNodes) {
+  const scoped = scopeGraph({ schemaVersion: 1, nodes: normalizedNodes, edges: normalizedEdges }, scope)
+  for (const node of scoped.nodes) {
     const tool = catalogMap.get(node.toolId)
     for (const input of tool.inputs) {
       const connected = occupiedTargets.has(`${node.id}\0${input.id}`)
@@ -247,9 +250,8 @@ export function validateGraph(graph, catalog = tools) {
     }
   }
 
-  const normalized = { schemaVersion: 1, nodes: normalizedNodes, edges: normalizedEdges }
-  topologicalOrder(normalized)
-  return normalized
+  topologicalOrder(scoped)
+  return scoped
 }
 
 function ancestorsOf(graph, selected) {
@@ -1394,8 +1396,7 @@ export function createAteliRouter(options = {}) {
       if (request.method === 'POST' && url.pathname === '/ateli/runs') {
         if (closing) throw new Error('router is closing')
         const payload = await readJsonBody(request)
-        const validatedGraph = validateGraph(payload.graph, configuredTools)
-        const graph = scopeGraph(validatedGraph, payload.scope)
+        const graph = validateGraph(payload.graph, configuredTools, payload.scope)
         for (const node of graph.nodes) {
           const tool = configuredToolMap.get(node.toolId)
           for (const input of tool.inputs) {

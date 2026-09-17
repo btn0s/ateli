@@ -5,6 +5,16 @@ import { atom, useEditor, useValue } from 'tldraw'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'meshoptimizer/decoder'
+
+// Compressed GLBs (mesh.compress) need their decoder registered; meshopt is inline WASM so it bundles.
+// Draco needs decoder files served at runtime, which the app protocol cannot do: Draco output previews
+// through the Blender-rendered thumbnail only.
+function createGltfLoader() {
+	const loader = new GLTFLoader()
+	loader.setMeshoptDecoder(MeshoptDecoder)
+	return loader
+}
 
 export interface LightboxResult {
 	title: string
@@ -214,7 +224,7 @@ function MeshViewer({ url, mode }: { url: string; mode: MaterialMode }) {
 			const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap')
 			try {
 				Object.defineProperty(globalThis, 'createImageBitmap', { value:undefined, configurable:true, writable:true })
-				new GLTFLoader().parse(data, '', loadModel, fail)
+				createGltfLoader().parse(data, '', loadModel, fail)
 			} finally {
 				if (descriptor) Object.defineProperty(globalThis, 'createImageBitmap', descriptor)
 				else Reflect.deleteProperty(globalThis, 'createImageBitmap')
