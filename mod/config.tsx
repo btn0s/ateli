@@ -27,7 +27,7 @@ const personalTools: Palette['personalTools'] = [
 	{ id: 'terminal', label: 'Terminal', icon: terminalIcon },
 ]
 
-const ateliCategories: AteliCategory[] = ['Input', 'Image', 'Mesh', 'Output']
+const ateliCategories: AteliCategory[] = ['Input', 'Image', 'Mesh', 'Utility', 'Output']
 // "Add <tool>" entries come from the bridge catalog, so they are computed when the palette or context menu opens.
 function commands(): PaletteCommand[] {
 	const tools = catalog.get()

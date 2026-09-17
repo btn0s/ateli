@@ -22,6 +22,32 @@ const FILE_TYPES = new Set(['image', 'mesh'])
 const SCALAR_TYPES = new Set(['text', 'number', 'boolean', 'enum'])
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff'])
 const MESH_EXTENSIONS = new Set(['.glb', '.gltf', '.fbx', '.obj'])
+const LIST_SUFFIX = '[]'
+
+function baseType(type) {
+  return type.endsWith(LIST_SUFFIX) ? type.slice(0, -LIST_SUFFIX.length) : type
+}
+
+function isListType(type) {
+  return type.endsWith(LIST_SUFFIX)
+}
+
+function isFileType(type) {
+  return FILE_TYPES.has(baseType(type))
+}
+
+function isScalarType(type) {
+  return SCALAR_TYPES.has(baseType(type))
+}
+
+function isListResult(result) {
+  return Boolean(result && isListType(result.kind) && Array.isArray(result.items))
+}
+
+function isCollectTool(tool) {
+  return tool.id === 'list.collectMeshes' || tool.id === 'list.collectImages'
+}
+
 
 function digest(value) {
   return createHash('sha256').update(value).digest('hex')
@@ -175,7 +201,7 @@ export function validateGraph(graph, catalog = tools) {
     if (!sourceNode || !targetNode) throw new Error('invalid edge node')
     const sourcePort = catalogMap.get(sourceNode.toolId).outputs.find(output => output.id === edge.source?.portId)
     const targetPort = catalogMap.get(targetNode.toolId).inputs.find(input => input.id === edge.target?.portId)
-    if (!sourcePort || !targetPort || sourcePort.type !== targetPort.type) throw new Error('type mismatch on edge')
+    if (!sourcePort || !targetPort || baseType(sourcePort.type) !== baseType(targetPort.type)) throw new Error('type mismatch on edge')
     const targetKey = `${targetNode.id}\0${targetPort.id}`
     if (occupiedTargets.has(targetKey)) throw new Error(`duplicate target port ${targetNode.id}.${targetPort.id}`)
     edgeIds.add(edge.id)
@@ -194,9 +220,15 @@ export function validateGraph(graph, catalog = tools) {
       const supplied = Object.hasOwn(node.parameters, input.id)
       if (supplied) {
         const value = node.parameters[input.id]
-        if (SCALAR_TYPES.has(input.type)) validateScalar(input, value)
-        else if (tool.category === 'Input' && FILE_TYPES.has(input.type)) {
-          if (typeof value !== 'string' || !value) throw new Error(`type mismatch for ${node.id}.${input.id}`)
+        if (isScalarType(input.type) && !isListType(input.type)) validateScalar(input, value)
+        else if (tool.category === 'Input' && isFileType(input.type)) {
+          if (isListType(input.type)) {
+            if (!Array.isArray(value) || value.length === 0 || value.some(item => typeof item !== 'string' || !item)) {
+              throw new Error(`type mismatch for ${node.id}.${input.id}`)
+            }
+          } else if (typeof value !== 'string' || !value) {
+            throw new Error(`type mismatch for ${node.id}.${input.id}`)
+          }
         } else {
           throw new Error(`type mismatch for ${node.id}.${input.id}`)
         }
@@ -346,6 +378,7 @@ function publicRun(run) {
       status: node.status,
       ...(node.error ? { error: node.error } : {}),
       outputs: { ...node.outputs },
+      ...(node.items ? { items: { ...node.items } } : {}),
     }])),
   }
 }
@@ -380,6 +413,16 @@ export function createAteliRouter(options = {}) {
   let closing = false
 
   function serializeResult(result) {
+    if (isListResult(result)) {
+      return {
+        resultId: result.resultId,
+        runId: result.runId,
+        nodeId: result.nodeId,
+        portId: result.portId,
+        kind: result.kind,
+        items: result.items.map(item => item?.resultId ?? null),
+      }
+    }
     return {
       resultId: result.resultId,
       runId: result.runId,
@@ -391,6 +434,7 @@ export function createAteliRouter(options = {}) {
       sha256: result.sha256,
       ...(result.value !== undefined ? { value: result.value } : {}),
       ...(result.meta !== undefined ? { meta: result.meta } : {}),
+      ...(result.sourceName ? { sourceName: result.sourceName } : {}),
       relativePath: result.relativePath,
       ...(result.previewRelativePath ? { previewRelativePath: result.previewRelativePath } : {}),
     }
@@ -426,89 +470,141 @@ export function createAteliRouter(options = {}) {
     return { absolutePath, info }
   }
 
-  function addResult(run, record) {
-    const absolutePath = path.resolve(run.directory, record.relativePath)
-    if (!isInside(absolutePath, run.directory) || absolutePath === run.directory) throw new Error('result escaped run directory')
-    let previewPath
-    if (record.previewRelativePath) {
-      previewPath = path.resolve(run.directory, record.previewRelativePath)
-      if (!isInside(previewPath, run.directory) || previewPath === run.directory) throw new Error('preview escaped run directory')
+  function addResult(run, record, { artifact = true } = {}) {
+    let result
+    if (isListType(record.kind)) {
+      if (!Array.isArray(record.items)) throw new Error('invalid list result')
+      result = { ...record }
+    } else {
+      const absolutePath = path.resolve(run.directory, record.relativePath)
+      if (!isInside(absolutePath, run.directory) || absolutePath === run.directory) throw new Error('result escaped run directory')
+      let previewPath
+      if (record.previewRelativePath) {
+        previewPath = path.resolve(run.directory, record.previewRelativePath)
+        if (!isInside(previewPath, run.directory) || previewPath === run.directory) throw new Error('preview escaped run directory')
+      }
+      result = { ...record, absolutePath, previewPath }
     }
-    const result = { ...record, absolutePath, previewPath }
     results.set(result.resultId, result)
     run.resultRecords[result.resultId] = result
-    run.artifacts[result.nodeId] ??= {}
-    run.artifacts[result.nodeId][result.portId] = result
+    if (artifact) {
+      run.artifacts[result.nodeId] ??= {}
+      run.artifacts[result.nodeId][result.portId] = result
+    }
     return result
   }
 
-  async function registerNodeOutputs(run, node, tool, nodeDirectory, outputDocument) {
+  function registerListResult(run, node, output, items, kind = output.type) {
+    const result = addResult(run, {
+      resultId: digest(`${run.runId}\0${node.id}\0${output.id}`).slice(0, 32),
+      runId: run.runId,
+      nodeId: node.id,
+      portId: output.id,
+      kind: isListType(kind) ? kind : `${kind}${LIST_SUFFIX}`,
+      items,
+    })
+    run.nodes[node.id].outputs[output.id] = result.resultId
+    return result
+  }
+
+  async function registerSingleOutput(run, node, tool, nodeDirectory, output, relativeOutput, previewOutput, metadataOutput, options) {
+    const outputFile = await pathForRelative(nodeDirectory, relativeOutput)
+    const kind = baseType(output.type)
+    let previewRelativePath
+    if (kind === 'mesh' && (tool.runtime !== 'none' || previewOutput)) {
+      const previewFile = await pathForRelative(nodeDirectory, previewOutput)
+      previewRelativePath = path.relative(run.directory, previewFile.absolutePath)
+    } else if (kind === 'image') {
+      previewRelativePath = path.relative(run.directory, outputFile.absolutePath)
+    }
+    let value
+    if (SCALAR_TYPES.has(kind)) {
+      try {
+        value = JSON.parse(await readFile(outputFile.absolutePath, 'utf8'))
+      } catch {
+        throw new Error(`invalid scalar output ${output.id}`)
+      }
+      validateScalar({ ...output, type: kind }, value)
+    }
+    let meta
+    if (metadataOutput !== undefined) {
+      const metaFile = await pathForRelative(nodeDirectory, metadataOutput)
+      try {
+        meta = JSON.parse(await readFile(metaFile.absolutePath, 'utf8'))
+      } catch {
+        throw new Error(`invalid result metadata ${output.id}`)
+      }
+      if (!isPlainObject(meta)) throw new Error(`invalid result metadata ${output.id}`)
+    }
+    const suffix = options.itemIndex === undefined ? '' : `\0${options.itemIndex}`
+    return addResult(run, {
+      resultId: digest(`${run.runId}\0${node.id}\0${output.id}${suffix}`).slice(0, 32),
+      runId: run.runId,
+      nodeId: node.id,
+      portId: output.id,
+      kind,
+      name: path.basename(outputFile.absolutePath),
+      size: outputFile.info.size,
+      sha256: await fileDigest(outputFile.absolutePath),
+      ...(value !== undefined ? { value } : {}),
+      ...(meta !== undefined ? { meta } : {}),
+      ...(options.sourceName ? { sourceName: options.sourceName } : {}),
+      relativePath: path.relative(run.directory, outputFile.absolutePath),
+      ...(previewRelativePath ? { previewRelativePath } : {}),
+    }, { artifact: options.artifact })
+  }
+
+  async function registerNodeOutputs(run, node, tool, nodeDirectory, outputDocument, options = {}) {
     if (!isPlainObject(outputDocument)) throw new Error('invalid outputs.json')
     const preview = isPlainObject(outputDocument.preview) ? outputDocument.preview : {}
     const metadata = isPlainObject(outputDocument.meta) ? outputDocument.meta : {}
-    const outputIds = {}
+    const outputRecords = {}
     for (const output of tool.outputs) {
       const relativeOutput = outputDocument[output.id]
       // A worker may legitimately skip an output (a bake channel switched off). Downstream nodes wired to it
       // then fail at their own turn with a clear "missing input" rather than this node failing wholesale.
       if (relativeOutput === undefined) continue
-      const outputFile = await pathForRelative(nodeDirectory, relativeOutput)
-      let previewRelativePath
-      if (output.type === 'mesh' && (tool.runtime !== 'none' || preview[output.id])) {
-        const previewFile = await pathForRelative(nodeDirectory, preview[output.id])
-        previewRelativePath = path.relative(run.directory, previewFile.absolutePath)
-      } else if (output.type === 'image') {
-        previewRelativePath = path.relative(run.directory, outputFile.absolutePath)
-      }
-      let value
-      if (SCALAR_TYPES.has(output.type)) {
-        try {
-          value = JSON.parse(await readFile(outputFile.absolutePath, 'utf8'))
-        } catch {
-          throw new Error(`invalid scalar output ${output.id}`)
+      if (isListType(output.type)) {
+        if (!Array.isArray(relativeOutput)) throw new Error(`invalid list output ${output.id}`)
+        const items = []
+        for (let index = 0; index < relativeOutput.length; index += 1) {
+          const itemPath = relativeOutput[index]
+          if (itemPath === null) {
+            items.push(null)
+            continue
+          }
+          items.push(await registerSingleOutput(
+            run, node, tool, nodeDirectory, output, itemPath,
+            Array.isArray(preview[output.id]) ? preview[output.id][index] : undefined,
+            Array.isArray(metadata[output.id]) ? metadata[output.id][index] : undefined,
+            { artifact: false, itemIndex: index, sourceName: options.sourceNames?.[index] },
+          ))
         }
-        validateScalar(output, value)
+        outputRecords[output.id] = registerListResult(run, node, output, items)
+        continue
       }
-      let meta
-      if (Object.hasOwn(metadata, output.id)) {
-        const metaFile = await pathForRelative(nodeDirectory, metadata[output.id])
-        try {
-          meta = JSON.parse(await readFile(metaFile.absolutePath, 'utf8'))
-        } catch {
-          throw new Error(`invalid result metadata ${output.id}`)
-        }
-        if (!isPlainObject(meta)) throw new Error(`invalid result metadata ${output.id}`)
-      }
-      const resultId = digest(`${run.runId}\0${node.id}\0${output.id}`).slice(0, 32)
-      const relativePath = path.relative(run.directory, outputFile.absolutePath)
-      const result = addResult(run, {
-        resultId,
-        runId: run.runId,
-        nodeId: node.id,
-        portId: output.id,
-        kind: output.type,
-        name: path.basename(outputFile.absolutePath),
-        size: outputFile.info.size,
-        sha256: await fileDigest(outputFile.absolutePath),
-        ...(value !== undefined ? { value } : {}),
-        ...(meta !== undefined ? { meta } : {}),
-        relativePath,
-        ...(previewRelativePath ? { previewRelativePath } : {}),
-      })
-      outputIds[output.id] = result.resultId
+      const result = await registerSingleOutput(
+        run, node, tool, nodeDirectory, output, relativeOutput, preview[output.id], metadata[output.id],
+        { artifact: options.artifact !== false, itemIndex: options.itemIndex, sourceName: options.sourceName },
+      )
+      outputRecords[output.id] = result
+      if (options.artifact !== false) run.nodes[node.id].outputs[output.id] = result.resultId
     }
-    run.nodes[node.id].outputs = outputIds
+    return outputRecords
   }
 
   async function copyOutputSet(sourceDirectory, targetDirectory, outputDocument, tool) {
     const relativePaths = new Set(['outputs.json'])
-    for (const output of tool.outputs) if (outputDocument[output.id] !== undefined) relativePaths.add(outputDocument[output.id])
-    if (isPlainObject(outputDocument.preview)) {
-      for (const output of tool.outputs) if (outputDocument.preview[output.id]) relativePaths.add(outputDocument.preview[output.id])
+    const addPaths = value => {
+      if (Array.isArray(value)) {
+        for (const item of value) addPaths(item)
+      } else if (typeof value === 'string') {
+        relativePaths.add(value)
+      }
     }
-    if (isPlainObject(outputDocument.meta)) {
-      for (const output of tool.outputs) if (outputDocument.meta[output.id]) relativePaths.add(outputDocument.meta[output.id])
-    }
+    for (const output of tool.outputs) addPaths(outputDocument[output.id])
+    if (isPlainObject(outputDocument.preview)) for (const output of tool.outputs) addPaths(outputDocument.preview[output.id])
+    if (isPlainObject(outputDocument.meta)) for (const output of tool.outputs) addPaths(outputDocument.meta[output.id])
     if (typeof outputDocument.log === 'string') relativePaths.add(outputDocument.log)
     for (const relativePath of relativePaths) {
       const source = await pathForRelative(sourceDirectory, relativePath)
@@ -527,50 +623,134 @@ export function createAteliRouter(options = {}) {
     }
   }
 
+  async function checkedSource(sourceId) {
+    const source = sources.get(sourceId)
+    if (!source) throw new Error(`unknown source ${sourceId}`)
+    const info = await stat(source.path).catch(() => null)
+    if (!info?.isFile()) throw new Error(`source is unavailable ${sourceId}`)
+    const currentHash = await fileDigest(source.path)
+    if (currentHash !== source.sha256) throw new Error(`source changed ${sourceId}`)
+    return source
+  }
+
+  function recordValue(record, type) {
+    if (!record) return undefined
+    return isFileType(type) ? { path: record.absolutePath ?? record.path } : record.value
+  }
+
+  function recordHash(record, type) {
+    return isFileType(type) ? record?.sha256 : record?.value
+  }
+
   async function resolveInputs(run, node, tool) {
-    const inputs = {}
-    const hashableInputs = {}
-    const inputHashes = {}
+    const resolved = {}
+    const fanoutLengths = []
     for (const input of tool.inputs) {
       const edge = run.graph.edges.find(candidate => candidate.target.nodeId === node.id && candidate.target.portId === input.id)
       if (edge) {
         const upstream = run.artifacts[edge.source.nodeId]?.[edge.source.portId]
         if (!upstream) throw new Error(`missing upstream output ${edge.source.nodeId}.${edge.source.portId}`)
-        inputHashes[input.id] = upstream.sha256
-        if (FILE_TYPES.has(input.type)) {
-          inputs[input.id] = { path: upstream.absolutePath }
-          hashableInputs[input.id] = upstream.sha256
+        const upstreamItems = isListResult(upstream) ? upstream.items : [upstream]
+        if (isListType(input.type) || isCollectTool(tool)) {
+          resolved[input.id] = { mode: 'list', records: upstreamItems }
+        } else if (isListResult(upstream)) {
+          resolved[input.id] = { mode: 'fanout', records: upstreamItems }
+          fanoutLengths.push([input.id, upstreamItems.length])
         } else {
-          inputs[input.id] = upstream.value
-          hashableInputs[input.id] = upstream.value
+          resolved[input.id] = { mode: 'single', records: upstreamItems }
         }
         continue
       }
       if (!Object.hasOwn(node.parameters, input.id)) continue
       const value = node.parameters[input.id]
-      if (FILE_TYPES.has(input.type)) {
-        const source = sources.get(value)
-        if (!source) throw new Error(`unknown source ${value}`)
-        const info = await stat(source.path).catch(() => null)
-        if (!info?.isFile()) throw new Error(`source is unavailable ${value}`)
-        const currentHash = await fileDigest(source.path)
-        if (currentHash !== source.sha256) throw new Error(`source changed ${value}`)
-        inputs[input.id] = { path: source.path }
-        hashableInputs[input.id] = source.sha256
-        inputHashes[input.id] = source.sha256
+      if (isFileType(input.type)) {
+        if (isListType(input.type)) {
+          const records = []
+          for (const sourceId of value) records.push(await checkedSource(sourceId))
+          resolved[input.id] = { mode: 'list', records }
+        } else {
+          resolved[input.id] = { mode: 'single', records: [await checkedSource(value)] }
+        }
       } else {
-        inputs[input.id] = value
-        hashableInputs[input.id] = value
+        resolved[input.id] = { mode: 'value', value }
       }
     }
-    return { inputs, hashableInputs, inputHashes }
+
+    const distinctLengths = new Set(fanoutLengths.map(([, length]) => length))
+    if (distinctLengths.size > 1) {
+      throw new Error(`fan-out lengths differ: ${fanoutLengths.map(([id, length]) => `${id}=${length}`).join(', ')}`)
+    }
+    const fanned = fanoutLengths.length > 0
+    const cardinality = fanned ? fanoutLengths[0][1] : 1
+    const iterations = []
+    for (let index = 0; index < cardinality; index += 1) {
+      const inputs = {}
+      const hashableInputs = {}
+      const inputHashes = {}
+      const inputArtifacts = {}
+      const sourceNames = []
+      for (const input of tool.inputs) {
+        const entry = resolved[input.id]
+        if (!entry) continue
+        if (entry.mode === 'value') {
+          inputs[input.id] = entry.value
+          hashableInputs[input.id] = entry.value
+          continue
+        }
+        const records = entry.mode === 'fanout' ? [entry.records[index]] : entry.records
+        if (records.some(record => !record)) throw new Error(`missing upstream output for ${node.id}.${input.id}[${index}]`)
+        const listValue = entry.mode === 'list'
+        inputArtifacts[input.id] = listValue ? records : records[0]
+        if (listValue) {
+          inputs[input.id] = records.map(record => recordValue(record, input.type))
+          hashableInputs[input.id] = records.map(record => recordHash(record, input.type))
+          inputHashes[input.id] = records.map(record => recordHash(record, input.type))
+          if (isFileType(input.type)) sourceNames.push(...records.map(record => record.sourceName ?? record.name))
+        } else {
+          inputs[input.id] = recordValue(records[0], input.type)
+          hashableInputs[input.id] = recordHash(records[0], input.type)
+          inputHashes[input.id] = recordHash(records[0], input.type)
+          if (isFileType(input.type)) sourceNames.push(records[0].sourceName ?? records[0].name)
+        }
+      }
+      const pickedSource = tool.id.startsWith('list.pick')
+        ? inputArtifacts.list?.[inputs.index]
+        : undefined
+      iterations.push({
+        inputs,
+        hashableInputs,
+        inputHashes,
+        inputArtifacts,
+        sourceName: pickedSource?.sourceName ?? pickedSource?.name ?? sourceNames[0],
+        sourceNames,
+      })
+    }
+    return { cardinality, fanned, iterations }
   }
 
   async function resolveInputNode(run, node, tool, nodeDirectory, inputs) {
     const input = tool.inputs[0]
     const output = tool.outputs[0]
     const outputDocument = {}
-    if (FILE_TYPES.has(input.type)) {
+    if (isFileType(input.type) && isListType(input.type)) {
+      outputDocument[output.id] = []
+      outputDocument.preview = { [output.id]: [] }
+      for (let index = 0; index < inputs[input.id].length; index += 1) {
+        const sourcePath = inputs[input.id][index].path
+        const itemDirectory = path.join(nodeDirectory, 'items', String(index))
+        await mkdir(itemDirectory, { recursive: true })
+        const outputName = path.basename(sourcePath)
+        const outputPath = path.join(itemDirectory, outputName)
+        await copyFile(sourcePath, outputPath)
+        outputDocument[output.id].push(path.posix.join('items', String(index), outputName))
+        if (baseType(output.type) === 'mesh') {
+          const preview = await renderMeshPreview(run, node, itemDirectory, outputPath)
+          outputDocument.preview[output.id].push(preview ? path.posix.join('items', String(index), preview) : null)
+        } else {
+          outputDocument.preview[output.id].push(path.posix.join('items', String(index), outputName))
+        }
+      }
+    } else if (isFileType(input.type)) {
       const extension = path.extname(inputs[input.id].path).toLowerCase()
       const outputName = `${output.id}${extension}`
       const outputPath = path.join(nodeDirectory, outputName)
@@ -612,48 +792,54 @@ export function createAteliRouter(options = {}) {
     }
   }
 
-  function exportAncestors(run, node) {
+  function exportAncestors(run, node, index) {
     const ancestorIds = ancestorsOf(run.graph, new Set([node.id]))
     ancestorIds.delete(node.id)
     return topologicalOrder(run.graph)
       .filter(nodeId => ancestorIds.has(nodeId))
       .map(nodeId => {
         const upstreamNode = run.graph.nodes.find(candidate => candidate.id === nodeId)
+        const storedHashes = run.inputHashes[nodeId] ?? {}
+        const selectedHashes = Array.isArray(storedHashes) ? storedHashes[index] ?? storedHashes[0] ?? {} : storedHashes
         return {
           nodeId,
           toolId: upstreamNode.toolId,
           parameters: structuredClone(upstreamNode.parameters),
-          inputHashes: { ...(run.inputHashes[nodeId] ?? {}) },
+          inputHashes: { ...selectedHashes },
         }
       })
   }
 
-  function exportMetadata(run, upstream) {
+  function exportMetadata(run, upstream, index) {
     const metadata = []
     for (const ancestor of upstream) {
       for (const result of Object.values(run.artifacts[ancestor.nodeId] ?? {})) {
-        if (isPlainObject(result.meta)) metadata.push(result.meta)
+        const selected = isListResult(result) ? result.items[index] : result
+        if (isPlainObject(selected?.meta)) metadata.push(selected.meta)
       }
     }
     return metadata.length ? Object.assign({}, ...metadata) : null
   }
 
-  async function resolveExportNode(run, node, nodeDirectory, inputs) {
+  async function resolveExportNode(run, node, nodeDirectory, inputs, inputArtifacts, index) {
     const inputPort = inputs.mesh ? 'mesh' : 'image'
-    const edge = run.graph.edges.find(candidate => candidate.target.nodeId === node.id && candidate.target.portId === inputPort)
-    const source = edge && run.artifacts[edge.source.nodeId]?.[edge.source.portId]
+    const source = inputArtifacts[inputPort]
     if (!source) throw new Error(`missing export input ${node.id}.${inputPort}`)
     const root = config.exportRoots[inputs.folder]
     const rootInfo = root && await stat(root).catch(() => null)
     if (!rootInfo?.isDirectory()) throw new Error(`export root is unavailable: ${inputs.folder}`)
+    const sourceStem = path.parse(source.sourceName ?? source.name).name
     const name = inputs.name
+      .replaceAll('{name}', sourceStem)
+      .replaceAll('{index}', String(index))
+      .replaceAll('{n}', String(index + 1))
     if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) throw new Error('invalid export name')
     const extension = path.extname(source.absolutePath).toLowerCase()
     if (!extension) throw new Error('export input has no file extension')
     const destinationPath = path.join(root, `${name}${extension}`)
     await installExport(source.absolutePath, destinationPath)
 
-    const upstream = exportAncestors(run, node)
+    const upstream = exportAncestors(run, node, index)
     const provenance = {
       sha256: source.sha256,
       size: source.size,
@@ -661,7 +847,7 @@ export function createAteliRouter(options = {}) {
       runId: run.runId,
       nodeId: node.id,
       upstream,
-      meta: exportMetadata(run, upstream),
+      meta: exportMetadata(run, upstream, index),
     }
     const provenancePath = path.join(root, `${name}.provenance.json`)
     const temporaryPath = `${provenancePath}.${process.pid}.${randomUUID()}.tmp`
@@ -674,9 +860,60 @@ export function createAteliRouter(options = {}) {
     return outputDocument
   }
 
-  async function resolveInProcessNode(run, node, tool, nodeDirectory, inputs) {
-    if (tool.id === 'output.export') return resolveExportNode(run, node, nodeDirectory, inputs)
-    if (tool.category === 'Input') return resolveInputNode(run, node, tool, nodeDirectory, inputs)
+  async function copyUtilityArtifact(nodeDirectory, relativeDirectory, outputId, record) {
+    const extension = path.extname(record.absolutePath)
+    const relativeOutput = path.posix.join(relativeDirectory, `${outputId}${extension}`)
+    const outputPath = path.join(nodeDirectory, relativeOutput)
+    await mkdir(path.dirname(outputPath), { recursive: true })
+    await copyFile(record.absolutePath, outputPath)
+    let relativePreview
+    if (baseType(record.kind) === 'mesh' && record.previewPath) {
+      relativePreview = path.posix.join(relativeDirectory, `${outputId}.preview.png`)
+      await copyFile(record.previewPath, path.join(nodeDirectory, relativePreview))
+    }
+    return { relativeOutput, relativePreview }
+  }
+
+  async function resolveListUtilityNode(tool, nodeDirectory, inputs, inputArtifacts) {
+    const output = tool.outputs[0]
+    if (tool.id.startsWith('list.count')) {
+      const outputDocument = { [output.id]: `${output.id}.json` }
+      await writeFile(path.join(nodeDirectory, outputDocument[output.id]), `${JSON.stringify(inputs.list.length)}\n`)
+      await writeFile(path.join(nodeDirectory, 'outputs.json'), `${JSON.stringify(outputDocument, null, 2)}\n`)
+      return outputDocument
+    }
+    if (tool.id.startsWith('list.pick')) {
+      if (!Number.isInteger(inputs.index) || inputs.index < 0 || inputs.index >= inputArtifacts.list.length) {
+        throw new Error(`list index out of range: ${inputs.index}`)
+      }
+      const copied = await copyUtilityArtifact(nodeDirectory, '.', output.id, inputArtifacts.list[inputs.index])
+      const outputDocument = { [output.id]: copied.relativeOutput }
+      if (copied.relativePreview) outputDocument.preview = { [output.id]: copied.relativePreview }
+      await writeFile(path.join(nodeDirectory, 'outputs.json'), `${JSON.stringify(outputDocument, null, 2)}\n`)
+      return outputDocument
+    }
+    if (isCollectTool(tool)) {
+      const records = inputArtifacts.item
+      const outputDocument = { [output.id]: [], preview: { [output.id]: [] } }
+      for (let index = 0; index < records.length; index += 1) {
+        const copied = await copyUtilityArtifact(nodeDirectory, path.posix.join('items', String(index)), output.id, records[index])
+        outputDocument[output.id].push(copied.relativeOutput)
+        outputDocument.preview[output.id].push(copied.relativePreview ?? null)
+      }
+      await writeFile(path.join(nodeDirectory, 'outputs.json'), `${JSON.stringify(outputDocument, null, 2)}\n`)
+      return outputDocument
+    }
+    throw new Error(`unsupported list utility: ${tool.id}`)
+  }
+
+  async function resolveInProcessNode(run, node, tool, nodeDirectory, iteration, index) {
+    if (tool.id === 'output.export') {
+      return resolveExportNode(run, node, nodeDirectory, iteration.inputs, iteration.inputArtifacts, index)
+    }
+    if (tool.category === 'Input') return resolveInputNode(run, node, tool, nodeDirectory, iteration.inputs)
+    if (tool.category === 'Utility') {
+      return resolveListUtilityNode(tool, nodeDirectory, iteration.inputs, iteration.inputArtifacts)
+    }
     throw new Error(`unsupported in-process tool: ${tool.id}`)
   }
 
@@ -777,39 +1014,95 @@ export function createAteliRouter(options = {}) {
 
   async function executeNode(run, node) {
     const tool = configuredToolMap.get(node.toolId)
-    const nodeDirectory = path.join(run.directory, 'nodes', node.id)
-    await mkdir(nodeDirectory, { recursive: true })
-    const { inputs, hashableInputs, inputHashes } = await resolveInputs(run, node, tool)
-    run.inputHashes[node.id] = inputHashes
-    const requestPath = path.join(nodeDirectory, 'request.json')
-    await writeFile(requestPath, `${JSON.stringify({
-      runId: run.runId,
-      nodeId: node.id,
-      toolId: tool.id,
-      inputs,
-      outputDir: nodeDirectory,
-    }, null, 2)}\n`)
-    const cacheKey = digest(`${tool.id}${tool.version}${canonicalJson(hashableInputs)}`)
-    run.cacheKeys[node.id] = cacheKey
+    const rootNodeDirectory = path.join(run.directory, 'nodes', node.id)
+    await mkdir(rootNodeDirectory, { recursive: true })
+    const resolved = await resolveInputs(run, node, tool)
+    run.inputHashes[node.id] = resolved.fanned
+      ? resolved.iterations.map(iteration => iteration.inputHashes)
+      : resolved.iterations[0]?.inputHashes ?? {}
     const cacheable = tool.id !== 'output.export'
-    const cacheDirectory = path.join(config.stagingRoot, 'cache', cacheKey)
-    if (run.cache && cacheable && (await stat(cacheDirectory).catch(() => null))?.isDirectory()) {
-      try {
-        const cachedOutputs = await readOutputs(cacheDirectory)
-        await copyOutputSet(cacheDirectory, nodeDirectory, cachedOutputs, tool)
-        await registerNodeOutputs(run, node, tool, nodeDirectory, cachedOutputs)
-        return 'cached'
-      } catch {
-        await rm(cacheDirectory, { recursive: true, force: true })
+    const cacheKeys = []
+    const itemOutputs = Object.fromEntries(tool.outputs.map(output => [output.id, Array(resolved.cardinality).fill(null)]))
+    let allCached = true
+
+    const publishFanoutOutputs = () => {
+      if (!resolved.fanned) return
+      for (const output of tool.outputs) {
+        registerListResult(run, node, output, itemOutputs[output.id], output.type)
       }
     }
 
-    const outputDocument = tool.runtime === 'none'
-      ? await resolveInProcessNode(run, node, tool, nodeDirectory, inputs)
-      : (await spawnWorker(run, node, tool, nodeDirectory, requestPath), await readOutputs(nodeDirectory))
-    await registerNodeOutputs(run, node, tool, nodeDirectory, outputDocument)
-    if (run.cache && cacheable) await writeCache(cacheKey, nodeDirectory, outputDocument, tool)
-    return 'succeeded'
+    if (resolved.fanned) {
+      run.nodes[node.id].items = { total: resolved.cardinality, done: 0, failed: 0 }
+      publishFanoutOutputs()
+      await persistRun(run)
+    }
+
+    for (let index = 0; index < resolved.cardinality; index += 1) {
+      if (run.cancelRequested) throw new Error('run cancelled')
+      const iteration = resolved.iterations[index]
+      const nodeDirectory = resolved.cardinality === 1
+        ? rootNodeDirectory
+        : path.join(rootNodeDirectory, String(index))
+      await mkdir(nodeDirectory, { recursive: true })
+      const requestPath = path.join(nodeDirectory, 'request.json')
+      const requestDocument = {
+        runId: run.runId,
+        nodeId: node.id,
+        ...(resolved.fanned ? { index } : {}),
+        toolId: tool.id,
+        inputs: iteration.inputs,
+        outputDir: nodeDirectory,
+      }
+      await writeFile(requestPath, `${JSON.stringify(requestDocument, null, 2)}\n`)
+      const cacheKey = digest(`${tool.id}${tool.version}${canonicalJson(iteration.hashableInputs)}`)
+      cacheKeys.push(cacheKey)
+      const cacheDirectory = path.join(config.stagingRoot, 'cache', cacheKey)
+      let iterationStatus = 'succeeded'
+      let outputDocument
+      try {
+        if (run.cache && cacheable && (await stat(cacheDirectory).catch(() => null))?.isDirectory()) {
+          try {
+            outputDocument = await readOutputs(cacheDirectory)
+            await copyOutputSet(cacheDirectory, nodeDirectory, outputDocument, tool)
+            iterationStatus = 'cached'
+          } catch {
+            await rm(cacheDirectory, { recursive: true, force: true })
+            outputDocument = undefined
+          }
+        }
+        if (!outputDocument) {
+          allCached = false
+          outputDocument = tool.runtime === 'none'
+            ? await resolveInProcessNode(run, node, tool, nodeDirectory, iteration, index)
+            : (await spawnWorker(run, node, tool, nodeDirectory, requestPath), await readOutputs(nodeDirectory))
+        }
+        const records = await registerNodeOutputs(run, node, tool, nodeDirectory, outputDocument, {
+          artifact: !resolved.fanned,
+          itemIndex: resolved.fanned ? index : undefined,
+          sourceName: iteration.sourceName,
+          sourceNames: iteration.sourceNames,
+        })
+        if (resolved.fanned) {
+          for (const [outputId, record] of Object.entries(records)) itemOutputs[outputId][index] = record
+          run.nodes[node.id].items.done += 1
+          publishFanoutOutputs()
+          await persistRun(run)
+        }
+        if (run.cache && cacheable && iterationStatus !== 'cached') {
+          await writeCache(cacheKey, nodeDirectory, outputDocument, tool)
+        }
+      } catch (error) {
+        if (resolved.fanned) {
+          if (!run.cancelRequested) run.nodes[node.id].items.failed += 1
+          publishFanoutOutputs()
+          await persistRun(run)
+        }
+        throw error
+      }
+    }
+    run.cacheKeys[node.id] = resolved.fanned ? cacheKeys : cacheKeys[0]
+    return allCached ? 'cached' : 'succeeded'
   }
 
   function updateProgress(run) {
@@ -1004,14 +1297,26 @@ export function createAteliRouter(options = {}) {
         cancelRequested: false,
       }
       let invalid = false
-      for (const record of stored.results ?? []) {
+      const storedResults = stored.results ?? []
+      const itemResultIds = new Set(storedResults.flatMap(record => isListType(record.kind) ? record.items.filter(Boolean) : []))
+      for (const record of storedResults.filter(record => !isListType(record.kind))) {
         try {
           const output = await pathForRelative(directory, record.relativePath)
           if (record.previewRelativePath) await pathForRelative(directory, record.previewRelativePath)
-          addResult(run, { ...record, size: output.info.size })
+          addResult(run, { ...record, size: output.info.size }, { artifact: !itemResultIds.has(record.resultId) })
         } catch {
           invalid = true
           break
+        }
+      }
+      if (!invalid) {
+        for (const record of storedResults.filter(record => isListType(record.kind))) {
+          const items = record.items.map(resultId => resultId === null ? null : run.resultRecords[resultId])
+          if (items.some((item, index) => record.items[index] !== null && !item)) {
+            invalid = true
+            break
+          }
+          addResult(run, { ...record, items })
         }
       }
       if (invalid) continue
@@ -1061,7 +1366,10 @@ export function createAteliRouter(options = {}) {
 
   async function clearNodeCache(nodeId) {
     const keys = new Set()
-    for (const run of runs.values()) if (run.cacheKeys[nodeId]) keys.add(run.cacheKeys[nodeId])
+    for (const run of runs.values()) {
+      const stored = run.cacheKeys[nodeId]
+      for (const key of Array.isArray(stored) ? stored : stored ? [stored] : []) keys.add(key)
+    }
     for (const key of keys) await rm(path.join(config.stagingRoot, 'cache', key), { recursive: true, force: true })
     return keys.size
   }
@@ -1087,8 +1395,12 @@ export function createAteliRouter(options = {}) {
         for (const node of graph.nodes) {
           const tool = configuredToolMap.get(node.toolId)
           for (const input of tool.inputs) {
-            if (tool.category === 'Input' && FILE_TYPES.has(input.type) && !sources.has(node.parameters[input.id])) {
-              throw new Error(`unknown source ${node.parameters[input.id]}`)
+            if (tool.category !== 'Input' || !isFileType(input.type)) continue
+            const sourceIds = isListType(input.type) ? node.parameters[input.id] : [node.parameters[input.id]]
+            for (const sourceId of sourceIds) {
+              const source = sources.get(sourceId)
+              if (!source) throw new Error(`unknown source ${sourceId}`)
+              if (source.kind !== baseType(input.type)) throw new Error(`type mismatch for ${node.id}.${input.id}`)
             }
           }
         }
@@ -1154,16 +1466,37 @@ export function createAteliRouter(options = {}) {
         const run = runs.get(result.runId)
         if (!run) throw new Error('result run is unavailable')
         if (resultMatch[2] === 'preview') {
-          const previewPath = result.kind === 'image' ? result.absolutePath : result.previewPath
+          const previewResult = isListResult(result)
+            ? result.items.find(Boolean)
+            : result
+          const previewPath = previewResult?.kind === 'image' ? previewResult.absolutePath : previewResult?.previewPath
           if (!previewPath) {
             sendJson(response, 404, { error: 'result has no preview' })
             return true
           }
-          await streamResult(response, run, previewPath, result.kind === 'image' ? mimeType(previewPath) : 'image/png')
+          await streamResult(response, run, previewPath, previewResult.kind === 'image' ? mimeType(previewPath) : 'image/png')
           return true
         }
         if (url.searchParams.get('download') === '1') {
+          if (isListResult(result)) {
+            sendJson(response, 400, { error: 'list results cannot be downloaded' })
+            return true
+          }
           await streamResult(response, run, result.absolutePath, mimeType(result.absolutePath))
+          return true
+        }
+        if (isListResult(result)) {
+          sendJson(response, 200, {
+            resultId: result.resultId,
+            kind: result.kind,
+            items: result.items.map(item => item ? {
+              resultId: item.resultId,
+              name: item.name,
+              previewUrl: item.kind === 'image' || item.previewPath ? `/ateli/results/${item.resultId}/preview` : null,
+              downloadUrl: `/ateli/results/${item.resultId}?download=1`,
+              ...(item.value !== undefined ? { value: item.value } : {}),
+            } : null),
+          })
           return true
         }
         sendJson(response, 200, {

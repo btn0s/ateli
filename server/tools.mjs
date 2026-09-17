@@ -8,7 +8,7 @@ const aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4']
 const imageModels = ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gemini-3.1-flash-image']
 const faceAxes = ['-Y', '+Y', '-X', '+X', '-Z', '+Z']
 
-/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh'|'Output', runtime: 'none'|'image'|'imgen'|'blender'|'meshy'|'gltf', inputs: object[], outputs: object[]}>} */
+/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh'|'Output'|'Utility', runtime: 'none'|'image'|'imgen'|'blender'|'meshy'|'gltf', inputs: object[], outputs: object[]}>} */
 export const tools = [
   {
     id: 'input.text', version: 1, title: 'Input Text', category: 'Input', runtime: 'none',
@@ -35,6 +35,17 @@ export const tools = [
     inputs: [param('file', 'File', 'mesh')],
     outputs: [param('mesh', 'Mesh', 'mesh')],
   },
+  {
+    id: 'input.meshes', version: 1, title: 'Input Meshes', category: 'Input', runtime: 'none',
+    inputs: [param('files', 'Files', 'mesh[]')],
+    outputs: [param('meshes', 'Meshes', 'mesh[]')],
+  },
+  {
+    id: 'input.images', version: 1, title: 'Input Images', category: 'Input', runtime: 'none',
+    inputs: [param('files', 'Files', 'image[]')],
+    outputs: [param('images', 'Images', 'image[]')],
+  },
+
 
   {
     id: 'image.generate.fast', version: 1, title: 'Text → Image (Fast)', category: 'Image', runtime: 'imgen',
@@ -343,6 +354,37 @@ export const tools = [
       param('roughness', 'Roughness', 'image'), param('metallic', 'Metallic', 'image'),
       param('normal', 'Normal', 'image'), param('ao', 'AO', 'image'),
     ],
+  },
+
+  {
+    id: 'list.collectMeshes', version: 1, title: 'Collect Meshes', category: 'Utility', runtime: 'none',
+    inputs: [param('item', 'Item', 'mesh')],
+    outputs: [param('list', 'List', 'mesh[]')],
+  },
+  {
+    id: 'list.collectImages', version: 1, title: 'Collect Images', category: 'Utility', runtime: 'none',
+    inputs: [param('item', 'Item', 'image')],
+    outputs: [param('list', 'List', 'image[]')],
+  },
+  {
+    id: 'list.pickMesh', version: 1, title: 'Pick Mesh', category: 'Utility', runtime: 'none',
+    inputs: [param('list', 'List', 'mesh[]'), param('index', 'Index', 'number', { default: 0, min: 0 })],
+    outputs: [param('item', 'Item', 'mesh')],
+  },
+  {
+    id: 'list.pickImage', version: 1, title: 'Pick Image', category: 'Utility', runtime: 'none',
+    inputs: [param('list', 'List', 'image[]'), param('index', 'Index', 'number', { default: 0, min: 0 })],
+    outputs: [param('item', 'Item', 'image')],
+  },
+  {
+    id: 'list.countMeshes', version: 1, title: 'Count Meshes', category: 'Utility', runtime: 'none',
+    inputs: [param('list', 'List', 'mesh[]')],
+    outputs: [param('count', 'Count', 'number')],
+  },
+  {
+    id: 'list.countImages', version: 1, title: 'Count Images', category: 'Utility', runtime: 'none',
+    inputs: [param('list', 'List', 'image[]')],
+    outputs: [param('count', 'Count', 'number')],
   },
 
   {

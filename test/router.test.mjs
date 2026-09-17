@@ -15,6 +15,10 @@ function inputMesh(sourceId, id = 'input') {
   return { id, toolId: 'input.mesh', toolVersion: 1, parameters: { file: sourceId } }
 }
 
+function inputMeshes(sourceIds, id = 'inputs') {
+  return { id, toolId: 'input.meshes', toolVersion: 1, parameters: { files: sourceIds } }
+}
+
 function optimize(id = 'optimize', targetFaces = 80000) {
   return { id, toolId: 'mesh.optimize', toolVersion: 1, parameters: { topology: 'triangle', targetFaces } }
 }
@@ -82,7 +86,7 @@ if (request.toolId === 'mesh.optimize' && request.inputs.targetFaces === 4) {
 }
 const outputs = {}
 if (request.toolId === 'mesh.optimize' || request.toolId === 'mesh.applyTextures') {
-  await writeFile(path.join(request.outputDir, 'mesh.glb'), 'mesh:' + request.toolId + ':' + request.inputs.targetFaces)
+  await writeFile(path.join(request.outputDir, 'mesh.glb'), 'mesh:' + request.toolId + ':' + request.inputs.targetFaces + (request.index === undefined ? '' : ':' + request.index))
   await writeFile(path.join(request.outputDir, 'mesh.preview.png'), 'preview:' + request.toolId)
   outputs.mesh = 'mesh.glb'
   outputs.preview = { mesh: 'mesh.preview.png' }
@@ -197,6 +201,16 @@ async function addSource(harness, filePath) {
   const response = await request(harness.origin, '/ateli/sources', { method: 'POST', body: { path: filePath } })
   assert.equal(response.status, 200, JSON.stringify(response.body))
   return response.body
+}
+
+async function addMeshSources(harness, names = ['alpha.glb', 'beta.glb', 'gamma.glb']) {
+  const sourceIds = []
+  for (const [index, name] of names.entries()) {
+    const filePath = path.join(harness.allowedRoot, name)
+    await writeFile(filePath, `source-mesh-${index}`)
+    sourceIds.push((await addSource(harness, filePath)).sourceId)
+  }
+  return sourceIds
 }
 
 async function submit(harness, runGraph, scope = { kind: 'graph' }, options = {}) {
@@ -609,4 +623,152 @@ test('a node may omit outputs it was configured not to produce, and the cache ho
   const second = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
   assert.equal(second.nodes.bake.status, 'cached')
   assert.deepEqual(Object.keys(second.nodes.bake.outputs).sort(), ['baseColor', 'mesh', 'normal'])
+})
+
+test('fan-out executes each mesh item and caches iterations independently', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const sourceIds = await addMeshSources(harness)
+  const runGraph = graph([
+    inputMeshes(sourceIds),
+    optimize(),
+  ], [edge('inputs-optimize', 'inputs', 'meshes', 'optimize', 'mesh')])
+
+  const first = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(first.status, 'completed')
+  assert.equal(first.nodes.optimize.status, 'succeeded')
+  assert.deepEqual(first.nodes.optimize.items, { total: 3, done: 3, failed: 0 })
+  const listResult = await request(harness.origin, `/ateli/results/${first.nodes.optimize.outputs.mesh}`)
+  assert.equal(listResult.status, 200)
+  assert.equal(listResult.body.kind, 'mesh[]')
+  assert.equal(listResult.body.items.length, 3)
+  assert.equal(new Set(listResult.body.items.map(item => item.resultId)).size, 3)
+  const downloads = await Promise.all(listResult.body.items.map(item => request(harness.origin, item.downloadUrl)))
+  assert.deepEqual(downloads.map(result => result.body), [
+    'mesh:mesh.optimize:80000:0',
+    'mesh:mesh.optimize:80000:1',
+    'mesh:mesh.optimize:80000:2',
+  ])
+  const preview = await request(harness.origin, `/ateli/results/${listResult.body.resultId}/preview`)
+  assert.equal(preview.body, 'preview:mesh.optimize')
+  assert.equal((await harness.calls()).filter(toolId => toolId === 'mesh.optimize').length, 3)
+
+  const second = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(second.nodes.optimize.status, 'cached')
+  assert.deepEqual(second.nodes.optimize.items, { total: 3, done: 3, failed: 0 })
+  assert.equal((await harness.calls()).filter(toolId => toolId === 'mesh.optimize').length, 3)
+})
+
+test('fan-out rejects mismatched input list lengths', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const meshSourceIds = await addMeshSources(harness)
+  const imageSourceIds = []
+  for (const [index, name] of ['albedo-a.png', 'albedo-b.png'].entries()) {
+    const filePath = path.join(harness.allowedRoot, name)
+    await writeFile(filePath, `source-image-${index}`)
+    imageSourceIds.push((await addSource(harness, filePath)).sourceId)
+  }
+  const runGraph = graph([
+    inputMeshes(meshSourceIds, 'meshes'),
+    { id: 'images', toolId: 'input.images', toolVersion: 1, parameters: { files: imageSourceIds } },
+    { id: 'apply', toolId: 'mesh.applyTextures', toolVersion: 1, parameters: {} },
+  ], [
+    edge('meshes-apply', 'meshes', 'meshes', 'apply', 'mesh'),
+    edge('images-apply', 'images', 'images', 'apply', 'baseColor'),
+  ])
+
+  const run = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(run.status, 'failed')
+  assert.equal(run.nodes.apply.status, 'failed')
+  assert.match(run.nodes.apply.error, /fan-out lengths differ: mesh=3, baseColor=2/)
+  assert.equal((await harness.calls()).filter(toolId => toolId === 'mesh.applyTextures').length, 0)
+})
+
+test('cancelling fan-out kills the current iteration and skips the remainder', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const sourceIds = await addMeshSources(harness)
+  const runGraph = graph([
+    inputMeshes(sourceIds),
+    optimize('slow-batch', 4),
+  ], [edge('inputs-slow', 'inputs', 'meshes', 'slow-batch', 'mesh')])
+  const submission = await submit(harness, runGraph, { kind: 'graph' }, { cache: false })
+  await waitForNode(harness.origin, submission.body.runId, 'slow-batch', 'running')
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline && !(await harness.calls()).includes('mesh.optimize')) {
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+
+  const cancelled = await request(harness.origin, `/ateli/runs/${submission.body.runId}/cancel`, { method: 'POST', body: {} })
+  assert.equal(cancelled.status, 200)
+  const run = await waitForRun(harness.origin, submission.body.runId)
+  assert.equal(run.status, 'cancelled')
+  assert.equal(run.nodes['slow-batch'].status, 'skipped')
+  assert.deepEqual(run.nodes['slow-batch'].items, { total: 3, done: 0, failed: 0 })
+  assert.equal((await harness.calls()).filter(toolId => toolId === 'mesh.optimize').length, 1)
+})
+
+test('export fan-out expands item name index and ordinal templates', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const sourceIds = await addMeshSources(harness)
+  const runGraph = graph([
+    inputMeshes(sourceIds),
+    { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: '{name}-{index}-{n}' } },
+  ], [edge('inputs-export', 'inputs', 'meshes', 'export', 'mesh')])
+
+  const run = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(run.status, 'completed')
+  assert.deepEqual(run.nodes.export.items, { total: 3, done: 3, failed: 0 })
+  const expectedPaths = ['alpha-0-1.glb', 'beta-1-2.glb', 'gamma-2-3.glb'].map(name => path.join(harness.exportRoot, name))
+  assert.deepEqual(await Promise.all(expectedPaths.map(filePath => readFile(filePath, 'utf8'))), [
+    'source-mesh-0',
+    'source-mesh-1',
+    'source-mesh-2',
+  ])
+  const pathResult = await request(harness.origin, `/ateli/results/${run.nodes.export.outputs.path}`)
+  assert.equal(pathResult.body.kind, 'text[]')
+  assert.deepEqual(pathResult.body.items.map(item => item.value), expectedPaths)
+})
+
+test('list utilities collect pick and count without subprocesses', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const catalog = await request(harness.origin, '/ateli/tools')
+  assert.equal(catalog.status, 200)
+  const utilityIds = catalog.body.filter(tool => tool.category === 'Utility').map(tool => tool.id)
+  assert.deepEqual(utilityIds, [
+    'list.collectMeshes',
+    'list.collectImages',
+    'list.pickMesh',
+    'list.pickImage',
+    'list.countMeshes',
+    'list.countImages',
+  ])
+  assert.equal(catalog.body.find(tool => tool.id === 'input.meshes').outputs[0].type, 'mesh[]')
+  assert.equal(catalog.body.find(tool => tool.id === 'list.pickImage').inputs[0].type, 'image[]')
+
+  const sourceIds = await addMeshSources(harness)
+  const runGraph = graph([
+    inputMeshes(sourceIds),
+    { id: 'collect', toolId: 'list.collectMeshes', toolVersion: 1, parameters: {} },
+    { id: 'pick', toolId: 'list.pickMesh', toolVersion: 1, parameters: { index: 1 } },
+    { id: 'count', toolId: 'list.countMeshes', toolVersion: 1, parameters: {} },
+  ], [
+    edge('inputs-collect', 'inputs', 'meshes', 'collect', 'item'),
+    edge('collect-pick', 'collect', 'list', 'pick', 'list'),
+    edge('collect-count', 'collect', 'list', 'count', 'list'),
+  ])
+
+  const run = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(run.status, 'completed')
+  const collected = await request(harness.origin, `/ateli/results/${run.nodes.collect.outputs.list}`)
+  assert.equal(collected.body.kind, 'mesh[]')
+  assert.equal(collected.body.items.length, 3)
+  const picked = await request(harness.origin, `/ateli/results/${run.nodes.pick.outputs.item}`)
+  assert.equal((await request(harness.origin, picked.body.downloadUrl)).body, 'source-mesh-1')
+  const count = await request(harness.origin, `/ateli/results/${run.nodes.count.outputs.count}`)
+  assert.equal(count.body.value, 3)
+  assert.equal((await harness.calls()).filter(toolId => toolId !== 'mesh.render').length, 0)
 })

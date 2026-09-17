@@ -52,16 +52,49 @@ const advancedToggleHeight = 22
 const previewHeight = 126
 const errorHeight = 34
 const portColor: Record<AteliValueType, string> = {
-	mesh:'#a78bfa', image:'#facc15', text:'#60a5fa', number:'#fb923c', boolean:'#f87171', enum:'#fb923c',
+	mesh:'#a78bfa', 'mesh[]':'#a78bfa',
+	image:'#facc15', 'image[]':'#facc15',
+	text:'#60a5fa', 'text[]':'#60a5fa',
+	number:'#fb923c', 'number[]':'#fb923c',
+	boolean:'#f87171', 'boolean[]':'#f87171',
+	enum:'#fb923c',
 }
+type ListValueType = Extract<AteliValueType, `${string}[]`>
+const isListType = (type: AteliValueType): type is ListValueType => type.endsWith('[]')
+const baseType = (type: AteliValueType) => isListType(type) ? type.slice(0, -2) : type
+const isFileType = (type: AteliValueType) => baseType(type) === 'mesh' || baseType(type) === 'image'
 
-interface StoredResult { resultId: string; previewUrl: string; kind: string; value?: JsonValue }
+interface StoredResultItem {
+	resultId: string
+	name: string
+	previewUrl: string
+	downloadUrl?: string
+	value?: JsonValue
+}
+interface StoredSingleResult { resultId: string; previewUrl: string; kind: string; value?: JsonValue }
+interface StoredListResult { resultId: string; kind: string; items: Array<StoredResultItem | null> }
+type StoredResult = StoredSingleResult | StoredListResult
+function storedResultItem(value: JsonValue): StoredResultItem | null | undefined {
+	if (value === null) return null
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+	const candidate = value as Record<string, JsonValue>
+	return typeof candidate.resultId === 'string'
+		&& typeof candidate.name === 'string'
+		&& typeof candidate.previewUrl === 'string'
+		? candidate as unknown as StoredResultItem
+		: undefined
+}
 function storedResult(value: JsonValue | undefined): StoredResult | undefined {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
 	const candidate = value as Record<string, JsonValue>
-	return typeof candidate.resultId === 'string' && typeof candidate.previewUrl === 'string' && typeof candidate.kind === 'string'
-		? candidate as unknown as StoredResult
-		: undefined
+	if (typeof candidate.resultId !== 'string' || typeof candidate.kind !== 'string') return undefined
+	if (Array.isArray(candidate.items)) {
+		const items = candidate.items.map(storedResultItem)
+		return items.every(item => item !== undefined)
+			? { resultId:candidate.resultId, kind:candidate.kind, items:items as Array<StoredResultItem | null> }
+			: undefined
+	}
+	return typeof candidate.previewUrl === 'string' ? candidate as unknown as StoredSingleResult : undefined
 }
 
 function nodeError(shape: AteliNodeShape) {
@@ -132,7 +165,7 @@ function wouldCycle(editor: Editor, from: TLShapeId, to: TLShapeId, ignoredEdgeI
 
 interface EdgeSource { shapeId: TLShapeId; port: AteliParam }
 function canConnect(editor: Editor, source: EdgeSource, targetNodeId: TLShapeId, target: AteliParam, ignoredEdgeId?: TLShapeId) {
-	return source.shapeId !== targetNodeId && source.port.type === target.type && !wouldCycle(editor, source.shapeId, targetNodeId, ignoredEdgeId)
+	return source.shapeId !== targetNodeId && baseType(source.port.type) === baseType(target.type) && !wouldCycle(editor, source.shapeId, targetNodeId, ignoredEdgeId)
 }
 
 export function connectPorts(editor: Editor, source: EdgeSource, to: TLShapeId, target: AteliParam, rewiredEdgeId?: TLShapeId) {
@@ -308,7 +341,32 @@ function connectedInputValue(editor: Editor, nodeId: TLShapeId, portId: string) 
 	if (!edge) return { connected:false as const, value:undefined }
 	const source = editor.getShape<AteliNodeShape>(edge.props.from)
 	const result = source && storedResult(source.props.results[edge.props.fromPort])
-	return { connected:true as const, value:result?.value }
+	return { connected:true as const, value:result && !('items' in result) ? result.value : undefined }
+}
+
+function fanOutCardinality(editor: Editor, shape: AteliNodeShape) {
+	const tool = getTool(shape.props.toolId)
+	if (!tool) return 1
+	let cardinality = 1
+	for (const input of tool.inputs) {
+		if (isListType(input.type)) continue
+		const edge = edgesOf(editor).find(candidate => candidate.props.to === shape.id && candidate.props.toPort === input.id)
+		if (!edge) continue
+		const source = editor.getShape<AteliNodeShape>(edge.props.from)
+		if (!source) continue
+		const sourcePort = getTool(source.props.toolId)?.outputs.find(output => output.id === edge.props.fromPort)
+		if (!sourcePort || !isListType(sourcePort.type)) continue
+		const result = storedResult(source.props.results[edge.props.fromPort])
+		if (result && 'items' in result) {
+			cardinality = Math.max(cardinality, result.items.length)
+			continue
+		}
+		if (source.props.toolId === 'input.meshes' || source.props.toolId === 'input.images') {
+			const files = source.props.values.files
+			if (Array.isArray(files)) cardinality = Math.max(cardinality, files.length)
+		}
+	}
+	return cardinality
 }
 
 
@@ -332,36 +390,51 @@ function InputControl({ shape, editor, param, readonly, onValues }: { shape: Ate
 	return <input {...shared} type={param.type === 'number' ? 'number' : 'text'} value={String(value)} placeholder={upstream.connected ? 'Connected' : ''} min={param.min} max={param.max} step={param.step} onChange={event => onValues({ [param.id]:param.type === 'number' ? Number(event.currentTarget.value) : event.currentTarget.value })} />
 }
 
-function InputRow({ shape, editor, param, readonly, drag, onValues, onUpload }: { shape: AteliNodeShape; editor: Editor; param: AteliParam; readonly: boolean; drag?: DragState; onValues(patch: Record<string, JsonValue>): void; onUpload(file: File, param: AteliParam): void }) {
+function InputRow({ shape, editor, param, readonly, drag, onValues, onUpload }: { shape: AteliNodeShape; editor: Editor; param: AteliParam; readonly: boolean; drag?: DragState; onValues(patch: Record<string, JsonValue>): void; onUpload(files: File[], param: AteliParam): void }) {
 	const compatible = drag ? canConnect(editor, drag.source, shape.id, param, drag.edgeId) : false
 	const dim = Boolean(drag) && !compatible
-	const fileInput = (shape.props.toolId === 'input.image' || shape.props.toolId === 'input.mesh') && param.id === 'file'
+	const multiFile = (shape.props.toolId === 'input.meshes' || shape.props.toolId === 'input.images') && param.id === 'files'
+	const singleFile = (shape.props.toolId === 'input.image' || shape.props.toolId === 'input.mesh') && param.id === 'file'
+	const fileInput = singleFile || multiFile
+	const storedFiles = shape.props.values[param.id]
+	const fileCount = Array.isArray(storedFiles) ? storedFiles.length : 0
 	const connectedEdge = edgesOf(editor).find(edge => edge.props.to === shape.id && edge.props.toPort === param.id)
+	const color = portColor[param.type]
+	const listPort = isListType(param.type)
 	return (
 		<div data-ateli-port="input" data-node-id={shape.id} data-port-id={param.id} className={cn('flex h-[22px] items-center gap-2 px-2.5 text-[11px] text-foreground', dim && 'opacity-30')}>
 			<button
 				type="button"
 				aria-label={connectedEdge ? `Detach ${param.label} input` : `${param.label} input`}
-				className={cn('pointer-events-auto -ml-[14px] size-2 shrink-0 rounded-full border-0 p-0', connectedEdge ? 'cursor-grab' : 'cursor-default')}
-				style={{ background:portColor[param.type], boxShadow:compatible ? `0 0 0 3px ${portColor[param.type]}66` : undefined }}
+				className={cn('pointer-events-auto relative -ml-[14px] size-2 shrink-0 rounded-full p-0', connectedEdge ? 'cursor-grab' : 'cursor-default')}
+				style={{ background:listPort ? 'transparent' : color, border:listPort ? `1px solid ${color}` : 0, boxShadow:compatible ? `0 0 0 3px ${color}66` : undefined }}
 				disabled={readonly || !connectedEdge}
 				onPointerDown={event => { const source = connectedEdge && sourceForEdge(editor, connectedEdge); if (source) beginDomDrag(editor, source, event, connectedEdge.id) }}
-			/>
+			>
+				{listPort ? <span className="absolute inset-[2px] rounded-full border" style={{ borderColor:color }} /> : null}
+			</button>
 			<span className="w-[72px] shrink-0 truncate">{param.label}</span>
 			{fileInput ? (
-				<label className={cn('ui-well pointer-events-auto flex h-[18px] min-w-0 flex-1 cursor-pointer items-center truncate rounded px-1.5 text-[10px] text-muted-foreground', readonly && 'pointer-events-none opacity-50')} onPointerDown={stop}>
-					{typeof shape.props.values[param.id] === 'string' ? 'Replace file' : 'Choose file'}
-					<input type="file" className="hidden" accept={param.type === 'mesh' ? '.glb,.gltf' : 'image/*'} disabled={readonly} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) onUpload(file, param) }} />
-				</label>
-			) : param.type === 'mesh' || param.type === 'image' ? <span className="flex-1" /> : <InputControl shape={shape} editor={editor} param={param} readonly={readonly} onValues={onValues} />}
+				<div className={cn('ui-well pointer-events-auto flex h-[18px] min-w-0 flex-1 items-center rounded text-[10px] text-muted-foreground', readonly && 'pointer-events-none opacity-50')} onPointerDown={stop}>
+					<label className="flex min-w-0 flex-1 cursor-pointer items-center truncate px-1.5">
+						{multiFile ? (fileCount ? `${fileCount} files` : 'Choose files') : (typeof storedFiles === 'string' ? 'Replace file' : 'Choose file')}
+						<input type="file" className="hidden" accept={baseType(param.type) === 'mesh' ? '.glb,.gltf' : 'image/*'} multiple={multiFile} disabled={readonly} onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; if (files.length) onUpload(files, param) }} />
+					</label>
+					{multiFile && fileCount ? <button type="button" className="h-full shrink-0 border-0 bg-transparent px-1.5 text-xs leading-none text-muted-foreground" title="Clear files" aria-label="Clear files" onPointerDown={stop} onClick={event => { stop(event); onValues({ [param.id]:[] }) }}>×</button> : null}
+				</div>
+			) : isFileType(param.type) ? <span className="flex-1" /> : <InputControl shape={shape} editor={editor} param={param} readonly={readonly} onValues={onValues} />}
 		</div>
 	)
 }
 
 function OutputRow({ shape, editor, port, readonly, active }: { shape: AteliNodeShape; editor: Editor; port: AteliParam; readonly: boolean; active: boolean }) {
+	const color = portColor[port.type]
+	const listPort = isListType(port.type)
 	return (
 		<div data-ateli-port="output" data-node-id={shape.id} data-port-id={port.id} className="flex h-[22px] flex-row-reverse items-center gap-2 px-2.5 text-right text-[11px] text-foreground">
-			<button type="button" aria-label={`Drag ${port.label} output`} className="pointer-events-auto -mr-[14px] size-2 shrink-0 cursor-crosshair rounded-full border-0 p-0" disabled={readonly} style={{ background:portColor[port.type], boxShadow:active ? `0 0 0 3px ${portColor[port.type]}66` : undefined }} onPointerDown={event => beginDomDrag(editor, { shapeId:shape.id, port }, event)} />
+			<button type="button" aria-label={`Drag ${port.label} output`} className="pointer-events-auto relative -mr-[14px] size-2 shrink-0 cursor-crosshair rounded-full p-0" disabled={readonly} style={{ background:listPort ? 'transparent' : color, border:listPort ? `1px solid ${color}` : 0, boxShadow:active ? `0 0 0 3px ${color}66` : undefined }} onPointerDown={event => beginDomDrag(editor, { shapeId:shape.id, port }, event)}>
+				{listPort ? <span className="absolute inset-[2px] rounded-full border" style={{ borderColor:color }} /> : null}
+			</button>
 			<span className="truncate">{port.label}</span>
 		</div>
 	)
@@ -374,30 +447,65 @@ function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
 		const result = storedResult(results[output.id])
 		return result ? [{ output, result }] : []
 	})
-	let visual = resolved.filter(({ result }) => (result.kind === 'mesh' || result.kind === 'image') && result.previewUrl)
+	let visualResults = resolved.filter(({ result }) => result.kind === 'mesh' || result.kind === 'image' || result.kind === 'mesh[]' || result.kind === 'image[]')
 	// A node that only passes a file through (Export) shows what it exported: the connected upstream result.
-	if (!visual.length && resolved.length) {
+	if (!visualResults.length && resolved.length) {
 		for (const input of tool.inputs) {
-			if (input.type !== 'mesh' && input.type !== 'image') continue
+			if (!isFileType(input.type)) continue
 			const edge = edgesOf(editor).find(candidate => candidate.props.to === shape.id && candidate.props.toPort === input.id)
 			const upstream = edge && editor.getShape<AteliNodeShape>(edge.props.from)
 			const result = upstream && storedResult(upstream.props.results[edge.props.fromPort])
-			if (result?.previewUrl) { visual = [{ output:input, result }]; break }
+			if (result && (result.kind === 'mesh' || result.kind === 'image' || result.kind === 'mesh[]' || result.kind === 'image[]')) {
+				visualResults = [{ output:input, result }]
+				break
+			}
 		}
 	}
-	async function show(outputLabel: string, result: StoredResult) {
-		const loaded = await client.result(result.resultId)
-		openLightbox({
-			title:`${tool.title} · ${outputLabel}`,
+	const filmstrip = visualResults.some(({ result }) => 'items' in result)
+	const visual: Array<{
+		key: string
+		label: string
+		kind: 'mesh' | 'image'
+		result?: StoredSingleResult | StoredResultItem
+		previewUrl?: string
+	}> = []
+	for (const { output, result } of visualResults) {
+		if ('items' in result) {
+			const kind = result.kind === 'mesh[]' ? 'mesh' as const : 'image' as const
+			for (const [index, item] of result.items.entries()) {
+				visual.push({
+					key:`${output.id}:${index}`,
+					label:`${output.label} ${index + 1}`,
+					kind,
+					result:item ?? undefined,
+					previewUrl:item?.previewUrl,
+				})
+			}
+			continue
+		}
+		visual.push({
+			key:output.id,
+			label:output.label,
 			kind:result.kind === 'mesh' ? 'mesh' : 'image',
+			result,
+			previewUrl:result.previewUrl,
+		})
+	}
+	async function show(label: string, kind: 'mesh' | 'image', result: StoredSingleResult | StoredResultItem) {
+		const loaded = await client.result(result.resultId)
+		if ('items' in loaded) throw new Error('Expected a single result')
+		openLightbox({
+			title:`${tool.title} · ${label}${'name' in result ? ` · ${result.name}` : ''}`,
+			kind,
 			previewUrl:loaded.previewUrl,
 			downloadUrl:loaded.downloadUrl,
 		})
 	}
 	// Save through the native dialog so the user picks the folder; fall back to a download link where the
 	// File System Access API is unavailable. The Export node remains the way to record provenance.
-	async function save(result: StoredResult) {
+	async function save(result: StoredSingleResult | StoredResultItem) {
 		const loaded = await client.result(result.resultId)
+		if ('items' in loaded) throw new Error('Expected a single result')
 		const response = await fetch(loaded.downloadUrl)
 		if (!response.ok) throw new Error(`download failed (${response.status})`)
 		const blob = await response.blob()
@@ -417,25 +525,49 @@ function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
 	}
 	const clear = () => editor.updateShape<AteliNodeShape>({ id:shape.id, type:'ateli-node', props:{ results:{} } })
 	const report = (error: unknown) => console.error('[ateli] preview action failed', error)
+	if (visual.length && filmstrip) {
+		return (
+			<div data-ateli-filmstrip className="ui-well flex h-full items-center gap-1 overflow-x-auto overflow-y-hidden rounded-lg p-1">
+				{visual.map(item => (
+					<div key={item.key} className="group relative h-full w-[72px] shrink-0 overflow-hidden rounded">
+						{item.result && item.previewUrl ? (
+							<>
+								<button type="button" data-ateli-preview={item.key} className="pointer-events-auto size-full cursor-zoom-in overflow-hidden rounded border-0 bg-transparent p-0" aria-label={`Open ${item.label} preview`} onPointerDown={stop} onClick={event => { stop(event); void show(item.label, item.kind, item.result!).catch(report) }}>
+									<img src={item.previewUrl} alt={`${item.label} preview`} className="size-full object-contain" />
+								</button>
+								<div className="pointer-events-auto absolute top-1 right-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100" onPointerDown={stop}>
+									<button type="button" className="ui-key ui-icon-button size-5" title="Expand" aria-label={`Expand ${item.label} preview`} onClick={event => { stop(event); void show(item.label, item.kind, item.result!).catch(report) }}><Maximize2 size={10} /></button>
+									<button type="button" className="ui-key ui-icon-button size-5" title="Save file…" aria-label={`Save ${item.label}`} onClick={event => { stop(event); void save(item.result!).catch(report) }}><Download size={10} /></button>
+									<button type="button" className="ui-key ui-icon-button size-5" title="Clear results" aria-label="Clear results" onClick={event => { stop(event); clear() }}><Trash2 size={10} /></button>
+								</div>
+							</>
+						) : <div className="grid size-full place-items-center text-[10px] text-muted-foreground">failed</div>}
+					</div>
+				))}
+			</div>
+		)
+	}
 	if (visual.length) {
 		const primary = visual[0]!
 		return (
 			<div className="group ui-well relative flex h-full items-center gap-1 overflow-hidden rounded-lg p-1">
-				{visual.map(({ output, result }) => (
-					<button key={output.id} type="button" data-ateli-preview={output.id} className="pointer-events-auto h-full min-w-0 flex-1 cursor-zoom-in overflow-hidden rounded border-0 bg-transparent p-0" aria-label={`Open ${output.label} preview`} onPointerDown={stop} onClick={event => { stop(event); void show(output.label, result).catch(report) }}>
-						<img src={result.previewUrl} alt={`${output.label} preview`} className="size-full object-contain" />
+				{visual.map(item => item.result && item.previewUrl ? (
+					<button key={item.key} type="button" data-ateli-preview={item.key} className="pointer-events-auto h-full min-w-0 flex-1 cursor-zoom-in overflow-hidden rounded border-0 bg-transparent p-0" aria-label={`Open ${item.label} preview`} onPointerDown={stop} onClick={event => { stop(event); void show(item.label, item.kind, item.result!).catch(report) }}>
+						<img src={item.previewUrl} alt={`${item.label} preview`} className="size-full object-contain" />
 					</button>
-				))}
-				<div className="pointer-events-auto absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100" onPointerDown={stop}>
-					<button type="button" className="ui-key ui-icon-button size-7" title="Expand" aria-label="Expand preview" onClick={event => { stop(event); void show(primary.output.label, primary.result).catch(report) }}><Maximize2 size={13} /></button>
-					<button type="button" className="ui-key ui-icon-button size-7" title="Save file…" aria-label="Save file" onClick={event => { stop(event); void save(primary.result).catch(report) }}><Download size={13} /></button>
+				) : null)}
+				{primary.result ? <div className="pointer-events-auto absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100" onPointerDown={stop}>
+					<button type="button" className="ui-key ui-icon-button size-7" title="Expand" aria-label="Expand preview" onClick={event => { stop(event); void show(primary.label, primary.kind, primary.result!).catch(report) }}><Maximize2 size={13} /></button>
+					<button type="button" className="ui-key ui-icon-button size-7" title="Save file…" aria-label="Save file" onClick={event => { stop(event); void save(primary.result!).catch(report) }}><Download size={13} /></button>
 					<button type="button" className="ui-key ui-icon-button size-7" title="Clear results" aria-label="Clear results" onClick={event => { stop(event); clear() }}><Trash2 size={13} /></button>
-				</div>
+				</div> : null}
 			</div>
 		)
 	}
-	const scalar = resolved.find(({ result }) => result.value !== undefined)
-	if (scalar) return <div className="ui-well grid h-full place-items-center overflow-auto rounded-lg px-3 text-center text-xs text-foreground">{String(scalar.result.value)}</div>
+	const scalar = resolved.find(({ result }) => !('items' in result) && result.value !== undefined)
+	if (scalar && !('items' in scalar.result)) return <div className="ui-well grid h-full place-items-center overflow-auto rounded-lg px-3 text-center text-xs text-foreground">{String(scalar.result.value)}</div>
+	const list = resolved.find(({ result }) => 'items' in result)
+	if (list && 'items' in list.result) return <div className="ui-well grid h-full place-items-center rounded-lg text-xs text-foreground">{list.result.items.length} items</div>
 	return <div className="ui-well grid h-full place-items-center rounded-lg text-muted-foreground"><div className="grid place-items-center gap-1"><Box size={28} strokeWidth={1.25} aria-hidden /><span className="ui-label">Preview</span></div></div>
 }
 
@@ -463,7 +595,7 @@ function AteliNodeView({ shape, editor }: { shape: AteliNodeShape; editor: Edito
 	useValue(catalog)
 	const { tool, regularInputs, advancedInputs, advancedOpen } = rowsFor(shape)
 	const readonly = useValue('ateli readonly', () => editor.getIsReadonly() || editor.isShapeOrAncestorLocked(shape.id), [editor, shape.id])
-	useValue('ateli connections', () => edgesOf(editor).map(edge => `${edge.id}:${edge.props.from}:${edge.props.to}`).join('|'), [editor])
+	const cardinality = useValue('ateli cardinality', () => fanOutCardinality(editor, shape), [editor, shape.id, shape.props.toolId])
 	const drag = useDrag(editor)
 	const [uploading, setUploading] = useState(false)
 	const update = (patch: Partial<AteliNodeProps>) => editor.updateShape<AteliNodeShape>({ id:shape.id, type:'ateli-node', props:patch })
@@ -473,16 +605,23 @@ function AteliNodeView({ shape, editor }: { shape: AteliNodeShape; editor: Edito
 	// Run state is session-only (see ateli-client): one run per editor, and nothing persisted as "running".
 	const live = useValue(activeRun)
 	const busy = live !== null
-	const running = live?.nodes[shape.id] === 'running' || live?.nodes[shape.id] === 'queued'
+	const liveNode = live?.nodes[shape.id]
+	const running = liveNode?.status === 'running' || liveNode?.status === 'queued'
+	const batch = liveNode?.items
+	const badge = batch ? `${batch.done}/${batch.total}` : cardinality > 1 ? `×${cardinality}` : undefined
 	useEffect(() => {
 		const expected = nodeHeight(shape, advancedOpen)
 		if (shape.props.h !== expected) update({ h:expected })
 	}, [advancedOpen, error, shape.props.collapsed, shape.props.h])
-	async function upload(file: File, param: AteliParam) {
+	async function upload(files: File[], param: AteliParam) {
 		setUploading(true)
 		try {
-			const source = await client.uploadSource(file)
-			setValues({ [param.id]:source.sourceId })
+			const sourceIds: string[] = []
+			for (const file of files) {
+				const source = await client.uploadSource(file)
+				sourceIds.push(source.sourceId)
+			}
+			setValues({ [param.id]:isListType(param.type) ? sourceIds : sourceIds[0]! })
 		} catch (uploadError) {
 			update({ results:{ ...shape.props.results, error:uploadError instanceof Error ? uploadError.message : String(uploadError) } })
 		} finally {
@@ -493,12 +632,13 @@ function AteliNodeView({ shape, editor }: { shape: AteliNodeShape; editor: Edito
 		<HTMLContainer className="ui-panel overflow-visible font-sans antialiased" style={{ width:shape.props.w, height:shape.props.h }}>
 			<div className="ui-rule-bottom flex items-center gap-1 px-3 text-xs font-medium text-foreground" style={{ height:headerHeight }}>
 				<span className="min-w-0 flex-1 truncate">{tool.title}</span>
+				{badge ? <span data-ateli-cardinality={cardinality} data-ateli-progress={batch ? `${batch.done}/${batch.total}` : undefined} className="ui-label shrink-0">{badge}</span> : null}
 				{uploading ? <span className="ui-label">Uploading</span> : null}
 				<NodeMenu shape={shape} editor={editor} update={update} busy={busy} />
 				<button type="button" className="ui-icon-button pointer-events-auto size-6" title="Run node" aria-label="Run node" disabled={readonly || busy} onPointerDown={stop} onClick={event => { stop(event); run({ kind:'node', nodeId:shape.id }) }}><Play size={13} fill="currentColor" /></button>
 				<button type="button" className="ui-icon-button pointer-events-auto size-6" title="Run downstream" aria-label="Run downstream" disabled={readonly || busy} onPointerDown={stop} onClick={event => { stop(event); run({ kind:'downstream', nodeId:shape.id }) }}><FastForward size={14} fill="currentColor" /></button>
 			</div>
-			{running ? <div className="absolute inset-x-0 h-0.5 overflow-hidden" style={{ top:headerHeight - 2 }}><div className="h-full w-2/5 animate-[shimmer_1.4s_ease-in-out_infinite] bg-blue-400" /></div> : null}
+			{running ? <div className="absolute inset-x-0 h-0.5 overflow-hidden" style={{ top:headerHeight - 2 }}><div className={cn('h-full bg-blue-400', !batch && 'w-2/5 animate-[shimmer_1.4s_ease-in-out_infinite]')} style={batch ? { width:`${batch.total ? Math.min(100, batch.done / batch.total * 100) : 0}%` } : undefined} /></div> : null}
 			{shape.props.collapsed ? null : (
 				<>
 					<div style={{ paddingTop:padding }}>
@@ -627,7 +767,7 @@ function AteliEdgeView({ shape, editor }: { shape: AteliEdgeShape; editor: Edito
 
 export class AteliEdgeShapeUtil extends ShapeUtil<AteliEdgeShape> {
 	static override type = 'ateli-edge' as const
-	static override props: RecordProps<AteliEdgeShape> = { from:shapeIdValidator, fromPort:T.string, to:shapeIdValidator, toPort:T.string, valueType:T.literalEnum('mesh', 'image', 'text', 'number', 'boolean', 'enum') }
+	static override props: RecordProps<AteliEdgeShape> = { from:shapeIdValidator, fromPort:T.string, to:shapeIdValidator, toPort:T.string, valueType:T.literalEnum('mesh', 'image', 'text', 'number', 'boolean', 'enum', 'mesh[]', 'image[]', 'text[]', 'number[]', 'boolean[]') }
 	getDefaultProps(): AteliEdgeProps { return { from:'' as TLShapeId, fromPort:'', to:'' as TLShapeId, toPort:'', valueType:'mesh' } }
 	override canResize() { return false }
 	override hideRotateHandle() { return true }

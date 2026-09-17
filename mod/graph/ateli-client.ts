@@ -10,10 +10,16 @@ export interface AteliGraph {
 }
 export type AteliRunScope = { kind: 'graph' } | { kind: 'node'; nodeId: string } | { kind: 'downstream'; nodeId: string }
 export type AteliRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export interface AteliBatchItems {
+	total: number
+	done: number
+	failed: number
+}
 export interface AteliNodeRunState {
 	status: 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'cached'
 	error?: string
 	outputs: Record<string, string>
+	items?: AteliBatchItems
 }
 export interface AteliStatusResponse {
 	runId: string
@@ -21,20 +27,46 @@ export interface AteliStatusResponse {
 	progress: number
 	nodes: Record<string, AteliNodeRunState>
 }
-export interface AteliResult {
+export interface AteliResultItem {
 	resultId: string
-	kind: Exclude<AteliValueType, 'enum'>
+	name: string
+	previewUrl: string
+	downloadUrl: string
+	value?: JsonValue
+}
+type AteliResultKind = Exclude<AteliValueType, 'enum'>
+export type AteliResult = {
+	resultId: string
+	kind: Exclude<AteliResultKind, `${string}[]`>
 	name: string
 	size: number
 	sha256: string
 	value?: JsonValue
 	downloadUrl: string
 	previewUrl: string
+} | {
+	resultId: string
+	kind: Extract<AteliResultKind, `${string}[]`>
+	items: Array<AteliResultItem | null>
 }
 
 function absoluteUrl(url: string) {
 	if (!url || /^https?:\/\//.test(url)) return url
 	return `${ATELI_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`
+}
+
+function absoluteResult(result: AteliResult): AteliResult {
+	if ('items' in result) {
+		return {
+			...result,
+			items:result.items.map(item => item && {
+				...item,
+				downloadUrl:absoluteUrl(item.downloadUrl),
+				previewUrl:absoluteUrl(item.previewUrl),
+			}),
+		}
+	}
+	return { ...result, downloadUrl:absoluteUrl(result.downloadUrl), previewUrl:absoluteUrl(result.previewUrl) }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -64,8 +96,7 @@ export const client = {
 		return request<AteliStatusResponse>(`/runs/${encodeURIComponent(runId)}`)
 	},
 	async result(id: string) {
-		const result = await request<AteliResult>(`/results/${encodeURIComponent(id)}`)
-		return { ...result, downloadUrl:absoluteUrl(result.downloadUrl), previewUrl:absoluteUrl(result.previewUrl) }
+		return absoluteResult(await request<AteliResult>(`/results/${encodeURIComponent(id)}`))
 	},
 	clearCache(nodeId: string) {
 		return request<unknown>(`/cache/${encodeURIComponent(nodeId)}`, { method:'DELETE' })
@@ -108,18 +139,46 @@ const terminalStatuses = new Set<AteliRunStatus>(['completed', 'failed', 'cancel
 
 // Session-only run state. It is never written into shape props: a document reopened after the bridge died
 // must not show nodes as running, and one editor drives at most one run at a time.
-export type AteliNodeLiveState = 'queued' | 'running'
+export type AteliNodeLiveState = {
+	status: 'queued' | 'running'
+	items?: AteliBatchItems
+}
 export interface AteliActiveRun { runId: string; nodes: Record<string, AteliNodeLiveState> }
 export const activeRun = atom<AteliActiveRun | null>('ateli active run', null)
 
-function resultProps(results: AteliResult[]) {
-	return Object.fromEntries(results.map(result => [result.resultId, { resultId:result.resultId, previewUrl:result.previewUrl, kind:result.kind, ...(result.value === undefined ? {} : { value:result.value }) }]))
+function resultProps(result: AteliResult): Record<string, JsonValue> {
+	if ('items' in result) {
+		return {
+			resultId:result.resultId,
+			kind:result.kind,
+			items:result.items.map(item => item && {
+				resultId:item.resultId,
+				name:item.name,
+				previewUrl:item.previewUrl,
+				downloadUrl:item.downloadUrl,
+				...(item.value === undefined ? {} : { value:item.value }),
+			}),
+		}
+	}
+	return {
+		resultId:result.resultId,
+		previewUrl:result.previewUrl,
+		kind:result.kind,
+		...(result.value === undefined ? {} : { value:result.value }),
+	}
 }
 
-function setNodeError(editor: Editor, nodeId: TLShapeId, error: unknown) {
+function nodeErrorMessage(error: unknown, items?: AteliBatchItems) {
+	const message = error instanceof Error ? error.message : String(error)
+	if (!items) return message
+	const progress = `${items.done}/${items.total}${items.failed ? ` · ${items.failed} failed` : ''}`
+	return message ? `${progress} · ${message}` : progress
+}
+
+function setNodeError(editor: Editor, nodeId: TLShapeId, error: unknown, items?: AteliBatchItems) {
 	const shape = editor.getShape(nodeId)
 	if (shape?.type !== 'ateli-node') return
-	editor.updateShape({ id:nodeId, type:'ateli-node', props:{ results:{ error:error instanceof Error ? error.message : String(error) } } })
+	editor.updateShape({ id:nodeId, type:'ateli-node', props:{ results:{ error:nodeErrorMessage(error, items) } } })
 }
 
 export async function cancelAteliRun() {
@@ -156,8 +215,10 @@ export async function runAteliGraph(editor: Editor, scope: AteliRunScope, cache?
 			for (const [nodeId, node] of Object.entries(status.nodes)) {
 				const shape = editor.getShape(nodeId as TLShapeId)
 				if (!shape || shape.type !== 'ateli-node') continue
-				if (node.status === 'queued' || node.status === 'running') { live[nodeId] = node.status; continue }
-				if (node.status === 'failed') { setNodeError(editor, shape.id, node.error ?? 'Node failed'); continue }
+				if (node.status === 'queued' || node.status === 'running') {
+					live[nodeId] = { status:node.status, ...(node.items ? { items:node.items } : {}) }
+					continue
+				}
 				if (node.status === 'skipped') continue
 				const outputEntries = await Promise.all(Object.entries(node.outputs).map(async ([portId, resultId]) => {
 					let result = loadedResults.get(resultId)
@@ -167,8 +228,8 @@ export async function runAteliGraph(editor: Editor, scope: AteliRunScope, cache?
 					}
 					return [portId, result] as const
 				}))
-				const byResultId = resultProps(outputEntries.map(([, result]) => result))
-				const results = Object.fromEntries(outputEntries.map(([portId, result]) => [portId, byResultId[result.resultId]]))
+				const results: Record<string, JsonValue> = Object.fromEntries(outputEntries.map(([portId, result]) => [portId, resultProps(result)]))
+				if (node.status === 'failed') results.error = nodeErrorMessage(node.error ?? 'Node failed', node.items)
 				if (JSON.stringify(shape.props.results) !== JSON.stringify(results)) editor.updateShape({ id:shape.id, type:'ateli-node', props:{ results } })
 			}
 			if (terminalStatuses.has(status.status)) return status
