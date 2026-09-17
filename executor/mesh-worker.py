@@ -147,7 +147,7 @@ class Worker:
         engine_requested = str(self.scalar("engine", "quadriflow"))
         topology = str(self.scalar("topology", "triangle"))
         target = int(self.scalar("targetFaces", 80000))
-        voxel_size = float(self.scalar("voxelSize", 0.01))
+        voxel_size = float(self.scalar("voxelSize", 0.0))
         preserve_uvs = bool(self.scalar("preserveUVs", False))
         if engine_requested not in {"quadriflow", "voxel", "decimate"}:
             raise RuntimeError("invalid optimize engine: %s" % engine_requested)
@@ -155,8 +155,8 @@ class Worker:
             raise RuntimeError("invalid optimize topology: %s" % topology)
         if target < 4 or target > 10000000:
             raise RuntimeError("targetFaces must be between 4 and 10000000")
-        if engine_requested in {"quadriflow", "voxel"} and (not math.isfinite(voxel_size) or voxel_size < 0.001 or voxel_size > 1.0):
-            raise RuntimeError("voxelSize must be between 0.001 and 1")
+        if engine_requested in {"quadriflow", "voxel"} and (not math.isfinite(voxel_size) or voxel_size < 0.0 or voxel_size > 1.0):
+            raise RuntimeError("voxelSize must be 0 (auto) or between 0.001 and 1")
 
         input_triangles = triangle_count(objects)
         engine_used = engine_requested
@@ -494,8 +494,22 @@ def decimate_to_target(objects, target, logger):
     return objects
 
 
+def voxel_size_for_target(obj, target):
+    # A voxel surface yields roughly 2.5 triangles per voxel-area of surface; aim a little above the target so the
+    # decimate pass only trims, instead of smoothing a far denser mesh into a blob.
+    scale = obj.matrix_world.to_scale()
+    area = sum(polygon.area for polygon in obj.data.polygons) * abs(scale.x * scale.y)
+    if area <= 0.0:
+        return 0.01
+    size = math.sqrt(2.5 * area / (target * 1.5))
+    return min(1.0, max(0.001, size))
+
+
 def voxel_remesh_to_target(obj, voxel_size, target, logger):
     select_only(obj)
+    if voxel_size <= 0.0:
+        voxel_size = voxel_size_for_target(obj, target)
+        logger("voxel size auto: %.4f for target %d" % (voxel_size, target))
     obj.data.remesh_voxel_size = voxel_size
     obj.data.remesh_voxel_adaptivity = 0.0
     result = bpy.ops.object.voxel_remesh()

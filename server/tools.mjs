@@ -240,7 +240,7 @@ export const tools = [
       param('engine', 'Engine', 'enum', { options: ['quadriflow', 'voxel', 'decimate'], default: 'quadriflow' }),
       param('targetFaces', 'Target Faces', 'number', { min: 4, max: 10000000, default: 80000 }),
       param('topology', 'Topology', 'enum', { options: ['triangle', 'quad'], default: 'triangle', advanced: true }),
-      param('voxelSize', 'Voxel Size', 'number', { min: 0.001, max: 1, default: 0.01, advanced: true }),
+      param('voxelSize', 'Voxel Size (0 = auto)', 'number', { min: 0, max: 1, default: 0, step: 0.001, advanced: true }),
       param('preserveUVs', 'Preserve UVs', 'boolean', { default: false, advanced: true }),
     ],
     outputs: [param('mesh', 'Mesh', 'mesh')],
