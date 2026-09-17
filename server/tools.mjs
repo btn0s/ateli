@@ -261,6 +261,7 @@ export const tools = [
     id: 'character.rig', version: 1, title: 'Rig Character', category: 'Mesh', runtime: 'uthana',
     inputs: [
       param('mesh', 'Mesh', 'mesh'),
+      param('skeleton', 'Skeleton', 'enum', { options: ['uthana', 'als'], default: 'uthana' }),
       param('includeFingers', 'Include Fingers', 'boolean', { default: false }),
       param('frontFacing', 'Front Facing', 'boolean', { default: true }),
     ],

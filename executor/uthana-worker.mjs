@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { access, appendFile, copyFile, mkdir, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, appendFile, mkdir, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
+import { Matrix4 } from 'three'
 
 const DEFAULT_BASE_URL = 'https://uthana.com'
 const DEFAULT_POLL_MS = 1_000
@@ -12,6 +14,19 @@ const DEFAULT_POLL_MAX_MS = 5_000
 const BLENDER = process.env.ATELI_BLENDER_PATH || '/opt/homebrew/bin/blender'
 const MESH_WORKER = path.resolve('executor/mesh-worker.py')
 const TEST_PREVIEW = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8dKAAAAAElFTkSuQmCC', 'base64')
+
+const SKELETON_OPTIONS = new Set(['uthana', 'als'])
+const REST_POSE_PROMPT = 'standing still'
+const ALS_TWIST_JOINTS = [
+  { name: 'lowerarm_twist_01_l', parent: 'lowerarm_l', child: 'hand_l', fraction: 0.5189963111209241, rotation: [0, 0, 0, 1] },
+  { name: 'upperarm_twist_01_l', parent: 'upperarm_l', child: 'lowerarm_l', fraction: 0.016479933563428455, rotation: [0, 0, 0, 1] },
+  { name: 'lowerarm_twist_01_r', parent: 'lowerarm_r', child: 'hand_r', fraction: 0.5189943608669755, rotation: [-0.11762712192944452, 0, 0, 0.9930578332537313] },
+  { name: 'upperarm_twist_01_r', parent: 'upperarm_r', child: 'lowerarm_r', fraction: 0.01647986746807476, rotation: [-0.17323487496728826, 0, 0, 0.9848805400123753] },
+  { name: 'calf_twist_01_l', parent: 'calf_l', child: 'foot_l', fraction: 0.5094145313954959, rotation: [0.0028089456755909735, -0.007612723333847363, 0.001933306983200052, 0.9999652086906538] },
+  { name: 'thigh_twist_01_l', parent: 'thigh_l', child: 'calf_l', fraction: 0.5189847504830478, rotation: [-0.0474437925547567, -0.0004911153057425742, -0.000021583159252370263, 0.9988737882675393] },
+  { name: 'calf_twist_01_r', parent: 'calf_r', child: 'foot_r', fraction: 0.509416117991404, rotation: [0.002807280260666933, -0.007612532893340088, 0.0019337231729064234, 0.9999652140125558] },
+  { name: 'thigh_twist_01_r', parent: 'thigh_r', child: 'calf_r', fraction: 0.5189822008467952, rotation: [-0.047445229054363575, -0.000491178590210262, -0.00002190678356337333, 0.9988737199985113] },
+]
 
 let logPath
 
@@ -123,6 +138,14 @@ function motionIdFrom(result) {
   return undefined
 }
 
+async function createTextMotion(graphqlUrl, apiKey, prompt, characterId) {
+  const query = 'mutation CreateTextMotion($prompt: String!, $characterId: String!) { create_text_to_motion(prompt: $prompt, character_id: $characterId) { motion { id name } } }'
+  const data = await fetchGraphql(graphqlUrl, apiKey, query, { prompt, characterId }, 'create text-to-motion')
+  const motionId = data.create_text_to_motion?.motion?.id
+  if (typeof motionId !== 'string' || !motionId) throw new Error('create text-to-motion returned no motion id')
+  return motionId
+}
+
 async function pollVideoJob(graphqlUrl, apiKey, jobId) {
   const query = 'query PollJob($jobId: String!) { job(job_id: $jobId) { id status result } }'
   let delay = positiveMilliseconds(process.env.UTHANA_POLL_BASE_MS, DEFAULT_POLL_MS)
@@ -229,6 +252,134 @@ function faceNegativeZ(document) {
   }
 }
 
+function nodeByName(document, name) {
+  const matches = document.getRoot().listNodes().filter(node => node.getName() === name)
+  if (matches.length !== 1) throw new Error(`ALS conformance requires exactly one '${name}' node, found ${matches.length}`)
+  return matches[0]
+}
+
+function sceneContaining(document, target) {
+  for (const scene of document.getRoot().listScenes()) {
+    let found = false
+    scene.traverse(node => { if (node === target) found = true })
+    if (found) return scene
+  }
+  throw new Error(`node '${target.getName()}' is not attached to a scene`)
+}
+
+function inverseBindMatrix(joint, meshNode) {
+  const matrix = new Matrix4().fromArray(joint.getWorldMatrix()).invert()
+  if (meshNode) matrix.multiply(new Matrix4().fromArray(meshNode.getWorldMatrix()))
+  return matrix.elements
+}
+
+function appendSkinJoints(document, skin, joints, skeletonRoot) {
+  const previousJoints = skin.listJoints()
+  const inverseBindMatrices = skin.getInverseBindMatrices()
+  const meshNode = document.getRoot().listNodes().find(node => node.getSkin() === skin)
+  let values
+  if (inverseBindMatrices) {
+    if (inverseBindMatrices.getType() !== 'MAT4' || inverseBindMatrices.getCount() !== previousJoints.length) {
+      throw new Error(`skin '${skin.getName()}' has invalid inverse bind matrices`)
+    }
+    values = new Float32Array((previousJoints.length + joints.length) * 16)
+    values.set(inverseBindMatrices.getArray())
+  } else {
+    values = new Float32Array((previousJoints.length + joints.length) * 16)
+    previousJoints.forEach((joint, index) => values.set(inverseBindMatrix(joint, meshNode), index * 16))
+  }
+  joints.forEach((joint, offset) => {
+    skin.addJoint(joint)
+    values.set(inverseBindMatrix(joint, meshNode), (previousJoints.length + offset) * 16)
+  })
+  if (inverseBindMatrices) {
+    inverseBindMatrices.setArray(values)
+  } else {
+    const buffer = document.getRoot().listBuffers()[0] ?? document.createBuffer()
+    skin.setInverseBindMatrices(document.createAccessor('Inverse bind matrices').setType('MAT4').setArray(values).setBuffer(buffer))
+  }
+  skin.setSkeleton(skeletonRoot)
+}
+
+function skinJointNames(document) {
+  return [...new Set(document.getRoot().listSkins().flatMap(skin => skin.listJoints().map(joint => joint.getName())))]
+}
+
+export function conformAlsSkeleton(document) {
+  const skins = document.getRoot().listSkins()
+  if (!skins.length) throw new Error('ALS conformance requires a skin')
+  const addedNames = ['root', ...ALS_TWIST_JOINTS.map(spec => spec.name), 'ik_foot_root', 'ik_foot_l', 'ik_foot_r', 'ik_hand_root', 'ik_hand_gun', 'ik_hand_l', 'ik_hand_r']
+  const existingNames = new Set(document.getRoot().listNodes().map(node => node.getName()))
+  const collision = addedNames.find(name => existingNames.has(name))
+  if (collision) throw new Error(`ALS conformance cannot inject existing node '${collision}'`)
+
+  const pelvis = nodeByName(document, 'pelvis')
+  const scene = sceneContaining(document, pelvis)
+  const pelvisWorldMatrix = pelvis.getWorldMatrix().slice()
+  const skeletonRoot = document.createNode('root')
+  scene.addChild(skeletonRoot)
+  skeletonRoot.addChild(pelvis)
+  pelvis.setMatrix(pelvisWorldMatrix)
+
+  const addedJoints = [skeletonRoot]
+  for (const spec of ALS_TWIST_JOINTS) {
+    const parent = nodeByName(document, spec.parent)
+    const child = nodeByName(document, spec.child)
+    const twist = document.createNode(spec.name)
+      .setTranslation(child.getTranslation().map(value => value * spec.fraction))
+      .setRotation(spec.rotation)
+    parent.addChild(twist)
+    addedJoints.push(twist)
+  }
+
+  const ikFootRoot = document.createNode('ik_foot_root')
+  const ikHandRoot = document.createNode('ik_hand_root')
+  skeletonRoot.addChild(ikFootRoot).addChild(ikHandRoot)
+  const copyWorldTransform = (name, parent, sourceName) => {
+    const sourceMatrix = new Matrix4().fromArray(nodeByName(document, sourceName).getWorldMatrix())
+    const parentInverse = new Matrix4().fromArray(parent.getWorldMatrix()).invert()
+    const joint = document.createNode(name)
+    parent.addChild(joint)
+    joint.setMatrix(parentInverse.multiply(sourceMatrix).elements)
+    addedJoints.push(joint)
+    return joint
+  }
+  copyWorldTransform('ik_foot_l', ikFootRoot, 'foot_l')
+  copyWorldTransform('ik_foot_r', ikFootRoot, 'foot_r')
+  const ikHandGun = copyWorldTransform('ik_hand_gun', ikHandRoot, 'hand_r')
+  copyWorldTransform('ik_hand_l', ikHandGun, 'hand_l')
+  copyWorldTransform('ik_hand_r', ikHandGun, 'hand_r')
+  addedJoints.push(ikFootRoot, ikHandRoot)
+
+  for (const skin of skins) appendSkinJoints(document, skin, addedJoints, skeletonRoot)
+  return skinJointNames(document)
+}
+
+export function prepareRiggedRestPose(document, skeleton) {
+  const animations = document.getRoot().listAnimations()
+  if (!animations.length) throw new Error('downloaded rest-pose motion has no animation')
+  const animationAccessors = new Set(animations.flatMap(animation => animation.listSamplers().flatMap(sampler => [sampler.getInput(), sampler.getOutput()])))
+  for (const accessor of animationAccessors) {
+    if (accessor && accessor.listParents().every(parent => ['Root', 'AnimationSampler'].includes(parent.propertyType))) accessor.dispose()
+  }
+  for (const animation of animations) {
+    for (const channel of animation.listChannels()) channel.dispose()
+    for (const sampler of animation.listSamplers()) sampler.dispose()
+    animation.dispose()
+  }
+  if (skeleton === 'als') conformAlsSkeleton(document)
+  faceNegativeZ(document)
+  return skinJointNames(document)
+}
+
+async function normalizeRiggedRestPose(filePath, skeleton) {
+  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)
+  const document = await io.read(filePath)
+  const joints = prepareRiggedRestPose(document, skeleton)
+  await writeFile(filePath, await io.writeBinary(document))
+  return joints
+}
+
 function applyMatrix(m, p) {
   return [
     m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
@@ -297,6 +448,12 @@ function numberInput(inputs, name, fallback) {
   return value
 }
 
+function enumInput(inputs, name, fallback, options) {
+  const value = inputs[name] ?? fallback
+  if (!options.has(value)) throw new Error(`input '${name}' must be one of ${[...options].join(', ')}`)
+  return value
+}
+
 async function main() {
   const requestPath = process.argv[2]
   if (!requestPath) throw new Error('usage: uthana-worker.mjs <request.json>')
@@ -319,23 +476,28 @@ async function main() {
     if (typeof meshPath !== 'string' || !path.isAbsolute(meshPath)) throw new Error("input 'mesh' requires an absolute file path")
     await access(meshPath)
     if (path.extname(meshPath).toLowerCase() !== '.glb') throw new Error('character.rig requires a GLB input')
-    const includeFingers = booleanInput(inputs, 'includeFingers', false)
+    const skeleton = enumInput(inputs, 'skeleton', 'uthana', SKELETON_OPTIONS)
+    const includeFingers = skeleton === 'als' ? true : booleanInput(inputs, 'includeFingers', false)
     const frontFacing = booleanInput(inputs, 'frontFacing', true)
-    const query = 'mutation CreateCharacter($file: Upload!, $name: String!, $includeFingers: Boolean!, $frontFacing: Boolean!) { create_character(file: $file, name: $name, auto_rig: true, include_fingers: $includeFingers, auto_rig_front_facing: $frontFacing) { character { id name } } }'
-    const data = await uploadGraphql(graphqlUrl, apiKey, query, {
-      file: null, name: path.parse(meshPath).name, includeFingers, frontFacing,
-    }, 'variables.file', meshPath, 'create character')
+    const query = skeleton === 'als'
+      ? 'mutation CreateCharacter($file: Upload!, $name: String!, $includeFingers: Boolean!, $frontFacing: Boolean!, $rerigTarget: String!) { create_character(file: $file, name: $name, auto_rig: true, include_fingers: $includeFingers, auto_rig_front_facing: $frontFacing, rerig_target: $rerigTarget) { character { id name } } }'
+      : 'mutation CreateCharacter($file: Upload!, $name: String!, $includeFingers: Boolean!, $frontFacing: Boolean!) { create_character(file: $file, name: $name, auto_rig: true, include_fingers: $includeFingers, auto_rig_front_facing: $frontFacing) { character { id name } } }'
+    const variables = { file: null, name: path.parse(meshPath).name, includeFingers, frontFacing }
+    if (skeleton === 'als') variables.rerigTarget = 'ue5'
+    const data = await uploadGraphql(graphqlUrl, apiKey, query, variables, 'variables.file', meshPath, 'create character')
     const characterId = data.create_character?.character?.id
     if (typeof characterId !== 'string' || !characterId) throw new Error('create character returned no character id')
+    const motionId = await createTextMotion(graphqlUrl, apiKey, REST_POSE_PROMPT, characterId)
     const outputMesh = path.join(outputDir, 'mesh.glb')
-    await copyFile(meshPath, outputMesh)
+    await downloadMotion(baseUrl, apiKey, characterId, motionId, 30, outputMesh)
+    const joints = await normalizeRiggedRestPose(outputMesh, skeleton)
     await renderPreview(outputDir, outputMesh)
     await writeFile(path.join(outputDir, 'character.json'), `${JSON.stringify(characterId)}\n`)
-    await writeFile(path.join(outputDir, 'uthana.json'), `${JSON.stringify({ characterId, motionId: null, prompt: null }, null, 2)}\n`)
+    await writeFile(path.join(outputDir, 'uthana.json'), `${JSON.stringify({ characterId, motionId, prompt: REST_POSE_PROMPT, skeleton, joints }, null, 2)}\n`)
     await writeFile(path.join(outputDir, 'outputs.json'), `${JSON.stringify({
       character: 'character.json', mesh: 'mesh.glb', preview: { mesh: 'mesh.preview.png' }, meta: { mesh: 'uthana.json' }, log: 'worker.log',
     }, null, 2)}\n`)
-    await log(`character=${characterId}`)
+    await log(`character=${characterId} motion=${motionId} skeleton=${skeleton}`)
     return
   }
 
@@ -347,9 +509,7 @@ async function main() {
   let prompt = null
   if (job.toolId === 'motion.fromText') {
     prompt = textInput(inputs, 'prompt')
-    const query = 'mutation CreateTextMotion($prompt: String!, $characterId: String!) { create_text_to_motion(prompt: $prompt, character_id: $characterId) { motion { id name } } }'
-    const data = await fetchGraphql(graphqlUrl, apiKey, query, { prompt, characterId }, 'create text-to-motion')
-    motionId = data.create_text_to_motion?.motion?.id
+    motionId = await createTextMotion(graphqlUrl, apiKey, prompt, characterId)
   } else {
     const videoPath = inputs.video?.path
     if (typeof videoPath !== 'string' || !path.isAbsolute(videoPath)) throw new Error("input 'video' requires an absolute file path")
@@ -372,11 +532,13 @@ async function main() {
   await log(`character=${characterId} motion=${motionId}`)
 }
 
-try {
-  await main()
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error)
-  if (logPath) await appendFile(logPath, `failed: ${message}\n`).catch(() => {})
-  console.error(message)
-  process.exitCode = 1
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    await main()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (logPath) await appendFile(logPath, `failed: ${message}\n`).catch(() => {})
+    console.error(message)
+    process.exitCode = 1
+  }
 }

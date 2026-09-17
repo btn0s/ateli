@@ -22,7 +22,7 @@ Builds on [atlas-nodes.md](./atlas-nodes.md) and [batch.md](./batch.md). Two age
 
 | id | title | category | inputs | outputs |
 |---|---|---|---|---|
-| `character.rig` | Rig Character | Mesh | `mesh: mesh` (uncompressed GLB < 30 MB), `includeFingers: boolean=false`, `frontFacing: boolean=true` | `character: text` (Uthana character id), `mesh: mesh` (rest pose download: the input GLB re-exported through Uthana is not available without a motion, so output the *input* file unchanged and put the id in `meta`) |
+| `character.rig` | Rig Character | Mesh | `mesh: mesh` (uncompressed GLB < 30 MB), `skeleton: enum ['uthana','als']='uthana'`, `includeFingers: boolean=false`, `frontFacing: boolean=true` | `character: text` (Uthana character id), `mesh: mesh` (skinned rest-pose GLB downloaded through a generated standing-still motion; `als` uses the UE5 rerig and conforms it to the SK_Als joint set) |
 | `motion.fromText` | Motion from Text | Mesh | `character: text`, `prompt: text (multiline)`, `clipName: text default 'clip'`, `inPlace: boolean=true`, `fps: number=30` | `mesh: mesh` (skinned GLB with one animation named `clipName`) |
 | `motion.fromVideo` | Motion from Video | Mesh | `character: text`, `video: video`, `clipName`, `inPlace`, `fps` | `mesh: mesh` |
 
@@ -68,3 +68,4 @@ Category `Video` is new. Read each model's `/api` page on fal for exact input na
 
 - Uthana characters walk toward +Z; the worker rotates every motion output so the character faces -Z like every other Ateli mesh.
 - The worker measures the clip's authored travel speed (root XZ displacement over the middle 60% of the track, world space) before flattening it and stores it as the animation's `extras.rootSpeed` (m/s) and in `uthana.json`. Runtimes scale walk playback by `groundSpeed / rootSpeed`; a `tired` prompt produced 0.45 m/s, `normal brisk pace` 1.63 m/s.
+- Deviation from the original `character.rig` contract above: Rig no longer passes the input GLB through. Both skeleton choices download a skinned standing-still motion and remove its animation so Rig's `mesh` is a merge-ready rest pose; the metadata records the generated motion, skeleton choice, and joint list.

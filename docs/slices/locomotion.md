@@ -18,6 +18,11 @@ Decision (2026-09-17): locomotion comes from ALS Refactored's authored clips and
 - `uthana` keeps today's behaviour, but its `mesh` output also becomes the skinned rest pose (same motion-download-and-strip method), so `mesh.mergeAnimations` can take Rig's mesh as base. Record this deviation in `docs/slices/animation.md`.
 - Tests: recorded fixture for the rerig request; a conformance test on the live sample `/tmp/drifter-ue5-walk.glb` run through the conform step asserting all 68 `SK_Als` names are present and skinned vertex data is unchanged.
 
+### Ateli implementation deviations
+
+- Twist placement follows the authored SK_Als rest skeleton rather than treating every twist as an exact midpoint. The thigh and lower-arm twists are at about 51.9% of the limb, calf twists at about 50.9%, and upper-arm twists at about 1.65%; parentage and local rest rotations also match SK_Als. This is required for the injected hierarchy to reproduce the reference rest transforms.
+- The authored SK_Als hierarchy parents `ik_hand_l` and `ik_hand_r` under `ik_hand_gun`, not directly under `ik_hand_root` as the shorthand above says. Conformance preserves that reference parentage while keeping each IK node's world-space rest transform equal to its source hand.
+
 ## B. `als-locomotion` package (`/Users/btnorris/dev/als-locomotion`, new repo; als-web READ-ONLY)
 
 Extract from `/Users/btnorris/dev/als-web/src/als` and the `rapierAls*` / `alsFeetPoseBridge` / `alsCameraBridge` / `alsAudioBridge` engine modules that the `animgraph` extraction left behind, into a framework-free package depending on `animgraph` (link `file:../animgraph`), `three` (peer) and `@dimforge/rapier3d-compat`. No React, zustand, leva, R3F. Keep the pure modules and tests intact (same rule as the animgraph extraction: never simplify the math; comments carry rationale, keep them; no no-comments lint). React-bound bridges are re-expressed as plain functions with an explicit `update(dt)`; leva controls become a settings object; zustand stores become plain state passed in.
