@@ -56,9 +56,12 @@ const terminals = new Set()
 const jobs = new Map()
 const ateliRouter = createAteliRouter({
 	blenderPath: '/opt/homebrew/bin/blender',
-	stagingRoot: '/Users/btnorris/dev/games/last-light/.scratch/ateli',
-	allowedSourceRoots: ['/Users/btnorris/dev/games/last-light/client/public/character-experiments'],
-	exportRoots: { 'character-experiments': '/Users/btnorris/dev/games/last-light/client/public/character-experiments' },
+	stagingRoot: '/Users/btnorris/dev/ateli/.scratch/last-light/staging',
+	allowedSourceRoots: ['/Users/btnorris/dev/ateli/.scratch/last-light', '/Users/btnorris/Downloads'],
+	exportRoots: {
+		'character-experiments': '/Users/btnorris/dev/ateli/.scratch/last-light/character-experiments',
+		'last-light/characters': '/Users/btnorris/dev/games/last-light/public/characters',
+	},
 })
 
 

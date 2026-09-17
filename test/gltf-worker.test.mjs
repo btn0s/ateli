@@ -12,7 +12,7 @@ import { MeshoptDecoder } from 'meshoptimizer'
 import sharp from 'sharp'
 
 const WORKER = path.resolve('executor/gltf-worker.mjs')
-const FIXTURE = '/Users/btnorris/dev/games/last-light/client/public/character-experiments/ateli-bake-test.glb'
+const FIXTURE = '/Users/btnorris/dev/ateli/.scratch/last-light/character-experiments/ateli-bake-test.glb'
 const TRIANGLE_MODES = new Set([Primitive.Mode.TRIANGLES, Primitive.Mode.TRIANGLE_STRIP, Primitive.Mode.TRIANGLE_FAN])
 const fixtureMissing = await access(FIXTURE).then(() => false, () => true)
 const skip = fixtureMissing ? `fixture missing: ${FIXTURE}` : false

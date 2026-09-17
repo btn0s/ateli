@@ -13,9 +13,9 @@ This is Ateli's first integration, not its product boundary. Meshes, Blender, an
 - Loopback bridge: `server/backend.mjs`
 - Current local bridge: `127.0.0.1:7237`
 - Headless executor: Blender 5.1.2 at `/opt/homebrew/bin/blender`
-- Canonical input: `../games/last-light/client/public/character-experiments/drifters-light-default/meshy-7-master-raw.glb`
+- Canonical input: `.scratch/last-light/character-experiments/drifters-light-default/meshy-7-master-raw.glb`
 
-The raw input is immutable. POC staging belongs under `../games/last-light/.scratch/ateli/<run-id>/`; promotion into a Last Light catalogue is a separate explicit action.
+The raw input is immutable. POC staging belongs under `.scratch/last-light/staging/<run-id>/`; promotion into a Last Light catalogue is a separate explicit action.
 
 ## Observed baseline
 

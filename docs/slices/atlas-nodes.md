@@ -16,8 +16,8 @@ Amendment: `input.mesh` is resolved in-process but the bridge renders its previe
 - Installed proof document: `/Users/btnorris/dev/tldraw-offline/Ateli POC.tldraw`
 - Blender 5.1.2: `/opt/homebrew/bin/blender`. Python: `/opt/homebrew/bin/python3` with Pillow 12 + numpy 2.
 - Image generation/editing: `imgen` CLI on PATH (`imgen generate --help`, `imgen edit --help`). It returns a job; use `--timeout` and parse its JSON output for the output file path.
-- Canonical mesh: `/Users/btnorris/dev/games/last-light/client/public/character-experiments/drifters-light-default/meshy-7-master-raw.glb`
-- Staging root: `/Users/btnorris/dev/games/last-light/.scratch/ateli/`
+- Canonical mesh: `/Users/btnorris/dev/ateli/.scratch/last-light/character-experiments/drifters-light-default/meshy-7-master-raw.glb`
+- Staging root: `/Users/btnorris/dev/ateli/.scratch/last-light/staging/`
 
 ## Value types and port colors
 

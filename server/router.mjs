@@ -6,9 +6,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tools, toolsForExportRoots } from './tools.mjs'
 
-const LAST_LIGHT_ROOT = '/Users/btnorris/dev/games/last-light'
-const DEFAULT_STAGING_ROOT = path.join(LAST_LIGHT_ROOT, '.scratch/ateli')
-const DEFAULT_SOURCE_ROOT = path.join(LAST_LIGHT_ROOT, 'client/public/character-experiments')
+const SCRATCH_ROOT = '/Users/btnorris/dev/ateli/.scratch/last-light'
+const DEFAULT_STAGING_ROOT = path.join(SCRATCH_ROOT, 'staging')
+const DEFAULT_SOURCE_ROOT = path.join(SCRATCH_ROOT, 'character-experiments')
 const IMAGE_WORKER = fileURLToPath(new URL('../executor/image-worker.py', import.meta.url))
 const MESH_WORKER = fileURLToPath(new URL('../executor/mesh-worker.py', import.meta.url))
 const MESHY_WORKER = fileURLToPath(new URL('../executor/meshy-worker.mjs', import.meta.url))
