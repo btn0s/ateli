@@ -170,7 +170,8 @@ function canConnect(editor: Editor, source: EdgeSource, targetNodeId: TLShapeId,
 
 export function connectPorts(editor: Editor, source: EdgeSource, to: TLShapeId, target: AteliParam, rewiredEdgeId?: TLShapeId) {
 	if (!canConnect(editor, source, to, target, rewiredEdgeId)) return false
-	const occupied = (getTool(editor.getShape<AteliNodeShape>(to)?.props.toolId ?? '')?.id.startsWith('list.collect') ?? false)
+	const multi = isListType(target.type) || (getTool(editor.getShape<AteliNodeShape>(to)?.props.toolId ?? '')?.id.startsWith('list.collect') ?? false)
+	const occupied = multi
 		? undefined
 		: edgesOf(editor).find(edge => edge.id !== rewiredEdgeId && edge.props.to === to && edge.props.toPort === target.id)
 	editor.markHistoryStoppingPoint('Connect Ateli ports')

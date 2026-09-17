@@ -140,6 +140,15 @@ import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 const request = JSON.parse(await readFile(process.argv[2], 'utf8'))
 await appendFile(process.env.ATELI_CALLS, request.toolId + '\\n')
+if (request.toolId === 'mesh.mergeAnimations') {
+  const base = await readFile(request.inputs.base.path, 'utf8')
+  const clips = []
+  for (const clip of request.inputs.clips) clips.push(await readFile(clip.path, 'utf8'))
+  await writeFile(path.join(request.outputDir, 'mesh.glb'), 'merge:' + base + '|' + clips.join(','))
+  await writeFile(path.join(request.outputDir, 'mesh.preview.png'), 'merged-preview')
+  await writeFile(path.join(request.outputDir, 'outputs.json'), JSON.stringify({ mesh: 'mesh.glb', preview: { mesh: 'mesh.preview.png' } }))
+  process.exit(0)
+}
 if (request.toolId !== 'mesh.compress') throw new Error('unexpected glTF tool ' + request.toolId)
 await writeFile(path.join(request.outputDir, 'mesh.glb'), 'compressed-mesh')
 await writeFile(path.join(request.outputDir, 'mesh.preview.png'), 'compressed-preview')
@@ -795,6 +804,34 @@ test('list utilities collect pick and count without subprocesses', async t => {
   const count = await request(harness.origin, `/ateli/results/${run.nodes.count.outputs.count}`)
   assert.equal(count.body.value, 3)
   assert.equal((await harness.calls()).filter(toolId => toolId !== 'mesh.render').length, 0)
+})
+
+test('several fanned edges into a list port zip per item rather than flattening', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const sourceIds = await addMeshSources(harness)
+  // Three characters, each optimized two ways; each merge must receive its own character's two clips.
+  const runGraph = graph([
+    inputMeshes(sourceIds),
+    { id: 'base', toolId: 'mesh.optimize', toolVersion: 1, parameters: { topology: 'triangle', targetFaces: 5 } },
+    { id: 'clip-a', toolId: 'mesh.optimize', toolVersion: 1, parameters: { topology: 'triangle', targetFaces: 10 } },
+    { id: 'clip-b', toolId: 'mesh.optimize', toolVersion: 1, parameters: { topology: 'triangle', targetFaces: 20 } },
+    { id: 'merge', toolId: 'mesh.mergeAnimations', toolVersion: 1, parameters: {} },
+  ], [
+    edge('inputs-base', 'inputs', 'meshes', 'base', 'mesh'),
+    edge('inputs-a', 'inputs', 'meshes', 'clip-a', 'mesh'),
+    edge('inputs-b', 'inputs', 'meshes', 'clip-b', 'mesh'),
+    edge('base-merge', 'base', 'mesh', 'merge', 'base'),
+    edge('a-merge', 'clip-a', 'mesh', 'merge', 'clips'),
+    edge('b-merge', 'clip-b', 'mesh', 'merge', 'clips'),
+  ])
+  const run = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(run.status, 'completed', run.nodes.merge.error)
+  assert.deepEqual(run.nodes.merge.items, { total: 3, done: 3, failed: 0 })
+  const merged = await request(harness.origin, `/ateli/results/${run.nodes.merge.outputs.mesh}`)
+  assert.equal(merged.body.kind, 'mesh[]')
+  const contents = await Promise.all(merged.body.items.map(async item => (await request(harness.origin, item.downloadUrl)).body))
+  assert.deepEqual(contents, [0, 1, 2].map(index => `merge:mesh:mesh.optimize:5:${index}|mesh:mesh.optimize:10:${index},mesh:mesh.optimize:20:${index}`))
 })
 
 function runProcess(command, args) {

@@ -213,7 +213,7 @@ export function validateGraph(graph, catalog = tools, scope = { kind: 'graph' })
     const targetPort = targetTool.inputs.find(input => input.id === edge.target?.portId)
     if (!sourcePort || !targetPort || baseType(sourcePort.type) !== baseType(targetPort.type)) throw new Error('type mismatch on edge')
     const targetKey = `${targetNode.id}\0${targetPort.id}`
-    if (occupiedTargets.has(targetKey) && !isCollectTool(targetTool)) throw new Error(`duplicate target port ${targetNode.id}.${targetPort.id}`)
+    if (occupiedTargets.has(targetKey) && !isCollectTool(targetTool) && !isListType(targetPort.type)) throw new Error(`duplicate target port ${targetNode.id}.${targetPort.id}`)
     edgeIds.add(edge.id)
     occupiedTargets.add(targetKey)
     normalizedEdges.push({
@@ -684,15 +684,24 @@ export function createAteliRouter(options = {}) {
     for (const input of tool.inputs) {
       const incoming = run.graph.edges.filter(candidate => candidate.target.nodeId === node.id && candidate.target.portId === input.id)
       if (incoming.length) {
-        const upstreamItems = []
-        for (const edge of incoming) {
+        const upstreams = incoming.map(edge => {
           const upstream = run.artifacts[edge.source.nodeId]?.[edge.source.portId]
           if (!upstream) throw new Error(`missing upstream output ${edge.source.nodeId}.${edge.source.portId}`)
-          upstreamItems.push(...(isListResult(upstream) ? upstream.items : [upstream]))
-        }
-        if (isListType(input.type) || isCollectTool(tool)) {
+          return upstream
+        })
+        const upstreamItems = upstreams.flatMap(upstream => (isListResult(upstream) ? upstream.items : [upstream]))
+        const fannedUpstreams = upstreams.filter(isListResult)
+        if (isListType(input.type) && incoming.length > 1 && fannedUpstreams.length) {
+          // Several edges into a list port gather per index: iteration i takes item i of each fanned edge
+          // (a single-valued edge is broadcast), so a batch of characters each merges its own clips.
+          const lengths = new Set(fannedUpstreams.map(upstream => upstream.items.length))
+          if (lengths.size > 1) throw new Error(`fan-out lengths differ into ${node.id}.${input.id}: ${[...lengths].join(', ')}`)
+          const width = fannedUpstreams[0].items.length
+          resolved[input.id] = { mode: 'zip', lists: upstreams.map(upstream => (isListResult(upstream) ? upstream.items : Array(width).fill(upstream))) }
+          fanoutLengths.push([input.id, width])
+        } else if (isListType(input.type) || isCollectTool(tool)) {
           resolved[input.id] = { mode: 'list', records: upstreamItems }
-        } else if (isListResult(run.artifacts[incoming[0].source.nodeId]?.[incoming[0].source.portId])) {
+        } else if (isListResult(upstreams[0])) {
           resolved[input.id] = { mode: 'fanout', records: upstreamItems }
           fanoutLengths.push([input.id, upstreamItems.length])
         } else {
@@ -746,9 +755,11 @@ export function createAteliRouter(options = {}) {
           hashableInputs[input.id] = entry.value
           continue
         }
-        const records = entry.mode === 'fanout' ? [entry.records[index]] : entry.records
+        const records = entry.mode === 'fanout' ? [entry.records[index]]
+          : entry.mode === 'zip' ? entry.lists.map(list => list[index])
+          : entry.records
         if (records.some(record => !record)) throw new Error(`missing upstream output for ${node.id}.${input.id}[${index}]`)
-        const listValue = entry.mode === 'list'
+        const listValue = entry.mode === 'list' || entry.mode === 'zip'
         inputArtifacts[input.id] = listValue ? records : records[0]
         if (listValue) {
           inputs[input.id] = records.map(record => recordValue(record, input.type))

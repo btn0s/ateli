@@ -16,6 +16,8 @@ Implements [ADR 0005](../adr/0005-lists-are-the-loop.md) on top of [atlas-nodes.
 - Node status: `{ status, error?, outputs, items?: { total, done, failed } }`. A failed iteration fails the node after the remaining iterations are skipped; `outputs` still lists results for the iterations that succeeded (as a list result with holes → `null`).
 - Cache: unchanged key per iteration; a node reports `cached` only if every iteration hit.
 
+- **Several edges into one list-typed port** (`clips: mesh[]` fed by three Motion nodes) gather per index under fan-out: iteration `i` receives item `i` of each fanned edge (single-valued edges broadcast), so a batch of characters each merges its own clips. Without fan-out the edges simply form the list. `Collect` with one edge still flattens an upstream list.
+
 ## Results
 
 A list result is one result record: `{ resultId, kind: 'mesh[]' (etc.), items: [{ resultId, name, previewUrl, downloadUrl, value? } | null] }`. `GET /ateli/results/:id` returns it; each item's own `resultId` is a normal single result (preview/download routes work per item). `GET /ateli/results/:id/preview` of a list returns the first non-null item's preview.
