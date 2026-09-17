@@ -135,11 +135,11 @@ class Worker:
         self.log("exported %s (%d bytes, %d triangles)" % (filename, os.path.getsize(output), triangle_count(objects)))
         return filename
 
-    def finish_mesh(self, objects):
+    def finish_mesh(self, objects, unlit=False):
         mesh_name = self.export_mesh(objects)
         preview_name = "mesh.preview.png"
-        render_mesh(objects, os.path.join(self.output_dir, preview_name), 512, 35.0, 15.0)
-        self.log("rendered %s" % preview_name)
+        render_mesh(objects, os.path.join(self.output_dir, preview_name), 512, 35.0, 15.0, unlit=unlit)
+        self.log("rendered %s%s" % (preview_name, " (unlit)" if unlit else ""))
         return {"mesh": mesh_name, "preview": {"mesh": preview_name}}
 
     def optimize(self):
@@ -207,6 +207,11 @@ class Worker:
             clear_uvs(objects)
             self.log("%s remesh output has no UVs; use mesh.bake to transfer textures" % engine_used)
 
+        # Remeshed or decimated output otherwise exports flat per-face normals and lights like a disco ball.
+        smooth_angle = float(self.scalar("smoothAngle", 60.0))
+        if smooth_angle > 0:
+            shade_smooth_by_angle(objects, smooth_angle)
+            self.log("shade smooth by angle %.0f" % smooth_angle)
         output_triangles = triangle_count(objects)
         output_has_uvs = has_uvs(objects)
         self.log(
@@ -280,7 +285,7 @@ class Worker:
         yaw = float(self.scalar("yaw", 35.0))
         pitch = float(self.scalar("pitch", 15.0))
         output = os.path.join(self.output_dir, "image.png")
-        render_mesh(objects, output, size, yaw, pitch)
+        render_mesh(objects, output, size, yaw, pitch, unlit=(str(self.scalar("shading", "lit")) == "unlit"))
         self.log("rendered image.png at %dx%d yaw=%.3f pitch=%.3f" % (size, size, yaw, pitch))
         return {"image": "image.png"}
 
@@ -378,6 +383,9 @@ class Worker:
         # ray lands. Normal and AO describe the low's own geometry, so they bake against the real surface — a tangent
         # normal map baked on the conformed shape and applied to the restored one is simply wrong.
         colour_channels = ("baseColor", "roughness", "metallic")
+        lighting = str(self.scalar("lighting", "none"))
+        if lighting not in {"none", "ao", "studio"}:
+            raise RuntimeError("invalid lighting mode: %s" % lighting)
         restore = conform_low_for_bake(low, high, self.log)
         conformed = True
         baked = {}
@@ -394,7 +402,7 @@ class Worker:
             set_colorspace(image, "sRGB" if channel == "baseColor" else "Non-Color")
             target_nodes = attach_bake_target(low, image)
             try:
-                bake_channel(high, low, channel, image, margin, cage)
+                bake_channel(high, low, channel, image, margin, cage, lit=(lighting == "studio"))
             finally:
                 remove_bake_targets(target_nodes)
             filename = channel + ".png"
@@ -413,19 +421,29 @@ class Worker:
             baked[channel] = image
             self.log("baked %s at %d with margin %d" % (channel, resolution, margin))
         restore()
-        # The 2000s-era trick: occlusion painted into the diffuse, so the asset carries its shading in one texture.
-        if bool(self.scalar("aoIntoBaseColor", False)) and "baseColor" in baked and "ao" in baked:
+        # 'ao': occlusion multiplied into the diffuse. 'studio': a lit diffuse baked from the high under a soft key,
+        # so creases and folds the low no longer has are painted in — the asset then renders unlit, as the era did.
+        if lighting == "ao" and "baseColor" in baked and "ao" in baked:
             multiply_ao_into_base_color(baked["baseColor"], baked["ao"], os.path.join(self.output_dir, "baseColor.png"))
             self.log("multiplied ao into baseColor")
         material_channels = dict(baked)
-        if bool(self.scalar("aoIntoBaseColor", False)):
+        if lighting != "none":
             material_channels.pop("ao", None)
         apply_images_to_materials(low, material_channels, self.log)
-        result = self.finish_mesh(low)
+        result = self.finish_mesh(low, unlit=(lighting != "none"))
         for channel in enabled:
             if channel in baked:
                 result[channel] = channel + ".png"
         return result
+
+
+def shade_smooth_by_angle(objects, degrees):
+    for obj in objects:
+        select_only(obj)
+        try:
+            bpy.ops.object.shade_smooth_by_angle(angle=math.radians(degrees), keep_sharp_edges=True)
+        except (AttributeError, TypeError):
+            bpy.ops.object.shade_smooth()
 
 
 def multiply_ao_into_base_color(base_image, ao_image, destination):
@@ -964,8 +982,35 @@ def conform_low_for_bake(low, high, logger):
     return restore
 
 
-def bake_channel(high, low, channel, image, margin, cage):
+def studio_lighting(scene):
+    """A soft top-front key plus a bright sky, the way 2000s diffuse maps had their shading painted in."""
+    world = scene.world or bpy.data.worlds.new("Ateli studio world")
+    scene.world = world
+    world.use_nodes = True
+    background = next((n for n in world.node_tree.nodes if n.type == "BACKGROUND"), None)
+    previous = None
+    if background is not None:
+        previous = (tuple(background.inputs["Color"].default_value), background.inputs["Strength"].default_value)
+        background.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+        background.inputs["Strength"].default_value = 0.35
+    key = bpy.data.objects.new("Ateli key light", bpy.data.lights.new("Ateli key light", "SUN"))
+    # Sky + key top out near albedo so lit pixels never clip to white; that is what kept hands as flat blobs.
+    key.data.energy = 1.2
+    key.data.angle = math.radians(20.0)
+    key.rotation_euler = (math.radians(50.0), 0.0, math.radians(-30.0))
+    scene.collection.objects.link(key)
+
+    def teardown():
+        bpy.data.objects.remove(key)
+        if background is not None and previous is not None:
+            background.inputs["Color"].default_value = previous[0]
+            background.inputs["Strength"].default_value = previous[1]
+    return teardown
+
+
+def bake_channel(high, low, channel, image, margin, cage, lit=False):
     changes = configure_high_metallic_emission(high) if channel == "metallic" else []
+    teardown = studio_lighting(bpy.context.scene) if (lit and channel == "baseColor") else None
     bake_types = {
         "baseColor": "DIFFUSE",
         "roughness": "ROUGHNESS",
@@ -991,13 +1036,15 @@ def bake_channel(high, low, channel, image, margin, cage):
                 "use_clear": first,
             }
             if channel == "baseColor":
-                kwargs["pass_filter"] = {"COLOR"}
+                kwargs["pass_filter"] = {"COLOR", "DIRECT", "INDIRECT"} if lit else {"COLOR"}
             if channel == "normal":
                 kwargs["normal_space"] = "TANGENT"
             bpy.ops.object.bake(**kwargs)
             first = False
     finally:
         bpy.ops.object.select_all(action="DESELECT")
+        if teardown is not None:
+            teardown()
         if changes:
             restore_high_emission(changes)
 
@@ -1019,9 +1066,17 @@ def linear_srgb(value):
     return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
 
 
-def render_mesh(objects, destination, size, yaw, pitch):
+def render_mesh(objects, destination, size, yaw, pitch, unlit=False):
     scene = bpy.context.scene
-    set_eevee_engine(scene)
+    if unlit:
+        # Assets with lighting baked into the diffuse are shown as a 2000s engine would: texture only.
+        scene.render.engine = "BLENDER_WORKBENCH"
+        scene.display.shading.light = "FLAT"
+        scene.display.shading.color_type = "TEXTURE"
+        scene.display.shading.show_shadows = False
+        scene.display.shading.show_cavity = False
+    else:
+        set_eevee_engine(scene)
     scene.render.resolution_x = int(size)
     scene.render.resolution_y = int(size)
     scene.render.resolution_percentage = 100
@@ -1067,7 +1122,7 @@ def render_mesh(objects, destination, size, yaw, pitch):
     camera_data.clip_start = max(radius / 1000.0, 0.001)
     camera_data.clip_end = max(radius * 20.0, 100.0)
     scene.camera = camera
-    light_specs = (
+    light_specs = () if unlit else (
         ("Key", Vector((-1.8, -2.2, 2.5)), 900.0, 4.0),
         ("Fill", Vector((2.4, -1.0, 1.0)), 450.0, 5.0),
         ("Rim", Vector((0.5, 2.5, 2.2)), 700.0, 3.0),

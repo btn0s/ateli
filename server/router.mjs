@@ -12,6 +12,7 @@ const DEFAULT_SOURCE_ROOT = path.join(LAST_LIGHT_ROOT, 'client/public/character-
 const IMAGE_WORKER = fileURLToPath(new URL('../executor/image-worker.py', import.meta.url))
 const MESH_WORKER = fileURLToPath(new URL('../executor/mesh-worker.py', import.meta.url))
 const MESHY_WORKER = fileURLToPath(new URL('../executor/meshy-worker.mjs', import.meta.url))
+const GLTF_WORKER = fileURLToPath(new URL('../executor/gltf-worker.mjs', import.meta.url))
 const MAX_JSON_BYTES = 1024 * 1024
 const MAX_UPLOAD_BYTES = 256 * 1024 * 1024
 const MAX_PARAMETER_BYTES = 64 * 1024
@@ -364,6 +365,7 @@ export function createAteliRouter(options = {}) {
     meshWorkerPath: options.meshWorkerPath ?? MESH_WORKER,
     nodePath: options.nodePath ?? process.execPath,
     meshyWorkerPath: options.meshyWorkerPath ?? MESHY_WORKER,
+    gltfWorkerPath: options.gltfWorkerPath ?? GLTF_WORKER,
     exportRoots: { ...exportRoots },
     workerCommand: options.workerCommand,
     maxUploadBytes: options.maxUploadBytes ?? MAX_UPLOAD_BYTES,
@@ -712,6 +714,7 @@ export function createAteliRouter(options = {}) {
       return { executable: config.blenderPath, args: ['--background', '--factory-startup', '--python', config.meshWorkerPath, '--', context.requestPath] }
     }
     if (runtime === 'meshy') return { executable: config.nodePath, args: [config.meshyWorkerPath, context.requestPath] }
+    if (runtime === 'gltf') return { executable: config.nodePath, args: [config.gltfWorkerPath, context.requestPath] }
     if (runtime === 'image' || runtime === 'imgen') {
       return { executable: config.pythonPath, args: [config.imageWorkerPath, context.requestPath] }
     }

@@ -2,7 +2,7 @@ import { atom } from 'tldraw'
 
 export type AteliValueType = 'mesh' | 'image' | 'text' | 'number' | 'boolean' | 'enum'
 export type AteliCategory = 'Input' | 'Image' | 'Mesh' | 'Output'
-export type AteliRuntime = 'none' | 'image' | 'imgen' | 'blender' | 'meshy'
+export type AteliRuntime = 'none' | 'image' | 'imgen' | 'blender' | 'meshy' | 'gltf'
 
 export interface AteliParam {
 	id: string

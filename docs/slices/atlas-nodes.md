@@ -43,7 +43,7 @@ type Param = {
 type Tool = {
   id: string; version: 1; title: string
   category: 'Input' | 'Image' | 'Mesh' | 'Output'
-  runtime: 'none' | 'image' | 'imgen' | 'blender' | 'meshy'
+  runtime: 'none' | 'image' | 'imgen' | 'blender' | 'meshy' | 'gltf'
   inputs: Param[]; outputs: Param[]
 }
 ```
@@ -100,6 +100,12 @@ Generation (`runtime: 'meshy'`):
 | id | title | inputs | outputs |
 |---|---|---|---|
 | `mesh.fromImage` | Image → 3D | `image: image`, `prompt: text?`, `model: enum ['meshy-7','meshy-6'] default 'meshy-7'`, `pose: enum ['a-pose','t-pose','none'] default 'a-pose'`, `texture: boolean default true`, `textureResolution: enum ['1k','2k','4k'] default '2k'`, `pbr: boolean default false advanced`, `remesh: boolean default false advanced` | `mesh: mesh` |
+Compression (`runtime: 'gltf'`):
+
+| id | title | inputs | outputs |
+|---|---|---|---|
+| `mesh.compress` | Compress for Web | `mesh`, `geometry: enum ['meshopt','draco','none'] default 'meshopt'`, `textureSize: enum ['256','512','1024','2048','keep'] default '1024'`, `textureFormat: enum ['webp','jpeg','png','ktx2'] default 'webp'`, `quality: number 1..100 default 85 advanced`, `quantize: boolean default true advanced`, `simplify: number 0..1 default 0 advanced`, `flatten: boolean default true advanced` | `mesh` |
+
 
 Processing (`runtime: 'blender'`):
 | id | title | inputs | outputs |
@@ -147,6 +153,7 @@ Worker CLIs:
 - `python3 executor/image-worker.py <request.json>` — `runtime: 'image'` and `'imgen'` tools (imgen tools shell out to `imgen`).
 - `/opt/homebrew/bin/blender --background --factory-startup --python executor/mesh-worker.py -- <request.json>` — `runtime: 'blender'` tools.
 - `node executor/meshy-worker.mjs <request.json>` — `runtime: 'meshy'` tools. The backend loads repository-root `.env` without overriding existing environment variables; the worker requires `MESHY_API_KEY`.
+- `node executor/gltf-worker.mjs <request.json>` — `runtime: 'gltf'` tools. `mesh.compress` writes `compress.json` metadata with input/output byte sizes, triangle count, texture details, and extensions used; KTX2 output requires the `ktx` CLI on `PATH`.
 
 Caching: the bridge keys each reusable node result by `sha256(toolId + version + canonical(inputs with file inputs replaced by their sha256))`. A cache hit skips the subprocess and reuses the outputs. `output.export` is intentionally not cached because it writes a run-specific provenance receipt. `POST /ateli/runs` accepts `"cache": false` to bypass; `DELETE /ateli/cache/:nodeId` clears one node's entries.
 

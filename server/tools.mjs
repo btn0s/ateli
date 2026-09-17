@@ -8,7 +8,7 @@ const aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4']
 const imageModels = ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gemini-3.1-flash-image']
 const faceAxes = ['-Y', '+Y', '-X', '+X', '-Z', '+Z']
 
-/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh'|'Output', runtime: 'none'|'image'|'imgen'|'blender'|'meshy', inputs: object[], outputs: object[]}>} */
+/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh'|'Output', runtime: 'none'|'image'|'imgen'|'blender'|'meshy'|'gltf', inputs: object[], outputs: object[]}>} */
 export const tools = [
   {
     id: 'input.text', version: 1, title: 'Input Text', category: 'Input', runtime: 'none',
@@ -232,6 +232,21 @@ export const tools = [
     ],
     outputs: [param('mesh', 'Mesh', 'mesh')],
   },
+  {
+    id: 'mesh.compress', version: 1, title: 'Compress for Web', category: 'Mesh', runtime: 'gltf',
+    inputs: [
+      param('mesh', 'Mesh', 'mesh'),
+      param('geometry', 'Geometry', 'enum', { options: ['meshopt', 'draco', 'none'], default: 'meshopt' }),
+      param('textureSize', 'Texture Size', 'enum', { options: ['256', '512', '1024', '2048', 'keep'], default: '1024' }),
+      param('textureFormat', 'Texture Format', 'enum', { options: ['webp', 'jpeg', 'png', 'ktx2'], default: 'webp' }),
+      param('quality', 'Quality', 'number', { min: 1, max: 100, default: 85, advanced: true }),
+      param('quantize', 'Quantize', 'boolean', { default: true, advanced: true }),
+      param('simplify', 'Simplify Ratio', 'number', { min: 0, max: 1, default: 0, advanced: true }),
+      param('flatten', 'Flatten', 'boolean', { default: true, advanced: true }),
+    ],
+    outputs: [param('mesh', 'Mesh', 'mesh')],
+  },
+
 
   {
     id: 'mesh.optimize', version: 1, title: 'Optimize Mesh', category: 'Mesh', runtime: 'blender',
@@ -242,6 +257,7 @@ export const tools = [
       param('topology', 'Topology', 'enum', { options: ['triangle', 'quad'], default: 'triangle', advanced: true }),
       param('voxelSize', 'Voxel Size (0 = auto)', 'number', { min: 0, max: 1, default: 0, step: 0.001, advanced: true }),
       param('preserveUVs', 'Preserve UVs', 'boolean', { default: false, advanced: true }),
+      param('smoothAngle', 'Smooth Angle (°, 0 = flat)', 'number', { min: 0, max: 180, default: 60, advanced: true }),
     ],
     outputs: [param('mesh', 'Mesh', 'mesh')],
   },
@@ -283,6 +299,7 @@ export const tools = [
       param('yaw', 'Yaw', 'number', { min: -180, max: 180, default: 35 }),
       param('pitch', 'Pitch', 'number', { min: -89, max: 89, default: 15 }),
       param('size', 'Size', 'number', { default: 1024 }),
+      param('shading', 'Shading', 'enum', { options: ['lit', 'unlit'], default: 'lit' }),
     ],
     outputs: [param('image', 'Image', 'image')],
   },
@@ -319,7 +336,7 @@ export const tools = [
       param('aoSamples', 'AO Samples', 'number', { default: 32, advanced: true }),
       param('margin', 'Margin', 'number', { default: 16, advanced: true }),
       param('rayDistance', 'Ray Distance (m, 0 = auto)', 'number', { min: 0, max: 1, default: 0, step: 0.005, advanced: true }),
-      param('aoIntoBaseColor', 'AO into Base Color', 'boolean', { default: false, advanced: true }),
+      param('lighting', 'Lighting', 'enum', { options: ['none', 'ao', 'studio'], default: 'none', advanced: true }),
     ],
     outputs: [
       param('mesh', 'Mesh', 'mesh'), param('baseColor', 'Base Color', 'image'),

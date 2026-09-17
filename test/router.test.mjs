@@ -61,6 +61,7 @@ async function createHarness() {
   const imageWorkerPath = path.join(root, 'image-worker.mjs')
   const blenderWorkerPath = path.join(root, 'blender-worker.mjs')
   const meshyWorkerPath = path.join(root, 'meshy-worker.mjs')
+  const gltfWorkerPath = path.join(root, 'gltf-worker.mjs')
 
   await writeFile(imageWorkerPath, `
 import { appendFile, readFile, writeFile } from 'node:fs/promises'
@@ -129,10 +130,32 @@ await writeFile(path.join(request.outputDir, 'outputs.json'), JSON.stringify({
   meta: { mesh: 'meshy.json' },
 }))
 `)
+  await writeFile(gltfWorkerPath, `
+import { appendFile, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+const request = JSON.parse(await readFile(process.argv[2], 'utf8'))
+await appendFile(process.env.ATELI_CALLS, request.toolId + '\\n')
+if (request.toolId !== 'mesh.compress') throw new Error('unexpected glTF tool ' + request.toolId)
+await writeFile(path.join(request.outputDir, 'mesh.glb'), 'compressed-mesh')
+await writeFile(path.join(request.outputDir, 'mesh.preview.png'), 'compressed-preview')
+await writeFile(path.join(request.outputDir, 'compress.json'), JSON.stringify({
+  bytesIn: 1000,
+  bytesOut: 200,
+  triangles: 12,
+  textures: [],
+  extensionsUsed: ['EXT_meshopt_compression'],
+}))
+await writeFile(path.join(request.outputDir, 'outputs.json'), JSON.stringify({
+  mesh: 'mesh.glb',
+  preview: { mesh: 'mesh.preview.png' },
+  meta: { mesh: 'compress.json' },
+}))
+`)
+
 
   const workerCommand = ({ runtime, requestPath }) => ({
     executable: process.execPath,
-    args: [runtime === 'blender' ? blenderWorkerPath : runtime === 'meshy' ? meshyWorkerPath : imageWorkerPath, requestPath],
+    args: [runtime === 'blender' ? blenderWorkerPath : runtime === 'meshy' ? meshyWorkerPath : runtime === 'gltf' ? gltfWorkerPath : imageWorkerPath, requestPath],
     env: { ...process.env, ATELI_CALLS: callsPath },
   })
   const opened = await openRouter(root, workerCommand, { test: exportRoot })
@@ -450,6 +473,26 @@ test('mesh.fromImage exposes Meshy task metadata on its mesh result', async t =>
   assert.equal(result.body.meta.consumedCredits, 30)
   assert.equal(result.body.previewUrl, `/ateli/results/${result.body.resultId}/preview`)
 })
+test('mesh.compress runs through the glTF worker and exposes compression metadata', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const source = await addSource(harness, harness.meshPath)
+  const runGraph = graph([
+    inputMesh(source.sourceId),
+    { id: 'compress', toolId: 'mesh.compress', toolVersion: 1, parameters: {} },
+  ], [edge('mesh-to-compress', 'input', 'mesh', 'compress', 'mesh')])
+
+  const submission = await submit(harness, runGraph)
+  assert.equal(submission.status, 202)
+  const run = await waitForRun(harness.origin, submission.body.runId)
+  assert.equal(run.status, 'completed')
+  const result = await request(harness.origin, `/ateli/results/${run.nodes.compress.outputs.mesh}`)
+  assert.equal(result.status, 200)
+  assert.equal(result.body.meta.bytesOut, 200)
+  assert.equal(result.body.previewUrl, `/ateli/results/${result.body.resultId}/preview`)
+  assert.deepEqual(await harness.calls(), ['mesh.render', 'mesh.compress'])
+})
+
 
 test('output.export validation requires one file input and rejects unsafe names', async t => {
   const harness = await createHarness()
