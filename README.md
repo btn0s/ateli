@@ -1,71 +1,54 @@
 # Ateli
 
-Ateli is a local-first visual system for composing typed tools into inspectable, repeatable graphs. It is intended to become an open-source alternative in the space occupied by n8n, Flora, and Atlas Studio without being limited to automation, image generation, maps, 3D, or any single media type.
+Ateli is my personal software, built on top of [tldraw Offline](https://github.com/tldraw/tldraw-offline). It is one installable mod set — a skin, a set of canvas tools, a node graph, and the local services behind them — that turns a `.tldraw` document into a workspace I actually use. It is not a product yet.
 
-Ateli uses native tldraw Offline custom shapes: `ateli-node` for tool nodes and `ateli-edge` for typed port-to-port connections. Tools may process text, structured data, images, maps, meshes, materials, animation, files, or other value types.
+## What is in it
 
-## Current status
+| Layer | What it gives a document |
+|---|---|
+| **Skin** (`mod/skin`) | One design system for tldraw's chrome and every custom shape: tokens, surfaces, the command bar, tool chrome. |
+| **Canvas tools** (`mod/canvas`) | Shapes that live on the canvas: an embedded browser, a terminal, landmarks for organizing large boards, image generation, and a feedback capture tool. |
+| **Node graph** (`mod/graph`) | A typed tool graph — Input, Image, and Mesh nodes with draggable typed edges, inline controls, per-node run, and previews — modelled on Atlas AI Studio. See `docs/slices/atlas-nodes.md`. |
+| **Server** (`server/`) | The loopback backend the shapes talk to: terminal sessions, image generation proxy, feedback capture, and the node-graph bridge (validation, per-node execution, caching, results). |
+| **Executors** (`executor/`) | Headless workers the bridge spawns per node: Blender for meshes, Pillow/`imgen` for images. |
 
-The Last Light mesh-optimization proof of concept is implemented end to end:
+The node graph is one module among several. The browser, terminal, and landmarks have nothing to do with it; they are just other things I wanted on the same canvas.
 
-- three complete local node categories — Input (5), Image (21), Mesh (9) — as native tldraw shapes with typed draggable edges, inline parameter controls, per-node run, and inline 3D/2D previews (see `docs/slices/atlas-nodes.md`);
-- the loopback bridge validates graph snapshots, runs scoped jobs, reports results, cancels Blender process groups, rehydrates retained runs, and guards promotion;
-- Blender derives a 49,999-triangle candidate, transfers shading normals, bakes a 1024px tangent-space normal map, exports evidence renders, and validates the result without changing the source; and
-- the promoted GLB and receipt are consumed by Last Light's React Three Fiber character viewer.
+## Using it
 
-This pipeline proves Ateli's graph, tool, run, result, and headless execution boundaries. It does not define Ateli as a 3D application.
-
-## Current shape
-
-Ateli is a tldraw Offline extension. Each tool instance is an `ateli-node` custom shape with typed input and output ports; material slots are individual ports. Connections are `ateli-edge` custom shapes that reference a source node/port and target node/port and draw a typed curve between the live port anchors. The bridge owns run coordination and retained artifacts; allowlisted headless tools perform the work.
-
-Ateli is one system:
-
-```text
-Ateli
-├── visual graph
-├── typed tool catalog
-├── run coordination
-├── retained results and receipts
-└── headless tool executors
+```sh
+npm install
+node bin/ateli serve                      # backend on 127.0.0.1:7237
+node bin/ateli install "My Board.tldraw"  # build the mod and install it into an open document
+node bin/ateli smoke                      # end-to-end mesh pipeline against real Blender
+npm test                                  # typecheck + mod build + router/worker tests
 ```
 
-The repository is the single source for the installed document script and its local services:
+`install` targets a document that is open in tldraw Offline; it writes the built document script through the app's local agent API.
+
+## Layout
 
 ```text
 mod/
-├── skin/       tldraw chrome and shared UI
-├── canvas/     browser, landmark, terminal, image generation, and feedback shapes
-├── graph/      Ateli node and edge shapes, client, and tool types
-└── config.tsx  composed document-script entry
-server/         loopback backend, Ateli router, terminal, and feedback service
-executor/       image and Blender workers
-tools/          document-script build and installer
-bin/ateli       install, serve, and smoke commands
-test/           router and worker tests
+├── skin/       design system, command bar, tool chrome
+├── canvas/     browser, terminal, landmark, image-gen, feedback shapes
+├── graph/      node + edge shapes, bridge client, catalog
+└── config.tsx  the composed document-script entry
+server/         backend, node-graph router and tool catalog, terminal + feedback services
+executor/       mesh-worker.py (Blender), image-worker.py (Pillow, imgen)
+tools/          esbuild + Tailwind build, installer
+bin/ateli       install | serve | smoke
+docs/           architecture, ADRs, contracts, research, ideas
 ```
-
-Mesh processing is the first POC tool family. Ateli's catalog is designed for image generation and editing, map processing, material construction, animation, data transformation, local automation, remote service calls, and other typed tools.
-
-## Principles
-
-- **General tools, concrete contracts.** Tools declare typed inputs, outputs, and parameters; nodes do not hide work in prompts.
-- **Graph-first UX.** Graph construction, parameter editing, run state, previews, and result inspection belong in a dedicated node editor.
-- **Local first.** Local files and executors work without a hosted Ateli service.
-- **Inspectable execution.** Runs expose state, logs, outputs, validation, and cancellation.
-- **Retained provenance.** Sources and accepted results are hashed and linked through receipts.
-- **Explicit promotion.** Producing a result is not the same as adopting it into a consuming project.
-- **No arbitrary execution by default.** A tool invokes an allowlisted capability, not user-supplied shell or Python.
-- **Breadth through added tools, not added systems.** New domains extend the catalog and result renderers while reusing the graph and run model.
 
 ## Documentation
 
-- [Domain language](./CONTEXT.md)
-- [Architecture](./docs/architecture.md)
-- [Original UI and headless-tools decision](./docs/adr/0001-tldraw-offline-headless-first.md)
+- [Ideas backlog](./docs/ideas.md)
+- [Node graph: domain language](./CONTEXT.md) · [architecture](./docs/architecture.md) · [node contract](./docs/slices/atlas-nodes.md)
+- ADRs: [native tldraw shapes](./docs/adr/0001-tldraw-offline-headless-first.md) · [per-node execution](./docs/adr/0003-per-node-execution.md) · [parameters are ports](./docs/adr/0004-textures-are-channel-images.md)
 - [Last Light mesh-optimization POC](./docs/poc/last-light-mesh-optimization.md)
 - [Research](./docs/research/README.md)
 
-## Open-source status
+## Status
 
-Ateli is intended to be open source. A license has not yet been selected; the repository should not be represented as licensed for redistribution until a license is added.
+Personal, unlicensed, changing under me. Documents are not in this repo.

@@ -1,11 +1,15 @@
 # ATELI
 
-The language of composing diverse tools into visible, inspectable, repeatable graphs.
+Language for Ateli, a personal mod set for tldraw Offline. Most entries below belong to its node-graph module; canvas tools (browser, terminal, landmark) use plain tldraw vocabulary.
 
 ## Language
 
 **Ateli**:
-The system that presents, connects, runs, and inspects typed tools across different kinds of work.
+The mod set as a whole: skin, canvas tools, node graph, and the local services behind them.
+_Avoid_: using it to mean only the node graph
+
+**Node graph**:
+The Ateli module that presents, connects, runs, and inspects typed tools.
 
 **Tool**:
 A declared capability with typed inputs, outputs, and parameters.
