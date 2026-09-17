@@ -425,8 +425,8 @@ function AteliNodeView({ shape, editor }: { shape: AteliNodeShape; editor: Edito
 				<span className="min-w-0 flex-1 truncate">{tool.title}</span>
 				{uploading ? <span className="ui-label">Uploading</span> : null}
 				<NodeMenu shape={shape} editor={editor} update={update} busy={busy} />
-				<button type="button" className="ui-icon-button size-6" title="Run node" aria-label="Run node" disabled={readonly || busy} onPointerDown={stop} onClick={event => { stop(event); run({ kind:'node', nodeId:shape.id }) }}><Play size={13} fill="currentColor" /></button>
-				<button type="button" className="ui-icon-button size-6" title="Run downstream" aria-label="Run downstream" disabled={readonly || busy} onPointerDown={stop} onClick={event => { stop(event); run({ kind:'downstream', nodeId:shape.id }) }}><FastForward size={14} fill="currentColor" /></button>
+				<button type="button" className="ui-icon-button pointer-events-auto size-6" title="Run node" aria-label="Run node" disabled={readonly || busy} onPointerDown={stop} onClick={event => { stop(event); run({ kind:'node', nodeId:shape.id }) }}><Play size={13} fill="currentColor" /></button>
+				<button type="button" className="ui-icon-button pointer-events-auto size-6" title="Run downstream" aria-label="Run downstream" disabled={readonly || busy} onPointerDown={stop} onClick={event => { stop(event); run({ kind:'downstream', nodeId:shape.id }) }}><FastForward size={14} fill="currentColor" /></button>
 			</div>
 			{running ? <div className="absolute inset-x-0 h-0.5 overflow-hidden" style={{ top:headerHeight - 2 }}><div className="h-full w-2/5 animate-[shimmer_1.4s_ease-in-out_infinite] bg-blue-400" /></div> : null}
 			{shape.props.collapsed ? null : (
