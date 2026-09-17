@@ -32,7 +32,7 @@ A list result is one result record: `{ resultId, kind: 'mesh[]' (etc.), items: [
 
 `Collect` exists so a downstream single-valued node (e.g. an Export that should name by index) can see the whole list; with implicit map most graphs never need it.
 
-`output.export` gains `name` templating: `{name}` → source file stem of the item, `{index}` → zero-based index, `{n}` → 1-based. A fanned Export writes one file per item.
+`output.export` gains `name` templating: `{name}` → source file stem of the item, `{dir}` → the source file's parent directory name (linked sources are named `<dir>/<file>`, since catalogues of same-named files are told apart only by folder), `{index}` → zero-based index, `{n}` → 1-based. A fanned Export writes one file per item.
 
 Category `Utility` is new (`AteliCategory`).
 

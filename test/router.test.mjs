@@ -207,6 +207,7 @@ async function addMeshSources(harness, names = ['alpha.glb', 'beta.glb', 'gamma.
   const sourceIds = []
   for (const [index, name] of names.entries()) {
     const filePath = path.join(harness.allowedRoot, name)
+    await mkdir(path.dirname(filePath), { recursive: true })
     await writeFile(filePath, `source-mesh-${index}`)
     sourceIds.push((await addSource(harness, filePath)).sourceId)
   }
@@ -709,19 +710,20 @@ test('cancelling fan-out kills the current iteration and skips the remainder', a
   assert.equal((await harness.calls()).filter(toolId => toolId === 'mesh.optimize').length, 1)
 })
 
-test('export fan-out expands item name index and ordinal templates', async t => {
+test('export fan-out expands item name, dir, index and ordinal templates', async t => {
   const harness = await createHarness()
   t.after(() => harness.close())
-  const sourceIds = await addMeshSources(harness)
+  // A catalogue of same-named files: only the parent directory tells them apart.
+  const sourceIds = await addMeshSources(harness, ['alpha/master.glb', 'beta/master.glb', 'gamma/master.glb'])
   const runGraph = graph([
     inputMeshes(sourceIds),
-    { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: '{name}-{index}-{n}' } },
+    { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: '{dir}-{name}-{index}-{n}' } },
   ], [edge('inputs-export', 'inputs', 'meshes', 'export', 'mesh')])
 
   const run = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
   assert.equal(run.status, 'completed')
   assert.deepEqual(run.nodes.export.items, { total: 3, done: 3, failed: 0 })
-  const expectedPaths = ['alpha-0-1.glb', 'beta-1-2.glb', 'gamma-2-3.glb'].map(name => path.join(harness.exportRoot, name))
+  const expectedPaths = ['alpha-master-0-1.glb', 'beta-master-1-2.glb', 'gamma-master-2-3.glb'].map(name => path.join(harness.exportRoot, name))
   assert.deepEqual(await Promise.all(expectedPaths.map(filePath => readFile(filePath, 'utf8'))), [
     'source-mesh-0',
     'source-mesh-1',

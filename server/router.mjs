@@ -828,9 +828,12 @@ export function createAteliRouter(options = {}) {
     const root = config.exportRoots[inputs.folder]
     const rootInfo = root && await stat(root).catch(() => null)
     if (!rootInfo?.isDirectory()) throw new Error(`export root is unavailable: ${inputs.folder}`)
-    const sourceStem = path.parse(source.sourceName ?? source.name).name
+    const sourceLabel = source.sourceName ?? source.name
+    const sourceStem = path.parse(sourceLabel).name
+    const sourceDir = path.basename(path.dirname(sourceLabel))
     const name = inputs.name
       .replaceAll('{name}', sourceStem)
+      .replaceAll('{dir}', sourceDir)
       .replaceAll('{index}', String(index))
       .replaceAll('{n}', String(index + 1))
     if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) throw new Error('invalid export name')
@@ -1182,7 +1185,8 @@ export function createAteliRouter(options = {}) {
     await rename(temporary, sourceIndexPath())
   }
 
-  async function registerSource(sourcePath, name = path.basename(sourcePath)) {
+  // A linked file's name carries its parent directory: batches of same-named files (catalogue/meshy-7-master-raw.glb) are distinguished by it.
+  async function registerSource(sourcePath, name = path.posix.join(path.basename(path.dirname(sourcePath)), path.basename(sourcePath))) {
     const info = await stat(sourcePath)
     if (!info.isFile()) throw new Error('source path is not a file')
     const kind = sourceKind(name)
