@@ -500,7 +500,7 @@ export function createAteliRouter(options = {}) {
 
   async function copyOutputSet(sourceDirectory, targetDirectory, outputDocument, tool) {
     const relativePaths = new Set(['outputs.json'])
-    for (const output of tool.outputs) relativePaths.add(outputDocument[output.id])
+    for (const output of tool.outputs) if (outputDocument[output.id] !== undefined) relativePaths.add(outputDocument[output.id])
     if (isPlainObject(outputDocument.preview)) {
       for (const output of tool.outputs) if (outputDocument.preview[output.id]) relativePaths.add(outputDocument.preview[output.id])
     }

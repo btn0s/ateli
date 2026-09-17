@@ -90,6 +90,17 @@ if (request.toolId === 'mesh.optimize' || request.toolId === 'mesh.applyTextures
     await writeFile(path.join(request.outputDir, name + '.png'), 'image:' + name)
     outputs[name] = name + '.png'
   }
+} else if (request.toolId === 'mesh.bake') {
+  // Mirrors the real worker: a channel switched off produces no file at all.
+  await writeFile(path.join(request.outputDir, 'mesh.glb'), 'mesh:bake')
+  await writeFile(path.join(request.outputDir, 'mesh.preview.png'), 'preview:bake')
+  outputs.mesh = 'mesh.glb'
+  outputs.preview = { mesh: 'mesh.preview.png' }
+  for (const [channel, flag] of [['baseColor', 'bakeBaseColor'], ['roughness', 'bakeRoughness'], ['metallic', 'bakeMetallic'], ['normal', 'bakeNormal'], ['ao', 'bakeAO']]) {
+    if (request.inputs[flag] === false) continue
+    await writeFile(path.join(request.outputDir, channel + '.png'), 'image:' + channel)
+    outputs[channel] = channel + '.png'
+  }
 } else if (request.toolId === 'mesh.render') {
   await writeFile(path.join(request.outputDir, 'image.png'), 'render')
   outputs.image = 'image.png'
@@ -538,4 +549,21 @@ test('output.export writes the artifact and full ancestor provenance and enforce
   assert.equal(conflict.status, 'failed')
   assert.match(conflict.nodes.export.error, /exists with different contents/)
   assert.equal(await readFile(path.join(harness.exportRoot, 'conflict.glb'), 'utf8'), 'different-mesh')
+})
+
+test('a node may omit outputs it was configured not to produce, and the cache honours that', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const source = await addSource(harness, harness.meshPath)
+  const bake = { id: 'bake', toolId: 'mesh.bake', toolVersion: 1, parameters: { resolution: 512, bakeBaseColor: true, bakeRoughness: false, bakeMetallic: false, bakeNormal: true, bakeAO: false, aoSamples: 8, margin: 4, rayDistance: 0 } }
+  const runGraph = graph([inputMesh(source.sourceId, 'high'), inputMesh(source.sourceId, 'low'), bake], [
+    edge('high-bake', 'high', 'mesh', 'bake', 'high'),
+    edge('low-bake', 'low', 'mesh', 'bake', 'low'),
+  ])
+  const first = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(first.nodes.bake.status, 'succeeded', JSON.stringify(first.nodes.bake))
+  assert.deepEqual(Object.keys(first.nodes.bake.outputs).sort(), ['baseColor', 'mesh', 'normal'])
+  const second = await waitForRun(harness.origin, (await submit(harness, runGraph)).body.runId)
+  assert.equal(second.nodes.bake.status, 'cached')
+  assert.deepEqual(Object.keys(second.nodes.bake.outputs).sort(), ['baseColor', 'mesh', 'normal'])
 })
