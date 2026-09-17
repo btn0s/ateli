@@ -210,14 +210,73 @@ function stripRootXZ(document) {
   if (!stripped) throw new Error('motion GLB has no root translation channel')
 }
 
+// Uthana characters walk toward +Z; game convention (and every other Ateli mesh) faces -Z.
+function faceNegativeZ(document) {
+  const HALF_TURN_Y = [0, 1, 0, 0]
+  for (const scene of document.getRoot().listScenes()) {
+    for (const node of scene.listChildren()) {
+      const [x, y, z, w] = node.getRotation()
+      const [qx, qy, qz, qw] = HALF_TURN_Y
+      node.setRotation([
+        qw * x + qx * w + qy * z - qz * y,
+        qw * y - qx * z + qy * w + qz * x,
+        qw * z + qx * y - qy * x + qz * w,
+        qw * w - qx * x - qy * y - qz * z,
+      ])
+      const [tx, ty, tz] = node.getTranslation()
+      node.setTranslation([-tx, ty, -tz])
+    }
+  }
+}
+
+function applyMatrix(m, p) {
+  return [
+    m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
+    m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
+    m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14],
+  ]
+}
+
+// Authored travel speed of the clip in metres per second, measured over the middle 60% of the root
+// track so a standing start or stop does not drag it down. Runtimes scale playback by it.
+function measureRootSpeed(document, animation) {
+  const roots = rootJoints(document)
+  for (const channel of animation.listChannels()) {
+    if (channel.getTargetPath() !== 'translation' || !roots.has(channel.getTargetNode())) continue
+    const sampler = channel.getSampler()
+    const times = sampler.getInput().getArray()
+    const values = sampler.getOutput().getArray()
+    const cubic = sampler.getInterpolation() === 'CUBICSPLINE'
+    const stride = cubic ? 9 : 3
+    const valueOffset = cubic ? 3 : 0
+    const keyCount = times.length
+    if (keyCount < 2) return 0
+    const parent = channel.getTargetNode().getParentNode()
+    const matrix = parent ? parent.getWorldMatrix() : [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+    const at = key => applyMatrix(matrix, [values[key * stride + valueOffset], values[key * stride + valueOffset + 1], values[key * stride + valueOffset + 2]])
+    const start = Math.floor(keyCount * 0.2)
+    const end = Math.max(start + 1, Math.floor(keyCount * 0.8))
+    const a = at(start)
+    const b = at(end)
+    const seconds = times[end] - times[start]
+    return seconds > 0 ? Math.hypot(b[0] - a[0], b[2] - a[2]) / seconds : 0
+  }
+  return 0
+}
+
 async function normalizeMotion(filePath, clipName, inPlace) {
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)
   const document = await io.read(filePath)
   const animations = document.getRoot().listAnimations()
   if (animations.length !== 1) throw new Error(`expected one animation, found ${animations.length}`)
-  animations[0].setName(clipName)
+  const animation = animations[0]
+  animation.setName(clipName)
+  const rootSpeed = measureRootSpeed(document, animation)
+  animation.setExtras({ ...animation.getExtras(), rootSpeed: Number(rootSpeed.toFixed(4)) })
   if (inPlace) stripRootXZ(document)
+  faceNegativeZ(document)
   await writeFile(filePath, await io.writeBinary(document))
+  return { rootSpeed }
 }
 
 function textInput(inputs, name, fallback) {
@@ -304,9 +363,9 @@ async function main() {
   if (typeof motionId !== 'string' || !motionId) throw new Error('motion creation returned no motion id')
   const outputMesh = path.join(outputDir, 'mesh.glb')
   await downloadMotion(baseUrl, apiKey, characterId, motionId, fps, outputMesh)
-  await normalizeMotion(outputMesh, clipName, inPlace)
+  const { rootSpeed } = await normalizeMotion(outputMesh, clipName, inPlace)
   await renderPreview(outputDir, outputMesh)
-  await writeFile(path.join(outputDir, 'uthana.json'), `${JSON.stringify({ characterId, motionId, prompt }, null, 2)}\n`)
+  await writeFile(path.join(outputDir, 'uthana.json'), `${JSON.stringify({ characterId, motionId, prompt, rootSpeed }, null, 2)}\n`)
   await writeFile(path.join(outputDir, 'outputs.json'), `${JSON.stringify({
     mesh: 'mesh.glb', preview: { mesh: 'mesh.preview.png' }, meta: { mesh: 'uthana.json' }, log: 'worker.log',
   }, null, 2)}\n`)

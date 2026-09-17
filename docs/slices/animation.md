@@ -63,3 +63,8 @@ Category `Video` is new. Read each model's `/api` page on fal for exact input na
 - `list.collectMeshes` and `list.collectImages` are variadic aggregation seams: repeated scalar edges may target their `item` port. Other input ports still reject duplicate incoming edges. This is required for the three motion nodes in the character-motion seed to feed one `Collect Meshes` node.
 - Named clip animations retain their names during `mesh.mergeAnimations`. The checked-in renderer fixtures contain unnamed animations, so an unnamed clip receives its source filename stem (`idle`, `walk`, or `attack`); additional unnamed animations in the same file receive `-2`, `-3`, and so on.
 - The fixture-generation prompts were not stored with the GLBs. The seed makes the intended actions explicit: “Standing idle, breathing naturally with subtle shifts of weight.”, “Walk forward at a steady relaxed pace.”, and “Raise a rifle to the shoulder, fire once, and recover to a ready stance.”
+
+## Conventions added after the first batch
+
+- Uthana characters walk toward +Z; the worker rotates every motion output so the character faces -Z like every other Ateli mesh.
+- The worker measures the clip's authored travel speed (root XZ displacement over the middle 60% of the track, world space) before flattening it and stores it as the animation's `extras.rootSpeed` (m/s) and in `uthana.json`. Runtimes scale walk playback by `groundSpeed / rootSpeed`; a `tired` prompt produced 0.45 m/s, `normal brisk pace` 1.63 m/s.

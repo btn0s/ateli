@@ -138,7 +138,9 @@ test('Uthana worker sends recorded multipart and JSON request shapes and normali
   const textDocument = await new NodeIO().read(path.join(text.outputDir, 'mesh.glb'))
   assert.deepEqual(textDocument.getRoot().listAnimations().map(animation => animation.getName()), ['idle'])
   assert.deepEqual([...textDocument.getRoot().listAnimations()[0].listSamplers()[0].getOutput().getArray()], [0, 0, 0, 0, 1, 0])
-  assert.deepEqual(JSON.parse(await readFile(path.join(text.outputDir, 'uthana.json'), 'utf8')), { characterId: 'character-123', motionId: 'motion-text', prompt: 'Stand and breathe.' })
+  const meta = JSON.parse(await readFile(path.join(text.outputDir, 'uthana.json'), 'utf8'))
+  assert.deepEqual({ ...meta, rootSpeed: undefined }, { characterId: 'character-123', motionId: 'motion-text', prompt: 'Stand and breathe.', rootSpeed: undefined })
+  assert.ok(meta.rootSpeed > 0, 'authored root speed is measured before the root track is flattened')
 
   const video = await requestFixture(root, 'motion.fromVideo', { character: 'character-123', video: { path: videoPath }, clipName: 'attack', inPlace: true, fps: 30 })
   await runWorker(video.requestPath, env)
