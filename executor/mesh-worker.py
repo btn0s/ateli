@@ -374,14 +374,21 @@ class Worker:
             cage = max((maximum - minimum).length * 0.005, 0.001)
         self.log("bake cage extrusion %.4f" % cage)
         # A hand-made low pokes outside the high in places (fingertips, chin, kneecaps); rays from there hit nothing
-        # and bake black. For the bake only, the low's vertices are shrinkwrapped onto the high surface so every ray
-        # lands, then the original geometry is restored — UVs never change, so the maps still fit the real low.
+        # and bake black. For the colour channels the low's vertices are shrinkwrapped onto the high surface so every
+        # ray lands. Normal and AO describe the low's own geometry, so they bake against the real surface — a tangent
+        # normal map baked on the conformed shape and applied to the restored one is simply wrong.
+        colour_channels = ("baseColor", "roughness", "metallic")
         restore = conform_low_for_bake(low, high, self.log)
+        conformed = True
         baked = {}
         for channel, is_enabled in enabled.items():
             if not is_enabled:
                 self.log("%s bake disabled" % channel)
                 continue
+            if conformed and channel not in colour_channels:
+                restore()
+                conformed = False
+                self.log("low geometry restored before %s bake" % channel)
             image = bpy.data.images.new("Ateli baked %s" % channel, width=resolution, height=resolution, alpha=False, float_buffer=False)
             image.generated_color = SOLID_DEFAULTS[channel]
             set_colorspace(image, "sRGB" if channel == "baseColor" else "Non-Color")
