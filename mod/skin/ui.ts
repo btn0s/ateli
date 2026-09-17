@@ -104,10 +104,7 @@ const tldraw = `
 .tlui-dialog__footer__actions .tlui-button::after { inset:6px 4px; }
 .tlui-dialog__footer__actions .tlui-button__primary::after { background:var(--ui-ink); box-shadow:inset 0 1px 0 #ffffff59; }
 .tlui-dialog__footer__actions .tlui-button__primary { color:var(--ui-panel-solid); }
-.desktop-share__trigger.tlui-button::before { background:var(--ui-ink); border-radius:var(--tl-radius-2); box-shadow:inset 0 1px 0 #ffffff59,inset 0 -1px 0 #00000026; }
-.desktop-share__trigger.tlui-button::after { background:var(--ui-panel); box-shadow:var(--ui-shadow-attached); }
-.desktop-share__trigger.tlui-button:not(:disabled,[data-disabled]):hover::before,.desktop-share__trigger.tlui-button[data-state=open]::before { background:var(--ui-ink-2); }
-.desktop-share__trigger.tlui-button { color:var(--ui-panel-solid); }
+.desktop-share__trigger,.tlui-navigation-panel { display:none; }
 .tl-container__focused:not(.tl-container__no-focus-ring) .tlui-button:focus-visible { outline:2px solid var(--ui-ring); outline-offset:-2px; border-radius:var(--tl-radius-2); }
 @media (prefers-reduced-motion:reduce) { .tlui-button::after { transition:none; } }
 `

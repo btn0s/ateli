@@ -46,18 +46,21 @@ function parseGlb(buffer) {
   assert.equal(buffer.readUInt32LE(4), 2)
   let offset = 12
   let json
+  let binary
   while (offset < buffer.length) {
     const length = buffer.readUInt32LE(offset)
     const type = buffer.readUInt32LE(offset + 4)
     const data = buffer.subarray(offset + 8, offset + 8 + length)
     if (type === 0x4E4F534A) json = JSON.parse(data.toString('utf8').trim())
+    if (type === 0x004E4942) binary = data
     offset += 8 + length
   }
   assert.ok(json, 'GLB has a JSON chunk')
-  return json
+  assert.ok(binary, 'GLB has a binary chunk')
+  return { json, binary }
 }
 
-function glbTriangleCount(json) {
+function glbTriangleCount({ json }) {
   let triangles = 0
   for (const mesh of json.meshes ?? []) {
     for (const primitive of mesh.primitives ?? []) {
@@ -70,7 +73,7 @@ function glbTriangleCount(json) {
   return triangles
 }
 
-function glbPositionBounds(json) {
+function glbPositionBounds({ json }) {
   const minimum = [Infinity, Infinity, Infinity]
   const maximum = [-Infinity, -Infinity, -Infinity]
   for (const mesh of json.meshes ?? []) {
@@ -84,6 +87,90 @@ function glbPositionBounds(json) {
     }
   }
   return { minimum, maximum }
+}
+
+const ACCESSOR_COMPONENTS = new Map([
+  ['SCALAR', 1],
+  ['VEC2', 2],
+  ['VEC3', 3],
+  ['VEC4', 4],
+])
+
+const COMPONENT_BYTES = new Map([
+  [5120, 1],
+  [5121, 1],
+  [5122, 2],
+  [5123, 2],
+  [5125, 4],
+  [5126, 4],
+])
+
+function readComponent(view, offset, componentType) {
+  if (componentType === 5120) return view.getInt8(offset)
+  if (componentType === 5121) return view.getUint8(offset)
+  if (componentType === 5122) return view.getInt16(offset, true)
+  if (componentType === 5123) return view.getUint16(offset, true)
+  if (componentType === 5125) return view.getUint32(offset, true)
+  if (componentType === 5126) return view.getFloat32(offset, true)
+  assert.fail(`unsupported accessor component type ${componentType}`)
+}
+
+function readAccessor(asset, accessorIndex) {
+  const accessor = asset.json.accessors[accessorIndex]
+  assert.equal(accessor.sparse, undefined, 'sparse accessors are not expected in Blender GLBs')
+  const bufferView = asset.json.bufferViews[accessor.bufferView]
+  const components = ACCESSOR_COMPONENTS.get(accessor.type)
+  const componentBytes = COMPONENT_BYTES.get(accessor.componentType)
+  assert.ok(components, `supported accessor type, got ${accessor.type}`)
+  assert.ok(componentBytes, `supported component type, got ${accessor.componentType}`)
+  const elementBytes = components * componentBytes
+  const stride = bufferView.byteStride ?? elementBytes
+  const start = (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
+  const view = new DataView(asset.binary.buffer, asset.binary.byteOffset, asset.binary.byteLength)
+  return Array.from({ length: accessor.count }, (_, index) => {
+    const elementOffset = start + index * stride
+    return Array.from({ length: components }, (_, component) => (
+      readComponent(view, elementOffset + component * componentBytes, accessor.componentType)
+    ))
+  })
+}
+
+function angleDegrees(origin, first, second) {
+  const a = first.map((value, axis) => value - origin[axis])
+  const b = second.map((value, axis) => value - origin[axis])
+  const denominator = Math.hypot(...a) * Math.hypot(...b)
+  if (denominator <= Number.EPSILON) return 0
+  const cosine = a.reduce((sum, value, axis) => sum + value * b[axis], 0) / denominator
+  return Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI
+}
+
+function glbSliverRatio(asset) {
+  let triangles = 0
+  let slivers = 0
+  for (const mesh of asset.json.meshes ?? []) {
+    for (const primitive of mesh.primitives ?? []) {
+      assert.equal(primitive.mode ?? 4, 4, 'primitive is TRIANGLES')
+      const positions = readAccessor(asset, primitive.attributes.POSITION)
+      const indices = primitive.indices === undefined
+        ? Array.from({ length: positions.length }, (_, index) => index)
+        : readAccessor(asset, primitive.indices).map(([index]) => index)
+      assert.equal(indices.length % 3, 0)
+      for (let offset = 0; offset < indices.length; offset += 3) {
+        const a = positions[indices[offset]]
+        const b = positions[indices[offset + 1]]
+        const c = positions[indices[offset + 2]]
+        const minimumAngle = Math.min(
+          angleDegrees(a, b, c),
+          angleDegrees(b, c, a),
+          angleDegrees(c, a, b),
+        )
+        triangles += 1
+        if (minimumAngle < 5) slivers += 1
+      }
+    }
+  }
+  assert.ok(triangles > 0, 'GLB contains triangles')
+  return slivers / triangles
 }
 
 function decodePng(buffer) {
@@ -189,17 +276,73 @@ function solidPng(width, height, rgba) {
   ])
 }
 
-test('mesh.optimize reaches 20,000 triangles and emits a preview', { skip: !HAS_BLENDER, timeout: 600_000 }, async (t) => {
+let decimateSliverRatio
+
+test('mesh.optimize decimate reaches 20,000 triangles and emits a preview', { skip: !HAS_BLENDER, timeout: 60_000 }, async (t) => {
   const run = await runWorker(t, 'mesh.optimize', {
     mesh: { path: CANONICAL },
+    engine: 'decimate',
     topology: 'triangle',
     targetFaces: 20_000,
   })
-  const json = parseGlb(await readFile(path.join(run.directory, run.outputs.mesh)))
-  const triangles = glbTriangleCount(json)
+  const asset = parseGlb(await readFile(path.join(run.directory, run.outputs.mesh)))
+  const triangles = glbTriangleCount(asset)
   assert.ok(Math.abs(triangles - 20_000) <= 400, `got ${triangles} triangles`)
+  decimateSliverRatio = glbSliverRatio(asset)
+  const meta = JSON.parse(await readFile(path.join(run.directory, run.outputs.meta.mesh), 'utf8'))
+  assert.equal(meta.engineRequested, 'decimate')
+  assert.equal(meta.engineUsed, 'decimate')
+  assert.equal(meta.outputTriangles, triangles)
+  assert.equal(meta.hasUVs, true)
   const preview = decodePng(await readFile(path.join(run.directory, run.outputs.preview.mesh)))
   assert.deepEqual([preview.width, preview.height], [512, 512])
+})
+
+test('mesh.optimize quadriflow avoids sliver triangles at a 20,000 triangle target', { skip: !HAS_BLENDER, timeout: 60_000 }, async (t) => {
+  const run = await runWorker(t, 'mesh.optimize', {
+    mesh: { path: CANONICAL },
+    engine: 'quadriflow',
+    topology: 'triangle',
+    targetFaces: 20_000,
+  })
+  const asset = parseGlb(await readFile(path.join(run.directory, run.outputs.mesh)))
+  const triangles = glbTriangleCount(asset)
+  assert.ok(Math.abs(triangles - 20_000) <= 2_000, `got ${triangles} triangles`)
+  assert.deepEqual(run.outputs.meta, { mesh: 'optimize.json' })
+  const meta = JSON.parse(await readFile(path.join(run.directory, run.outputs.meta.mesh), 'utf8'))
+  assert.equal(meta.engineRequested, 'quadriflow')
+  assert.ok(['quadriflow', 'voxel'].includes(meta.engineUsed), `unexpected engineUsed ${meta.engineUsed}`)
+  if (meta.engineUsed === 'voxel') {
+    const fallback = run.stdout.split('\n').find((line) => line.includes('quadriflow failed'))
+    assert.match(fallback ?? '', /quadriflow failed .* falling back to voxel/)
+    console.log(`quadriflow fallback: ${fallback}`)
+  }
+  assert.equal(meta.outputTriangles, triangles)
+  assert.equal(meta.hasUVs, false)
+  const quadriflowSliverRatio = glbSliverRatio(asset)
+  assert.ok(quadriflowSliverRatio < 0.02, `quadriflow sliver ratio was ${(quadriflowSliverRatio * 100).toFixed(3)}%`)
+  assert.notEqual(decimateSliverRatio, undefined, 'decimate sliver ratio was measured first')
+  console.log(`sliver ratios (minimum angle < 5°): quadriflow=${(quadriflowSliverRatio * 100).toFixed(3)}% decimate=${(decimateSliverRatio * 100).toFixed(3)}%`)
+  console.log(`quadriflow optimize.json meta: ${JSON.stringify(meta)}`)
+})
+
+test('mesh.optimize voxel reaches 20,000 triangles and discards UVs', { skip: !HAS_BLENDER, timeout: 60_000 }, async (t) => {
+  const run = await runWorker(t, 'mesh.optimize', {
+    mesh: { path: CANONICAL },
+    engine: 'voxel',
+    topology: 'triangle',
+    targetFaces: 20_000,
+    voxelSize: 0.02,
+  })
+  const asset = parseGlb(await readFile(path.join(run.directory, run.outputs.mesh)))
+  const triangles = glbTriangleCount(asset)
+  assert.ok(Math.abs(triangles - 20_000) <= 2_000, `got ${triangles} triangles`)
+  const meta = JSON.parse(await readFile(path.join(run.directory, run.outputs.meta.mesh), 'utf8'))
+  assert.equal(meta.engineRequested, 'voxel')
+  assert.equal(meta.engineUsed, 'voxel')
+  assert.equal(meta.outputTriangles, triangles)
+  assert.equal(meta.hasUVs, false)
+  assert.match(run.stdout, /voxel remesh .* produced \d+ triangle\(s\) before decimation/)
 })
 
 test('mesh.extractTextures writes four PNG channels with OpenGL normals', { skip: !HAS_BLENDER, timeout: 600_000 }, async (t) => {
@@ -226,8 +369,38 @@ test('mesh.applyTextures embeds a supplied base color image', { skip: !HAS_BLEND
     baseColor: { path: red },
     normalConvention: 'opengl',
   })
-  const json = parseGlb(await readFile(path.join(run.directory, run.outputs.mesh)))
+  const { json } = parseGlb(await readFile(path.join(run.directory, run.outputs.mesh)))
   assert.ok(json.images?.some((image) => Number.isInteger(image.bufferView)), 'GLB embeds an image bufferView')
+})
+
+// Regression: baked images were saved to disk but exported as their GENERATED default (0.8 grey), so the
+// GLB carried no detail while the standalone PNG outputs looked right.
+test('mesh.bake embeds the baked maps, not the generated defaults', { skip: !HAS_BLENDER, timeout: 900_000 }, async (t) => {
+  const low = await runWorker(t, 'mesh.optimize', { mesh: { path: CANONICAL }, engine: 'voxel', targetFaces: 8000, topology: 'triangle', voxelSize: 0.02, preserveUVs: false })
+  const run = await runWorker(t, 'mesh.bake', {
+    high: { path: CANONICAL },
+    low: { path: path.join(low.directory, low.outputs.mesh) },
+    resolution: 512, bakeBaseColor: true, bakeRoughness: false, bakeMetallic: false, bakeNormal: true, bakeAO: false, aoSamples: 8, margin: 4,
+  })
+  const { json, binary } = parseGlb(await readFile(path.join(run.directory, run.outputs.mesh)))
+  const material = json.materials[0]
+  const embedded = (textureIndex) => {
+    const image = json.images[json.textures[textureIndex].source]
+    const view = json.bufferViews[image.bufferView]
+    return decodePng(binary.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength))
+  }
+  const stats = ({ pixels, channels }) => {
+    const sums = [0, 0, 0], squares = [0, 0, 0]
+    const count = pixels.length / channels
+    for (let i = 0; i < pixels.length; i += channels) for (let c = 0; c < 3; c += 1) { sums[c] += pixels[i + c]; squares[c] += pixels[i + c] ** 2 }
+    return sums.map((sum, c) => ({ mean: sum / count, std: Math.sqrt(squares[c] / count - (sum / count) ** 2) }))
+  }
+  const base = stats(embedded(material.pbrMetallicRoughness.baseColorTexture.index))
+  const normal = stats(embedded(material.normalTexture.index))
+  const baseOnDisk = stats(decodePng(await readFile(path.join(run.directory, run.outputs.baseColor))))
+  assert.ok(Math.abs(base[0].mean - baseOnDisk[0].mean) < 2, `embedded base color mean ${base[0].mean.toFixed(1)} should match the saved PNG ${baseOnDisk[0].mean.toFixed(1)}`)
+  assert.ok(base[0].mean < 190, `embedded base color is the generated grey (${base[0].mean.toFixed(1)})`)
+  assert.ok(normal[2].std > 5, `embedded normal map is flat (std ${normal[2].std.toFixed(2)})`)
 })
 
 test('mesh.render writes a 1024 square PNG', { skip: !HAS_BLENDER, timeout: 600_000 }, async (t) => {

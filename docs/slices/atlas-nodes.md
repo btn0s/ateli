@@ -104,7 +104,7 @@ Generation (`runtime: 'meshy'`):
 Processing (`runtime: 'blender'`):
 | id | title | inputs | outputs |
 |---|---|---|---|
-| `mesh.optimize` | Optimize Mesh | `mesh`, `topology: enum ['triangle'] advanced`, `targetFaces: number 4..10000000 default 80000` | `mesh` |
+| `mesh.optimize` | Optimize Mesh | `mesh`, `engine: enum ['quadriflow','voxel','decimate'] default 'quadriflow'`, `targetFaces: number 4..10000000 default 80000`, `topology: enum ['triangle','quad'] default 'triangle' advanced`, `voxelSize: number 0.001..1 default 0.01 advanced`, `preserveUVs: boolean default false advanced` | `mesh` |
 | `mesh.autoTransform` | Auto Transform Mesh | `mesh`, `targetHeight: number default 1.8` (metres), `origin: enum ['bottom-center','center'] default 'bottom-center'`, `faceAxis: enum ['-Y','+Y','-X','+X','-Z','+Z'] default '-Y'` | `mesh` |
 | `mesh.bboxFit` | Mesh BBox Fit | `mesh`, `width/height/depth: number` | `mesh` |
 | `mesh.setOrigin` | Set Mesh Origin | `mesh`, `origin: enum ['bottom-center','center','top-center','min-corner']` | `mesh` |
@@ -113,6 +113,8 @@ Processing (`runtime: 'blender'`):
 | `mesh.extractTextures` | Extract Texture Maps | `mesh` | `baseColor`, `roughness`, `metallic`, `normal` (image) |
 | `mesh.applyTextures` | Apply Textures to Mesh | `mesh`, `baseColor: image?`, `roughness: image?`, `metallic: image?`, `normal: image?`, `normalConvention: enum ['opengl','directx'] advanced` | `mesh` |
 | `mesh.bake` | Bake High-Poly to Low-Poly | `high: mesh`, `low: mesh`, `resolution: number 256..4096 default 2048`, `bakeBaseColor/bakeRoughness/bakeMetallic/bakeNormal/bakeAO: boolean default true`, `aoSamples: number default 32 advanced`, `margin: number default 16 advanced` | `mesh` (low with baked textures applied), `baseColor`, `roughness`, `metallic`, `normal`, `ao` (image) |
+
+`mesh.optimize`'s QuadriFlow and voxel remesh engines reconstruct topology and discard UVs. Pair remeshed output with `mesh.bake` to transfer textures from the source mesh. Quad output is available only with QuadriFlow; voxel and decimate output is triangulated. `preserveUVs` applies only to decimate.
 
 ### Output (`runtime: 'none'` — resolved by the bridge, no subprocess)
 
@@ -131,7 +133,7 @@ The bridge executes nodes **one at a time in topological order**, each in its ow
 Per-node request written to `<runDir>/nodes/<nodeId>/request.json`:
 ```json
 { "runId": "…", "nodeId": "shape:…", "toolId": "mesh.optimize",
-  "inputs": { "mesh": { "path": "/abs/upstream/mesh.glb" }, "targetFaces": 80000, "topology": "triangle" },
+  "inputs": { "mesh": { "path": "/abs/upstream/mesh.glb" }, "engine": "quadriflow", "targetFaces": 80000, "topology": "triangle" },
   "outputDir": "/abs/<runDir>/nodes/<nodeId>" }
 ```
 File-typed inputs are `{ path }`; scalars are bare values. Worker writes every output to `outputDir` and then `outputDir/outputs.json`:

@@ -23,6 +23,7 @@ import {
 import { cn } from '@/lib/utils'
 import { activeRun, cancelAteliRun, client, runAteliGraph, type AteliRunScope } from './ateli-client'
 import { catalog, defaultValues, getTool, placeholderTool, type AteliParam, type AteliValueType } from './ateli-tools'
+import { openLightbox } from './lightbox'
 
 export interface AteliNodeProps {
 	w: number
@@ -373,8 +374,25 @@ function Preview({ toolId, results }: { toolId: string; results: Record<string, 
 		return result ? [{ output, result }] : []
 	})
 	const visual = resolved.filter(({ result }) => (result.kind === 'mesh' || result.kind === 'image') && result.previewUrl)
+	async function show(outputLabel: string, result: StoredResult) {
+		const loaded = await client.result(result.resultId)
+		openLightbox({
+			title:`${tool.title} · ${outputLabel}`,
+			kind:result.kind === 'mesh' ? 'mesh' : 'image',
+			previewUrl:loaded.previewUrl,
+			downloadUrl:loaded.downloadUrl,
+		})
+	}
 	if (visual.length) {
-		return <div className="ui-well flex h-full items-center gap-1 overflow-hidden rounded-lg p-1">{visual.map(({ output, result }) => <img key={output.id} src={result.previewUrl} alt={`${output.label} preview`} className="h-full min-w-0 flex-1 rounded object-contain" />)}</div>
+		return (
+			<div className="ui-well flex h-full items-center gap-1 overflow-hidden rounded-lg p-1">
+				{visual.map(({ output, result }) => (
+					<button key={output.id} type="button" data-ateli-preview={output.id} className="pointer-events-auto h-full min-w-0 flex-1 cursor-zoom-in overflow-hidden rounded border-0 bg-transparent p-0" aria-label={`Open ${output.label} preview`} onPointerDown={stop} onClick={event => { stop(event); void show(output.label, result).catch(error => console.error('[ateli] result preview failed', error)) }}>
+						<img src={result.previewUrl} alt={`${output.label} preview`} className="size-full object-contain" />
+					</button>
+				))}
+			</div>
+		)
 	}
 	const scalar = resolved.find(({ result }) => result.value !== undefined)
 	if (scalar) return <div className="ui-well grid h-full place-items-center overflow-auto rounded-lg px-3 text-center text-xs text-foreground">{String(scalar.result.value)}</div>

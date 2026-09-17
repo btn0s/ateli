@@ -144,31 +144,88 @@ class Worker:
 
     def optimize(self):
         objects = self.import_mesh()
+        engine_requested = str(self.scalar("engine", "quadriflow"))
+        topology = str(self.scalar("topology", "triangle"))
         target = int(self.scalar("targetFaces", 80000))
-        if target < 4:
-            raise RuntimeError("targetFaces must be at least 4")
-        triangulate(objects)
-        before = triangle_count(objects)
-        if before > target:
-            ratio = max(0.0, min(1.0, target / float(before)))
-            self.log("decimating %d triangles toward %d (ratio %.8f)" % (before, target, ratio))
-            for obj in objects:
-                if not obj.data.polygons:
-                    continue
-                select_only(obj)
-                modifier = obj.modifiers.new("Ateli Collapse Decimate", "DECIMATE")
-                modifier.decimate_type = "COLLAPSE"
-                modifier.ratio = ratio
-                if hasattr(modifier, "use_collapse_triangulate"):
-                    modifier.use_collapse_triangulate = True
-                bpy.ops.object.modifier_apply(modifier=modifier.name)
-            triangulate(objects)
-        after = triangle_count(objects)
-        tolerance = max(1, int(math.ceil(target * 0.02)))
-        if before > target and abs(after - target) > tolerance:
-            raise RuntimeError("collapse decimation produced %d triangles; target %d requires ±%d" % (after, target, tolerance))
-        self.log("optimize result=%d target=%d tolerance=%d" % (after, target, tolerance))
-        return self.finish_mesh(objects)
+        voxel_size = float(self.scalar("voxelSize", 0.01))
+        preserve_uvs = bool(self.scalar("preserveUVs", False))
+        if engine_requested not in {"quadriflow", "voxel", "decimate"}:
+            raise RuntimeError("invalid optimize engine: %s" % engine_requested)
+        if topology not in {"triangle", "quad"}:
+            raise RuntimeError("invalid optimize topology: %s" % topology)
+        if target < 4 or target > 10000000:
+            raise RuntimeError("targetFaces must be between 4 and 10000000")
+        if engine_requested in {"quadriflow", "voxel"} and (not math.isfinite(voxel_size) or voxel_size < 0.001 or voxel_size > 1.0):
+            raise RuntimeError("voxelSize must be between 0.001 and 1")
+
+        input_triangles = triangle_count(objects)
+        engine_used = engine_requested
+        if engine_requested == "decimate":
+            if topology == "quad":
+                self.log("decimate does not produce quad topology; triangulating output")
+            self.log("decimate retains UV data; preserveUVs=%s" % preserve_uvs)
+            objects = decimate_to_target(objects, target, self.log)
+        else:
+            objects = join_mesh_objects(objects, self.log)
+            obj = objects[0]
+            if engine_requested == "voxel":
+                voxel_remesh_to_target(obj, voxel_size, target, self.log)
+            else:
+                backup = obj.data.copy()
+                quad_target = target if topology == "quad" else max(4, int(round(target / 2.0)))
+                self.log("quadriflow remesh target=%d %s face(s)" % (quad_target, "quad" if topology == "quad" else "quad before triangulation"))
+                try:
+                    select_only(obj)
+                    result = bpy.ops.object.quadriflow_remesh(
+                        target_faces=quad_target,
+                        use_mesh_symmetry=False,
+                        use_preserve_sharp=True,
+                        use_preserve_boundary=True,
+                        smooth_normals=True,
+                    )
+                    if "FINISHED" not in result:
+                        raise RuntimeError("operator returned %s" % sorted(result))
+                except Exception as exc:
+                    failed_data = obj.data
+                    obj.data = backup
+                    if failed_data != backup and failed_data.users == 0:
+                        bpy.data.meshes.remove(failed_data)
+                    engine_used = "voxel"
+                    self.log("quadriflow failed (%s); falling back to voxel" % exc)
+                    voxel_remesh_to_target(obj, voxel_size, target, self.log)
+                else:
+                    bpy.data.meshes.remove(backup)
+                    clear_uvs(objects)
+                    self.log("quadriflow remesh produced %d triangle(s) before topology conversion" % triangle_count(objects))
+                    if topology == "triangle":
+                        triangulate(objects)
+                        remeshed_triangles = triangle_count(objects)
+                        if remeshed_triangles > target * 1.05:
+                            self.log("quadriflow result is more than 5%% over target; applying light decimate pass")
+                            objects = decimate_to_target(objects, target, self.log)
+
+            clear_uvs(objects)
+            self.log("%s remesh output has no UVs; use mesh.bake to transfer textures" % engine_used)
+
+        output_triangles = triangle_count(objects)
+        output_has_uvs = has_uvs(objects)
+        self.log(
+            "optimize engineRequested=%s engineUsed=%s inputTriangles=%d outputTriangles=%d hasUVs=%s"
+            % (engine_requested, engine_used, input_triangles, output_triangles, output_has_uvs)
+        )
+        metadata = {
+            "engineRequested": engine_requested,
+            "engineUsed": engine_used,
+            "inputTriangles": input_triangles,
+            "outputTriangles": output_triangles,
+            "hasUVs": output_has_uvs,
+        }
+        with open(os.path.join(self.output_dir, "optimize.json"), "w", encoding="utf-8") as handle:
+            json.dump(metadata, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        result = self.finish_mesh(objects)
+        result["meta"] = {"mesh": "optimize.json"}
+        return result
 
     def auto_transform(self):
         objects = self.import_mesh()
@@ -325,8 +382,18 @@ class Worker:
             finally:
                 remove_bake_targets(target_nodes)
             filename = channel + ".png"
-            save_image_as_png(image, os.path.join(self.output_dir, filename))
-            image.filepath = os.path.join(self.output_dir, filename)
+            destination = os.path.join(self.output_dir, filename)
+            save_image_as_png(image, destination)
+            # A GENERATED image exports as its generated_color, not its baked pixels: rebind it to the saved
+            # file and pack it so the glTF exporter embeds what was actually baked.
+            image.filepath = destination
+            image.source = "FILE"
+            image.reload()
+            set_colorspace(image, "sRGB" if channel == "baseColor" else "Non-Color")
+            try:
+                image.pack()
+            except RuntimeError:
+                pass
             baked[channel] = image
             self.log("baked %s at %d with margin %d" % (channel, resolution, margin))
         material_channels = dict(baked)
@@ -339,6 +406,8 @@ class Worker:
 
 
 def select_only(obj):
+    if bpy.context.object is not None and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
@@ -372,6 +441,69 @@ def triangulate(objects):
         modifier.ngon_method = "BEAUTY"
         bpy.ops.object.modifier_apply(modifier=modifier.name)
 
+
+
+def join_mesh_objects(objects, logger):
+    bake_world_transforms(objects)
+    if len(objects) == 1:
+        select_only(objects[0])
+        return objects
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in objects:
+        obj.hide_set(False)
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.object.join()
+    logger("joined %d mesh objects for remeshing" % len(objects))
+    return [objects[0]]
+
+
+def has_uvs(objects):
+    return any(len(obj.data.uv_layers) > 0 for obj in objects)
+
+
+def clear_uvs(objects):
+    for obj in objects:
+        while obj.data.uv_layers:
+            obj.data.uv_layers.remove(obj.data.uv_layers[0])
+
+
+def decimate_to_target(objects, target, logger):
+    triangulate(objects)
+    before = triangle_count(objects)
+    if before <= target:
+        return objects
+    ratio = max(0.0, min(1.0, target / float(before)))
+    logger("decimating %d triangles toward %d (ratio %.8f)" % (before, target, ratio))
+    for obj in objects:
+        if not obj.data.polygons:
+            continue
+        select_only(obj)
+        modifier = obj.modifiers.new("Ateli Collapse Decimate", "DECIMATE")
+        modifier.decimate_type = "COLLAPSE"
+        modifier.ratio = ratio
+        if hasattr(modifier, "use_collapse_triangulate"):
+            modifier.use_collapse_triangulate = True
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    triangulate(objects)
+    after = triangle_count(objects)
+    tolerance = max(1, int(math.ceil(target * 0.02)))
+    if abs(after - target) > tolerance:
+        raise RuntimeError("collapse decimation produced %d triangles; target %d requires ±%d" % (after, target, tolerance))
+    logger("decimate result=%d target=%d tolerance=%d" % (after, target, tolerance))
+    return objects
+
+
+def voxel_remesh_to_target(obj, voxel_size, target, logger):
+    select_only(obj)
+    obj.data.remesh_voxel_size = voxel_size
+    obj.data.remesh_voxel_adaptivity = 0.0
+    result = bpy.ops.object.voxel_remesh()
+    if "FINISHED" not in result:
+        raise RuntimeError("voxel remesh returned %s" % sorted(result))
+    clear_uvs([obj])
+    logger("voxel remesh at size %.6f produced %d triangle(s) before decimation" % (voxel_size, triangle_count([obj])))
+    decimate_to_target([obj], target, logger)
 
 def bounds(objects):
     minimum = Vector((math.inf, math.inf, math.inf))
