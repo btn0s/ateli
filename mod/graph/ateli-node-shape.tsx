@@ -1,5 +1,5 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
-import { Box, Boxes, ChevronRight, FastForward, MoreHorizontal, Play } from 'lucide-react'
+import { Box, Boxes, ChevronRight, Download, FastForward, Maximize2, MoreHorizontal, Play, Trash2 } from 'lucide-react'
 import {
 	BaseBoxShapeTool,
 	HTMLContainer,
@@ -394,14 +394,43 @@ function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
 			downloadUrl:loaded.downloadUrl,
 		})
 	}
+	// Save through the native dialog so the user picks the folder; fall back to a download link where the
+	// File System Access API is unavailable. The Export node remains the way to record provenance.
+	async function save(result: StoredResult) {
+		const loaded = await client.result(result.resultId)
+		const response = await fetch(loaded.downloadUrl)
+		if (!response.ok) throw new Error(`download failed (${response.status})`)
+		const blob = await response.blob()
+		const picker = (window as Window & { showSaveFilePicker?: (options: { suggestedName?: string }) => Promise<{ createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }> }).showSaveFilePicker
+		if (picker) {
+			const handle = await picker({ suggestedName:loaded.name }).catch(() => undefined)
+			if (!handle) return
+			const writable = await handle.createWritable()
+			await writable.write(blob)
+			await writable.close()
+			return
+		}
+		const url = URL.createObjectURL(blob)
+		const anchor = Object.assign(document.createElement('a'), { href:url, download:loaded.name })
+		anchor.click()
+		URL.revokeObjectURL(url)
+	}
+	const clear = () => editor.updateShape<AteliNodeShape>({ id:shape.id, type:'ateli-node', props:{ results:{} } })
+	const report = (error: unknown) => console.error('[ateli] preview action failed', error)
 	if (visual.length) {
+		const primary = visual[0]!
 		return (
-			<div className="ui-well flex h-full items-center gap-1 overflow-hidden rounded-lg p-1">
+			<div className="group ui-well relative flex h-full items-center gap-1 overflow-hidden rounded-lg p-1">
 				{visual.map(({ output, result }) => (
-					<button key={output.id} type="button" data-ateli-preview={output.id} className="pointer-events-auto h-full min-w-0 flex-1 cursor-zoom-in overflow-hidden rounded border-0 bg-transparent p-0" aria-label={`Open ${output.label} preview`} onPointerDown={stop} onClick={event => { stop(event); void show(output.label, result).catch(error => console.error('[ateli] result preview failed', error)) }}>
+					<button key={output.id} type="button" data-ateli-preview={output.id} className="pointer-events-auto h-full min-w-0 flex-1 cursor-zoom-in overflow-hidden rounded border-0 bg-transparent p-0" aria-label={`Open ${output.label} preview`} onPointerDown={stop} onClick={event => { stop(event); void show(output.label, result).catch(report) }}>
 						<img src={result.previewUrl} alt={`${output.label} preview`} className="size-full object-contain" />
 					</button>
 				))}
+				<div className="pointer-events-auto absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100" onPointerDown={stop}>
+					<button type="button" className="ui-key ui-icon-button size-7" title="Expand" aria-label="Expand preview" onClick={event => { stop(event); void show(primary.output.label, primary.result).catch(report) }}><Maximize2 size={13} /></button>
+					<button type="button" className="ui-key ui-icon-button size-7" title="Save file…" aria-label="Save file" onClick={event => { stop(event); void save(primary.result).catch(report) }}><Download size={13} /></button>
+					<button type="button" className="ui-key ui-icon-button size-7" title="Clear results" aria-label="Clear results" onClick={event => { stop(event); clear() }}><Trash2 size={13} /></button>
+				</div>
 			</div>
 		)
 	}
