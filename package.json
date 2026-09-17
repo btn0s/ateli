@@ -1,0 +1,10 @@
+{
+  "name": "ateli-poc",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "smoke": "node bin/ateli-smoke.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}
