@@ -367,13 +367,24 @@ function OutputRow({ shape, editor, port, readonly, active }: { shape: AteliNode
 	)
 }
 
-function Preview({ toolId, results }: { toolId: string; results: Record<string, JsonValue> }) {
+function Preview({ shape, editor }: { shape: AteliNodeShape; editor: Editor }) {
+	const { toolId, results } = shape.props
 	const tool = (getTool(toolId) ?? placeholderTool(toolId))
 	const resolved = tool.outputs.flatMap(output => {
 		const result = storedResult(results[output.id])
 		return result ? [{ output, result }] : []
 	})
-	const visual = resolved.filter(({ result }) => (result.kind === 'mesh' || result.kind === 'image') && result.previewUrl)
+	let visual = resolved.filter(({ result }) => (result.kind === 'mesh' || result.kind === 'image') && result.previewUrl)
+	// A node that only passes a file through (Export) shows what it exported: the connected upstream result.
+	if (!visual.length && resolved.length) {
+		for (const input of tool.inputs) {
+			if (input.type !== 'mesh' && input.type !== 'image') continue
+			const edge = edgesOf(editor).find(candidate => candidate.props.to === shape.id && candidate.props.toPort === input.id)
+			const upstream = edge && editor.getShape<AteliNodeShape>(edge.props.from)
+			const result = upstream && storedResult(upstream.props.results[edge.props.fromPort])
+			if (result?.previewUrl) { visual = [{ output:input, result }]; break }
+		}
+	}
 	async function show(outputLabel: string, result: StoredResult) {
 		const loaded = await client.result(result.resultId)
 		openLightbox({
@@ -471,7 +482,7 @@ function AteliNodeView({ shape, editor }: { shape: AteliNodeShape; editor: Edito
 						{advancedOpen ? advancedInputs.map(param => <InputRow key={param.id} shape={shape} editor={editor} param={param} readonly={readonly} drag={drag} onValues={setValues} onUpload={upload} />) : null}
 						{tool.outputs.map(port => <OutputRow key={port.id} shape={shape} editor={editor} port={port} readonly={readonly} active={drag?.source.shapeId === shape.id && drag.source.port.id === port.id} />)}
 					</div>
-					<div className="px-2.5" style={{ height:previewHeight, paddingTop:padding }}><Preview toolId={shape.props.toolId} results={shape.props.results} /></div>
+					<div className="px-2.5" style={{ height:previewHeight, paddingTop:padding }}><Preview shape={shape} editor={editor} /></div>
 					{error ? <div className="overflow-hidden px-2.5 pt-2 text-[10px] leading-3" style={{ height:errorHeight, color:'#f87171' }}>{error}</div> : null}
 				</>
 			)}
