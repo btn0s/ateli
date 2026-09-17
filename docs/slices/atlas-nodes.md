@@ -1,6 +1,6 @@
-# Slice: Atlas Input, Image, and Mesh nodes in tldraw Offline
+# Slice: Atlas Input, Image, Mesh, and Output nodes in tldraw Offline
 
-Implement three complete node categories from Atlas AI Studio as native tldraw shapes backed by the local bridge, with draggable/reconnectable edges and per-node run.
+Implement four complete node categories from Atlas AI Studio as native tldraw shapes backed by the local bridge, with draggable/reconnectable edges and per-node run.
 Reference: https://docs.atlas.design/atlas-ai-studio-overview/node-index.md (append `.md` to any page; `?ask=` answers questions).
 
 "Complete" means every Atlas node in the category that can run locally. Nodes that require a hosted AI model with no local equivalent are **excluded** and listed at the end. Do not add them.
@@ -42,8 +42,8 @@ type Param = {
 }
 type Tool = {
   id: string; version: 1; title: string
-  category: 'Input' | 'Image' | 'Mesh'
-  runtime: 'none' | 'image' | 'imgen' | 'blender'
+  category: 'Input' | 'Image' | 'Mesh' | 'Output'
+  runtime: 'none' | 'image' | 'imgen' | 'blender' | 'meshy'
   inputs: Param[]; outputs: Param[]
 }
 ```
@@ -93,8 +93,15 @@ Procedural + post-processing (`runtime: 'image'`, deterministic, Pillow/numpy):
 | `image.normalFromDepth` | Fast Normal from Depth | `depth: image`, `strength: number 0.1..10 default 2` | `normal: image` |
 | `image.normalConvention` | Normal Map Convention Convert | `normal: image`, `to: enum ['opengl','directx']` | `normal: image` |
 
-### Mesh (`runtime: 'blender'`)
+### Mesh
 
+Generation (`runtime: 'meshy'`):
+
+| id | title | inputs | outputs |
+|---|---|---|---|
+| `mesh.fromImage` | Image → 3D | `image: image`, `prompt: text?`, `model: enum ['meshy-7','meshy-6'] default 'meshy-7'`, `pose: enum ['a-pose','t-pose','none'] default 'a-pose'`, `texture: boolean default true`, `textureResolution: enum ['1k','2k','4k'] default '2k'`, `pbr: boolean default false advanced`, `remesh: boolean default false advanced` | `mesh: mesh` |
+
+Processing (`runtime: 'blender'`):
 | id | title | inputs | outputs |
 |---|---|---|---|
 | `mesh.optimize` | Optimize Mesh | `mesh`, `topology: enum ['triangle'] advanced`, `targetFaces: number 4..10000000 default 80000` | `mesh` |
@@ -107,7 +114,15 @@ Procedural + post-processing (`runtime: 'image'`, deterministic, Pillow/numpy):
 | `mesh.applyTextures` | Apply Textures to Mesh | `mesh`, `baseColor: image?`, `roughness: image?`, `metallic: image?`, `normal: image?`, `normalConvention: enum ['opengl','directx'] advanced` | `mesh` |
 | `mesh.bake` | Bake High-Poly to Low-Poly | `high: mesh`, `low: mesh`, `resolution: number 256..4096 default 2048`, `bakeBaseColor/bakeRoughness/bakeMetallic/bakeNormal/bakeAO: boolean default true`, `aoSamples: number default 32 advanced`, `margin: number default 16 advanced` | `mesh` (low with baked textures applied), `baseColor`, `roughness`, `metallic`, `normal`, `ao` (image) |
 
-Excluded (no local model): Input Images/PDF(s)/Video/Audio/EXR/USDZ/Mixamo, Describe Image(s), Camera Control, Depth Estimation, Smart Resize, Find Images by Description, Image→SVG, Text→SVG, Split Image into Layers, Material Generation, Image→3D (all variants), Multi-View→3D, Retexture Mesh, Occlusion Mask, Project Multi-View, Text to Origin, Compose 3D Scene, Mask to Spline, Separate Object Parts, Rig/Animate, Omnipart, USDZ round-trip.
+### Output (`runtime: 'none'` — resolved by the bridge, no subprocess)
+
+| id | title | inputs | outputs |
+|---|---|---|---|
+| `output.export` | Export to Folder | `mesh: mesh?`, `image: image?`, `folder: enum` (configured export-root labels), `name: text` | `path: text` (absolute exported path) |
+
+Exactly one of `mesh` or `image` must be connected. The bridge rejects names containing path separators or `..`, copies the input to `<root>/<name>.<ext>`, and refuses a differing existing file. It writes `<root>/<name>.provenance.json` with the artifact hash and size, export/run/node identity, the complete ordered ancestor chain (`nodeId`, `toolId`, normalized `parameters`, and `inputHashes`), and available result metadata.
+
+Excluded (no local model): Input Images/PDF(s)/Video/Audio/EXR/USDZ/Mixamo, Describe Image(s), Camera Control, Depth Estimation, Smart Resize, Find Images by Description, Image→SVG, Text→SVG, Split Image into Layers, Material Generation, Multi-View→3D, Retexture Mesh, Occlusion Mask, Project Multi-View, Text to Origin, Compose 3D Scene, Mask to Spline, Separate Object Parts, Rig/Animate, Omnipart, USDZ round-trip.
 
 ## Execution model (per node, not per graph)
 
@@ -121,25 +136,29 @@ Per-node request written to `<runDir>/nodes/<nodeId>/request.json`:
 ```
 File-typed inputs are `{ path }`; scalars are bare values. Worker writes every output to `outputDir` and then `outputDir/outputs.json`:
 ```json
-{ "mesh": "mesh.glb", "preview": { "mesh": "mesh.preview.png" }, "log": "worker.log" }
+{ "mesh": "mesh.glb", "preview": { "mesh": "mesh.preview.png" },
+  "meta": { "mesh": "meshy.json" }, "log": "worker.log" }
 ```
-Output keys are the tool's output port ids; values are filenames relative to `outputDir`. `preview` is required for every `mesh` output (512×512 PNG, EEVEE, front 3/4 framed to bounds, neutral 3-point light, `#1a1a1a` background). Image outputs are their own preview. Non-zero exit or missing `outputs.json` = node failed; stderr tail becomes the error.
+Output keys are the tool's output port ids; values are filenames relative to `outputDir`. Optional `meta` keys are output port ids whose values name JSON sidecars; the bridge parses that JSON and attaches it to the corresponding result. `preview` is required for every `mesh` output (512×512 PNG, EEVEE, front 3/4 framed to bounds, neutral 3-point light, `#1a1a1a` background). Image outputs are their own preview. Non-zero exit or missing `outputs.json` = node failed; stderr tail becomes the error.
 
 Worker CLIs:
 - `python3 executor/image-worker.py <request.json>` — `runtime: 'image'` and `'imgen'` tools (imgen tools shell out to `imgen`).
 - `/opt/homebrew/bin/blender --background --factory-startup --python executor/mesh-worker.py -- <request.json>` — `runtime: 'blender'` tools.
+- `node executor/meshy-worker.mjs <request.json>` — `runtime: 'meshy'` tools. The backend loads repository-root `.env` without overriding existing environment variables; the worker requires `MESHY_API_KEY`.
 
-Caching: the bridge keys each node result by `sha256(toolId + version + canonical(inputs with file inputs replaced by their sha256))`. A cache hit skips the subprocess and reuses the outputs. `POST /ateli/runs` accepts `"cache": false` to bypass; `DELETE /ateli/cache/:nodeId` clears one node's entries.
+Caching: the bridge keys each reusable node result by `sha256(toolId + version + canonical(inputs with file inputs replaced by their sha256))`. A cache hit skips the subprocess and reuses the outputs. `output.export` is intentionally not cached because it writes a run-specific provenance receipt. `POST /ateli/runs` accepts `"cache": false` to bypass; `DELETE /ateli/cache/:nodeId` clears one node's entries.
 
 ## HTTP API
 
-- `GET /ateli/tools` → `Tool[]`
+Router configuration supplies export destinations as `createAteliRouter({ exportRoots: { label: '/absolute/path' } })`. `GET /ateli/tools` derives `output.export.folder.options` from those labels for that router instance.
+
+- `GET /ateli/tools` → `Tool[]`; configured export-root labels appear as the `output.export.folder` enum options.
 - `POST /ateli/sources` (multipart or `{ path }` JSON) → `{ sourceId, sha256, size, name, kind: 'image'|'mesh' }`. Path form must be inside an allowlisted root; multipart stores under `<staging>/sources/<sha256>.<ext>`.
 - `POST /ateli/runs` `{ graph, scope, cache?: boolean }` → `202 { runId, status: 'queued' }`
   - `graph.nodes[]`: `{ id, toolId, toolVersion, parameters }` — `parameters` holds values for **unconnected** scalar/text inputs and `sourceId` for input file nodes.
   - `graph.edges[]`: `{ id, source: { nodeId, portId }, target: { nodeId, portId } }`
   - `scope`: `{ kind: 'graph' }` | `{ kind: 'node', nodeId }` (that node + its ancestors) | `{ kind: 'downstream', nodeId }` (node, ancestors, and descendants)
-  - 400 on: unknown tool/version, missing required input, type mismatch, duplicate target port, cycle, unknown parameter key, scalar out of range.
+  - 400 on: unknown tool/version, missing required input, type mismatch, duplicate target port, cycle, unknown parameter key, scalar out of range, invalid export name, or an export with neither/both file inputs connected.
 - `GET /ateli/runs/:runId` →
   ```json
   { "runId", "status": "queued|running|completed|failed|cancelled", "progress": 0.0,
@@ -147,7 +166,7 @@ Caching: the bridge keys each node result by `sha256(toolId + version + canonica
                              "outputs": { "<portId>": "<resultId>" } } } }
   ```
 - `POST /ateli/runs/:runId/cancel` → kills the current subprocess group; remaining nodes `skipped`.
-- `GET /ateli/results/:id` → `{ resultId, kind: 'mesh'|'image'|'text'|'number'|'boolean', name, size, sha256, value?, downloadUrl, previewUrl }` (`value` for scalar results).
+- `GET /ateli/results/:id` → `{ resultId, kind: 'mesh'|'image'|'text'|'number'|'boolean', name, size, sha256, value?, meta?, downloadUrl, previewUrl }` (`value` for scalar results; `meta` is parsed from an output's optional JSON sidecar).
 - `GET /ateli/results/:id?download=1` streams the file. `GET /ateli/results/:id/preview` streams the preview PNG (mesh) or the image itself.
 - Retained runs are rehydrated from `<runDir>/run.json` on startup.
 

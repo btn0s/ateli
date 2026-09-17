@@ -1,16 +1,17 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream, createWriteStream } from 'node:fs'
-import { appendFile, copyFile, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { constants, createReadStream, createWriteStream } from 'node:fs'
+import { appendFile, copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { tools, toolMap } from './tools.mjs'
+import { tools, toolsForExportRoots } from './tools.mjs'
 
 const LAST_LIGHT_ROOT = '/Users/btnorris/dev/games/last-light'
 const DEFAULT_STAGING_ROOT = path.join(LAST_LIGHT_ROOT, '.scratch/ateli')
 const DEFAULT_SOURCE_ROOT = path.join(LAST_LIGHT_ROOT, 'client/public/character-experiments')
 const IMAGE_WORKER = fileURLToPath(new URL('../executor/image-worker.py', import.meta.url))
 const MESH_WORKER = fileURLToPath(new URL('../executor/mesh-worker.py', import.meta.url))
+const MESHY_WORKER = fileURLToPath(new URL('../executor/meshy-worker.mjs', import.meta.url))
 const MAX_JSON_BYTES = 1024 * 1024
 const MAX_UPLOAD_BYTES = 256 * 1024 * 1024
 const MAX_PARAMETER_BYTES = 64 * 1024
@@ -133,18 +134,19 @@ function topologicalOrder(graph) {
   return ordered
 }
 
-export function validateGraph(graph) {
+export function validateGraph(graph, catalog = tools) {
   if (!isPlainObject(graph) || (graph.schemaVersion !== undefined && graph.schemaVersion !== 1) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || graph.nodes.length === 0) {
     throw new Error('invalid graph schema')
   }
 
+  const catalogMap = new Map(catalog.map(tool => [tool.id, tool]))
   const normalizedNodes = []
   const nodesById = new Map()
   for (const node of graph.nodes) {
     if (!isPlainObject(node) || typeof node.id !== 'string' || !SAFE_ID.test(node.id) || nodesById.has(node.id)) {
       throw new Error(`invalid node ${node?.id ?? ''}`)
     }
-    const tool = toolMap.get(node.toolId)
+    const tool = catalogMap.get(node.toolId)
     if (!tool) throw new Error(`unknown tool ${node.toolId ?? ''}`)
     if (node.toolVersion !== tool.version) throw new Error(`unknown tool version ${node.toolId}`)
     if (!isPlainObject(node.parameters)) throw new Error(`invalid parameters for ${node.id}`)
@@ -170,8 +172,8 @@ export function validateGraph(graph) {
     const sourceNode = nodesById.get(edge.source?.nodeId)
     const targetNode = nodesById.get(edge.target?.nodeId)
     if (!sourceNode || !targetNode) throw new Error('invalid edge node')
-    const sourcePort = toolMap.get(sourceNode.toolId).outputs.find(output => output.id === edge.source?.portId)
-    const targetPort = toolMap.get(targetNode.toolId).inputs.find(input => input.id === edge.target?.portId)
+    const sourcePort = catalogMap.get(sourceNode.toolId).outputs.find(output => output.id === edge.source?.portId)
+    const targetPort = catalogMap.get(targetNode.toolId).inputs.find(input => input.id === edge.target?.portId)
     if (!sourcePort || !targetPort || sourcePort.type !== targetPort.type) throw new Error('type mismatch on edge')
     const targetKey = `${targetNode.id}\0${targetPort.id}`
     if (occupiedTargets.has(targetKey)) throw new Error(`duplicate target port ${targetNode.id}.${targetPort.id}`)
@@ -185,14 +187,14 @@ export function validateGraph(graph) {
   }
 
   for (const node of normalizedNodes) {
-    const tool = toolMap.get(node.toolId)
+    const tool = catalogMap.get(node.toolId)
     for (const input of tool.inputs) {
       const connected = occupiedTargets.has(`${node.id}\0${input.id}`)
       const supplied = Object.hasOwn(node.parameters, input.id)
       if (supplied) {
         const value = node.parameters[input.id]
         if (SCALAR_TYPES.has(input.type)) validateScalar(input, value)
-        else if (tool.runtime === 'none' && FILE_TYPES.has(input.type)) {
+        else if (tool.category === 'Input' && FILE_TYPES.has(input.type)) {
           if (typeof value !== 'string' || !value) throw new Error(`type mismatch for ${node.id}.${input.id}`)
         } else {
           throw new Error(`type mismatch for ${node.id}.${input.id}`)
@@ -201,6 +203,14 @@ export function validateGraph(graph) {
       if (connected) continue
       if (!supplied && Object.hasOwn(input, 'default')) node.parameters[input.id] = structuredClone(input.default)
       else if (!supplied && input.required !== false) throw new Error(`missing required input ${node.id}.${input.id}`)
+    }
+    if (tool.id === 'output.export') {
+      const connectedFiles = ['mesh', 'image'].filter(inputId => occupiedTargets.has(`${node.id}\0${inputId}`))
+      if (connectedFiles.length !== 1) throw new Error(`${node.id} requires exactly one of mesh or image`)
+      const name = node.parameters.name
+      if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) {
+        throw new Error(`invalid export name ${node.id}.name`)
+      }
     }
   }
 
@@ -340,6 +350,11 @@ function publicRun(run) {
 }
 
 export function createAteliRouter(options = {}) {
+  const exportRoots = options.exportRoots ?? {}
+  if (!isPlainObject(exportRoots)) throw new Error('exportRoots must be a label-to-path map')
+  for (const [label, root] of Object.entries(exportRoots)) {
+    if (!label || typeof root !== 'string' || !path.isAbsolute(root)) throw new Error(`invalid export root ${label}`)
+  }
   const config = {
     stagingRoot: path.resolve(options.stagingRoot ?? DEFAULT_STAGING_ROOT),
     allowedSourceRoots: options.allowedSourceRoots ?? [DEFAULT_SOURCE_ROOT],
@@ -347,9 +362,14 @@ export function createAteliRouter(options = {}) {
     pythonPath: options.pythonPath ?? 'python3',
     imageWorkerPath: options.imageWorkerPath ?? IMAGE_WORKER,
     meshWorkerPath: options.meshWorkerPath ?? MESH_WORKER,
+    nodePath: options.nodePath ?? process.execPath,
+    meshyWorkerPath: options.meshyWorkerPath ?? MESHY_WORKER,
+    exportRoots: { ...exportRoots },
     workerCommand: options.workerCommand,
     maxUploadBytes: options.maxUploadBytes ?? MAX_UPLOAD_BYTES,
   }
+  const configuredTools = toolsForExportRoots(Object.keys(config.exportRoots))
+  const configuredToolMap = new Map(configuredTools.map(tool => [tool.id, tool]))
   const runs = new Map()
   const results = new Map()
   const sources = new Map()
@@ -368,6 +388,7 @@ export function createAteliRouter(options = {}) {
       size: result.size,
       sha256: result.sha256,
       ...(result.value !== undefined ? { value: result.value } : {}),
+      ...(result.meta !== undefined ? { meta: result.meta } : {}),
       relativePath: result.relativePath,
       ...(result.previewRelativePath ? { previewRelativePath: result.previewRelativePath } : {}),
     }
@@ -383,6 +404,7 @@ export function createAteliRouter(options = {}) {
       cache: run.cache,
       nodes: run.nodes,
       cacheKeys: run.cacheKeys,
+      inputHashes: run.inputHashes,
       results: Object.values(run.resultRecords).map(serializeResult),
     }
   }
@@ -421,6 +443,7 @@ export function createAteliRouter(options = {}) {
   async function registerNodeOutputs(run, node, tool, nodeDirectory, outputDocument) {
     if (!isPlainObject(outputDocument)) throw new Error('invalid outputs.json')
     const preview = isPlainObject(outputDocument.preview) ? outputDocument.preview : {}
+    const metadata = isPlainObject(outputDocument.meta) ? outputDocument.meta : {}
     const outputIds = {}
     for (const output of tool.outputs) {
       const relativeOutput = outputDocument[output.id]
@@ -441,6 +464,16 @@ export function createAteliRouter(options = {}) {
         }
         validateScalar(output, value)
       }
+      let meta
+      if (Object.hasOwn(metadata, output.id)) {
+        const metaFile = await pathForRelative(nodeDirectory, metadata[output.id])
+        try {
+          meta = JSON.parse(await readFile(metaFile.absolutePath, 'utf8'))
+        } catch {
+          throw new Error(`invalid result metadata ${output.id}`)
+        }
+        if (!isPlainObject(meta)) throw new Error(`invalid result metadata ${output.id}`)
+      }
       const resultId = digest(`${run.runId}\0${node.id}\0${output.id}`).slice(0, 32)
       const relativePath = path.relative(run.directory, outputFile.absolutePath)
       const result = addResult(run, {
@@ -453,6 +486,7 @@ export function createAteliRouter(options = {}) {
         size: outputFile.info.size,
         sha256: await fileDigest(outputFile.absolutePath),
         ...(value !== undefined ? { value } : {}),
+        ...(meta !== undefined ? { meta } : {}),
         relativePath,
         ...(previewRelativePath ? { previewRelativePath } : {}),
       })
@@ -466,6 +500,9 @@ export function createAteliRouter(options = {}) {
     for (const output of tool.outputs) relativePaths.add(outputDocument[output.id])
     if (isPlainObject(outputDocument.preview)) {
       for (const output of tool.outputs) if (outputDocument.preview[output.id]) relativePaths.add(outputDocument.preview[output.id])
+    }
+    if (isPlainObject(outputDocument.meta)) {
+      for (const output of tool.outputs) if (outputDocument.meta[output.id]) relativePaths.add(outputDocument.meta[output.id])
     }
     if (typeof outputDocument.log === 'string') relativePaths.add(outputDocument.log)
     for (const relativePath of relativePaths) {
@@ -488,11 +525,13 @@ export function createAteliRouter(options = {}) {
   async function resolveInputs(run, node, tool) {
     const inputs = {}
     const hashableInputs = {}
+    const inputHashes = {}
     for (const input of tool.inputs) {
       const edge = run.graph.edges.find(candidate => candidate.target.nodeId === node.id && candidate.target.portId === input.id)
       if (edge) {
         const upstream = run.artifacts[edge.source.nodeId]?.[edge.source.portId]
         if (!upstream) throw new Error(`missing upstream output ${edge.source.nodeId}.${edge.source.portId}`)
+        inputHashes[input.id] = upstream.sha256
         if (FILE_TYPES.has(input.type)) {
           inputs[input.id] = { path: upstream.absolutePath }
           hashableInputs[input.id] = upstream.sha256
@@ -513,12 +552,13 @@ export function createAteliRouter(options = {}) {
         if (currentHash !== source.sha256) throw new Error(`source changed ${value}`)
         inputs[input.id] = { path: source.path }
         hashableInputs[input.id] = source.sha256
+        inputHashes[input.id] = source.sha256
       } else {
         inputs[input.id] = value
         hashableInputs[input.id] = value
       }
     }
-    return { inputs, hashableInputs }
+    return { inputs, hashableInputs, inputHashes }
   }
 
   async function resolveInputNode(run, node, tool, nodeDirectory, inputs) {
@@ -545,9 +585,99 @@ export function createAteliRouter(options = {}) {
     return outputDocument
   }
 
+  async function installExport(sourcePath, destinationPath) {
+    const existing = await lstat(destinationPath).catch(error => {
+      if (error.code === 'ENOENT') return null
+      throw error
+    })
+    if (existing) {
+      if (!existing.isFile() || await fileDigest(destinationPath) !== await fileDigest(sourcePath)) {
+        throw new Error(`export target exists with different contents: ${destinationPath}`)
+      }
+      return
+    }
+    try {
+      await copyFile(sourcePath, destinationPath, constants.COPYFILE_EXCL)
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+      const raced = await lstat(destinationPath)
+      if (!raced.isFile() || await fileDigest(destinationPath) !== await fileDigest(sourcePath)) {
+        throw new Error(`export target exists with different contents: ${destinationPath}`)
+      }
+    }
+  }
+
+  function exportAncestors(run, node) {
+    const ancestorIds = ancestorsOf(run.graph, new Set([node.id]))
+    ancestorIds.delete(node.id)
+    return topologicalOrder(run.graph)
+      .filter(nodeId => ancestorIds.has(nodeId))
+      .map(nodeId => {
+        const upstreamNode = run.graph.nodes.find(candidate => candidate.id === nodeId)
+        return {
+          nodeId,
+          toolId: upstreamNode.toolId,
+          parameters: structuredClone(upstreamNode.parameters),
+          inputHashes: { ...(run.inputHashes[nodeId] ?? {}) },
+        }
+      })
+  }
+
+  function exportMetadata(run, upstream) {
+    const metadata = []
+    for (const ancestor of upstream) {
+      for (const result of Object.values(run.artifacts[ancestor.nodeId] ?? {})) {
+        if (isPlainObject(result.meta)) metadata.push(result.meta)
+      }
+    }
+    return metadata.length ? Object.assign({}, ...metadata) : null
+  }
+
+  async function resolveExportNode(run, node, nodeDirectory, inputs) {
+    const inputPort = inputs.mesh ? 'mesh' : 'image'
+    const edge = run.graph.edges.find(candidate => candidate.target.nodeId === node.id && candidate.target.portId === inputPort)
+    const source = edge && run.artifacts[edge.source.nodeId]?.[edge.source.portId]
+    if (!source) throw new Error(`missing export input ${node.id}.${inputPort}`)
+    const root = config.exportRoots[inputs.folder]
+    const rootInfo = root && await stat(root).catch(() => null)
+    if (!rootInfo?.isDirectory()) throw new Error(`export root is unavailable: ${inputs.folder}`)
+    const name = inputs.name
+    if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) throw new Error('invalid export name')
+    const extension = path.extname(source.absolutePath).toLowerCase()
+    if (!extension) throw new Error('export input has no file extension')
+    const destinationPath = path.join(root, `${name}${extension}`)
+    await installExport(source.absolutePath, destinationPath)
+
+    const upstream = exportAncestors(run, node)
+    const provenance = {
+      sha256: source.sha256,
+      size: source.size,
+      exportedAt: new Date().toISOString(),
+      runId: run.runId,
+      nodeId: node.id,
+      upstream,
+      meta: exportMetadata(run, upstream),
+    }
+    const provenancePath = path.join(root, `${name}.provenance.json`)
+    const temporaryPath = `${provenancePath}.${process.pid}.${randomUUID()}.tmp`
+    await writeFile(temporaryPath, `${JSON.stringify(provenance, null, 2)}\n`)
+    await rename(temporaryPath, provenancePath)
+
+    const outputDocument = { path: 'path.json' }
+    await writeFile(path.join(nodeDirectory, outputDocument.path), `${JSON.stringify(destinationPath)}\n`)
+    await writeFile(path.join(nodeDirectory, 'outputs.json'), `${JSON.stringify(outputDocument, null, 2)}\n`)
+    return outputDocument
+  }
+
+  async function resolveInProcessNode(run, node, tool, nodeDirectory, inputs) {
+    if (tool.id === 'output.export') return resolveExportNode(run, node, nodeDirectory, inputs)
+    if (tool.category === 'Input') return resolveInputNode(run, node, tool, nodeDirectory, inputs)
+    throw new Error(`unsupported in-process tool: ${tool.id}`)
+  }
+
   // Best effort: a failed preview leaves the mesh usable and is recorded in the node log.
   async function renderMeshPreview(run, node, nodeDirectory, meshPath) {
-    const renderTool = toolMap.get('mesh.render')
+    const renderTool = configuredToolMap.get('mesh.render')
     const previewDirectory = path.join(nodeDirectory, 'preview')
     await mkdir(previewDirectory, { recursive: true })
     const requestPath = path.join(previewDirectory, 'request.json')
@@ -578,7 +708,11 @@ export function createAteliRouter(options = {}) {
     if (runtime === 'blender') {
       return { executable: config.blenderPath, args: ['--background', '--factory-startup', '--python', config.meshWorkerPath, '--', context.requestPath] }
     }
-    return { executable: config.pythonPath, args: [config.imageWorkerPath, context.requestPath] }
+    if (runtime === 'meshy') return { executable: config.nodePath, args: [config.meshyWorkerPath, context.requestPath] }
+    if (runtime === 'image' || runtime === 'imgen') {
+      return { executable: config.pythonPath, args: [config.imageWorkerPath, context.requestPath] }
+    }
+    throw new Error(`unsupported worker runtime ${runtime}`)
   }
 
   async function spawnWorker(run, node, tool, nodeDirectory, requestPath) {
@@ -592,7 +726,7 @@ export function createAteliRouter(options = {}) {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
       ...(command.cwd ? { cwd: command.cwd } : {}),
-      ...(command.env ? { env: command.env } : {}),
+      env: { ...process.env, ...(command.env ?? {}) },
     })
     run.current = { child, nodeId: node.id, processGroup: child.pid ? -child.pid : undefined }
     child.stdout.pipe(logStream, { end: false })
@@ -636,10 +770,11 @@ export function createAteliRouter(options = {}) {
   }
 
   async function executeNode(run, node) {
-    const tool = toolMap.get(node.toolId)
+    const tool = configuredToolMap.get(node.toolId)
     const nodeDirectory = path.join(run.directory, 'nodes', node.id)
     await mkdir(nodeDirectory, { recursive: true })
-    const { inputs, hashableInputs } = await resolveInputs(run, node, tool)
+    const { inputs, hashableInputs, inputHashes } = await resolveInputs(run, node, tool)
+    run.inputHashes[node.id] = inputHashes
     const requestPath = path.join(nodeDirectory, 'request.json')
     await writeFile(requestPath, `${JSON.stringify({
       runId: run.runId,
@@ -650,8 +785,9 @@ export function createAteliRouter(options = {}) {
     }, null, 2)}\n`)
     const cacheKey = digest(`${tool.id}${tool.version}${canonicalJson(hashableInputs)}`)
     run.cacheKeys[node.id] = cacheKey
+    const cacheable = tool.id !== 'output.export'
     const cacheDirectory = path.join(config.stagingRoot, 'cache', cacheKey)
-    if (run.cache && (await stat(cacheDirectory).catch(() => null))?.isDirectory()) {
+    if (run.cache && cacheable && (await stat(cacheDirectory).catch(() => null))?.isDirectory()) {
       try {
         const cachedOutputs = await readOutputs(cacheDirectory)
         await copyOutputSet(cacheDirectory, nodeDirectory, cachedOutputs, tool)
@@ -663,10 +799,10 @@ export function createAteliRouter(options = {}) {
     }
 
     const outputDocument = tool.runtime === 'none'
-      ? await resolveInputNode(run, node, tool, nodeDirectory, inputs)
+      ? await resolveInProcessNode(run, node, tool, nodeDirectory, inputs)
       : (await spawnWorker(run, node, tool, nodeDirectory, requestPath), await readOutputs(nodeDirectory))
     await registerNodeOutputs(run, node, tool, nodeDirectory, outputDocument)
-    if (run.cache) await writeCache(cacheKey, nodeDirectory, outputDocument, tool)
+    if (run.cache && cacheable) await writeCache(cacheKey, nodeDirectory, outputDocument, tool)
     return 'succeeded'
   }
 
@@ -841,7 +977,7 @@ export function createAteliRouter(options = {}) {
       let stored
       try {
         stored = JSON.parse(await readFile(path.join(directory, 'run.json'), 'utf8'))
-        stored.graph = validateGraph(stored.graph)
+        stored.graph = validateGraph(stored.graph, configuredTools)
       } catch {
         continue
       }
@@ -854,6 +990,7 @@ export function createAteliRouter(options = {}) {
         cache: stored.cache !== false,
         nodes: stored.nodes,
         cacheKeys: stored.cacheKeys ?? {},
+        inputHashes: stored.inputHashes ?? {},
         resultRecords: {},
         artifacts: {},
         directory,
@@ -928,7 +1065,7 @@ export function createAteliRouter(options = {}) {
     try {
       await ready
       if (request.method === 'GET' && url.pathname === '/ateli/tools') {
-        sendJson(response, 200, tools)
+        sendJson(response, 200, toolsForExportRoots(Object.keys(config.exportRoots)))
         return true
       }
       if (request.method === 'POST' && url.pathname === '/ateli/sources') {
@@ -939,12 +1076,12 @@ export function createAteliRouter(options = {}) {
       if (request.method === 'POST' && url.pathname === '/ateli/runs') {
         if (closing) throw new Error('router is closing')
         const payload = await readJsonBody(request)
-        const validatedGraph = validateGraph(payload.graph)
+        const validatedGraph = validateGraph(payload.graph, configuredTools)
         const graph = scopeGraph(validatedGraph, payload.scope)
         for (const node of graph.nodes) {
-          const tool = toolMap.get(node.toolId)
+          const tool = configuredToolMap.get(node.toolId)
           for (const input of tool.inputs) {
-            if (tool.runtime === 'none' && FILE_TYPES.has(input.type) && !sources.has(node.parameters[input.id])) {
+            if (tool.category === 'Input' && FILE_TYPES.has(input.type) && !sources.has(node.parameters[input.id])) {
               throw new Error(`unknown source ${node.parameters[input.id]}`)
             }
           }
@@ -962,6 +1099,7 @@ export function createAteliRouter(options = {}) {
           cache: payload.cache !== false,
           nodes: Object.fromEntries(graph.nodes.map(node => [node.id, { status: 'queued', outputs: {} }])),
           cacheKeys: {},
+          inputHashes: {},
           resultRecords: {},
           artifacts: {},
           directory,
@@ -1029,6 +1167,7 @@ export function createAteliRouter(options = {}) {
           size: result.size,
           sha256: result.sha256,
           ...(result.value !== undefined ? { value: result.value } : {}),
+          ...(result.meta !== undefined ? { meta: result.meta } : {}),
           downloadUrl: `/ateli/results/${result.resultId}?download=1`,
           previewUrl: result.kind === 'image' || result.previewPath ? `/ateli/results/${result.resultId}/preview` : null,
         })

@@ -8,7 +8,7 @@ const aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4']
 const imageModels = ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gemini-3.1-flash-image']
 const faceAxes = ['-Y', '+Y', '-X', '+X', '-Z', '+Z']
 
-/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh', runtime: 'none'|'image'|'imgen'|'blender', inputs: object[], outputs: object[]}>} */
+/** @type {Array<{id: string, version: 1, title: string, category: 'Input'|'Image'|'Mesh'|'Output', runtime: 'none'|'image'|'imgen'|'blender'|'meshy', inputs: object[], outputs: object[]}>} */
 export const tools = [
   {
     id: 'input.text', version: 1, title: 'Input Text', category: 'Input', runtime: 'none',
@@ -219,6 +219,21 @@ export const tools = [
   },
 
   {
+    id: 'mesh.fromImage', version: 1, title: 'Image → 3D', category: 'Mesh', runtime: 'meshy',
+    inputs: [
+      param('image', 'Image', 'image'),
+      param('prompt', 'Prompt', 'text', { required: false }),
+      param('model', 'Model', 'enum', { options: ['meshy-7', 'meshy-6'], default: 'meshy-7' }),
+      param('pose', 'Pose', 'enum', { options: ['a-pose', 't-pose', 'none'], default: 'a-pose' }),
+      param('texture', 'Texture', 'boolean', { default: true }),
+      param('textureResolution', 'Texture Resolution', 'enum', { options: ['1k', '2k', '4k'], default: '2k' }),
+      param('pbr', 'PBR', 'boolean', { default: false, advanced: true }),
+      param('remesh', 'Remesh', 'boolean', { default: false, advanced: true }),
+    ],
+    outputs: [param('mesh', 'Mesh', 'mesh')],
+  },
+
+  {
     id: 'mesh.optimize', version: 1, title: 'Optimize Mesh', category: 'Mesh', runtime: 'blender',
     inputs: [
       param('mesh', 'Mesh', 'mesh'),
@@ -307,6 +322,29 @@ export const tools = [
       param('normal', 'Normal', 'image'), param('ao', 'AO', 'image'),
     ],
   },
+
+  {
+    id: 'output.export', version: 1, title: 'Export to Folder', category: 'Output', runtime: 'none',
+    inputs: [
+      param('mesh', 'Mesh', 'mesh', { required: false }),
+      param('image', 'Image', 'image', { required: false }),
+      param('folder', 'Folder', 'enum', { options: [] }),
+      param('name', 'Name', 'text'),
+    ],
+    outputs: [param('path', 'Path', 'text')],
+  },
 ]
 
 export const toolMap = new Map(tools.map(tool => [tool.id, tool]))
+
+export function toolsForExportRoots(labels) {
+  const options = [...labels]
+  return tools.map(tool => tool.id === 'output.export'
+    ? {
+        ...tool,
+        inputs: tool.inputs.map(input => input.id === 'folder'
+          ? { ...input, options, ...(options.length ? { default: options[0] } : {}) }
+          : input),
+      }
+    : tool)
+}

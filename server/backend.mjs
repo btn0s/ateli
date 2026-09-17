@@ -9,6 +9,24 @@ import * as pty from 'node-pty'
 import { WebSocketServer } from 'ws'
 import { createAteliRouter } from './router.mjs'
 
+function loadRepoEnvironment() {
+	let contents
+	try {
+		contents = readFileSync(new URL('../.env', import.meta.url), 'utf8')
+	} catch (error) {
+		if (error.code === 'ENOENT') return
+		throw error
+	}
+	for (const line of contents.split(/\r?\n/)) {
+		const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/)
+		if (!match || Object.hasOwn(process.env, match[1])) continue
+		let value = match[2].trim()
+		if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1)
+		process.env[match[1]] = value
+	}
+}
+loadRepoEnvironment()
+
 
 // Agentation's server binds its own port (the MCP client and the launcher point at it); supervise it rather than embed it.
 const feedback = { child: null, restarts: 0, stopping: false }
@@ -40,7 +58,7 @@ const ateliRouter = createAteliRouter({
 	blenderPath: '/opt/homebrew/bin/blender',
 	stagingRoot: '/Users/btnorris/dev/games/last-light/.scratch/ateli',
 	allowedSourceRoots: ['/Users/btnorris/dev/games/last-light/client/public/character-experiments'],
-	promotionRoots: ['/Users/btnorris/dev/games/last-light/client/public/character-experiments'],
+	exportRoots: { 'character-experiments': '/Users/btnorris/dev/games/last-light/client/public/character-experiments' },
 })
 
 

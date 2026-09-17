@@ -23,10 +23,11 @@ function edge(id, sourceNode, sourcePort, targetNode, targetPort) {
   return { id, source: { nodeId: sourceNode, portId: sourcePort }, target: { nodeId: targetNode, portId: targetPort } }
 }
 
-async function openRouter(root, workerCommand) {
+async function openRouter(root, workerCommand, exportRoots = {}) {
   const router = createAteliRouter({
     stagingRoot: path.join(root, 'staging'),
     allowedSourceRoots: [path.join(root, 'allowed')],
+    exportRoots,
     workerCommand,
   })
   const server = createServer((request, response) => {
@@ -50,7 +51,8 @@ async function createHarness() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'ateli-router-'))
   const allowedRoot = path.join(root, 'allowed')
   const stagingRoot = path.join(root, 'staging')
-  await mkdir(allowedRoot, { recursive: true })
+  const exportRoot = path.join(root, 'exports')
+  await Promise.all([mkdir(allowedRoot, { recursive: true }), mkdir(exportRoot, { recursive: true })])
   const meshPath = path.join(allowedRoot, 'source.glb')
   const imagePath = path.join(allowedRoot, 'source.png')
   await writeFile(meshPath, 'source-mesh')
@@ -58,6 +60,7 @@ async function createHarness() {
   const callsPath = path.join(root, 'worker-calls.log')
   const imageWorkerPath = path.join(root, 'image-worker.mjs')
   const blenderWorkerPath = path.join(root, 'blender-worker.mjs')
+  const meshyWorkerPath = path.join(root, 'meshy-worker.mjs')
 
   await writeFile(imageWorkerPath, `
 import { appendFile, readFile, writeFile } from 'node:fs/promises'
@@ -95,17 +98,38 @@ if (request.toolId === 'mesh.optimize' || request.toolId === 'mesh.applyTextures
 }
 await writeFile(path.join(request.outputDir, 'outputs.json'), JSON.stringify(outputs))
 `)
+  await writeFile(meshyWorkerPath, `
+import { appendFile, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+const request = JSON.parse(await readFile(process.argv[2], 'utf8'))
+await appendFile(process.env.ATELI_CALLS, request.toolId + '\\n')
+if (request.toolId !== 'mesh.fromImage') throw new Error('unexpected Meshy tool ' + request.toolId)
+await writeFile(path.join(request.outputDir, 'mesh.glb'), 'meshy-mesh')
+await writeFile(path.join(request.outputDir, 'mesh.preview.png'), 'meshy-preview')
+await writeFile(path.join(request.outputDir, 'meshy.json'), JSON.stringify({
+  taskId: 'fake-meshy-task',
+  request: { ai_model: request.inputs.model, should_texture: request.inputs.texture },
+  consumedCredits: 30,
+  createdAt: '2026-09-16T00:00:00.000Z',
+}))
+await writeFile(path.join(request.outputDir, 'outputs.json'), JSON.stringify({
+  mesh: 'mesh.glb',
+  preview: { mesh: 'mesh.preview.png' },
+  meta: { mesh: 'meshy.json' },
+}))
+`)
 
   const workerCommand = ({ runtime, requestPath }) => ({
     executable: process.execPath,
-    args: [runtime === 'blender' ? blenderWorkerPath : imageWorkerPath, requestPath],
+    args: [runtime === 'blender' ? blenderWorkerPath : runtime === 'meshy' ? meshyWorkerPath : imageWorkerPath, requestPath],
     env: { ...process.env, ATELI_CALLS: callsPath },
   })
-  const opened = await openRouter(root, workerCommand)
+  const opened = await openRouter(root, workerCommand, { test: exportRoot })
   return {
     root,
     allowedRoot,
     stagingRoot,
+    exportRoot,
     meshPath,
     imagePath,
     callsPath,
@@ -394,4 +418,124 @@ test('multipart source upload is content-addressed under staging sources', async
   await access(storedPath)
   assert.equal((await stat(storedPath)).size, bytes.length)
   assert.deepEqual(await readFile(storedPath), bytes)
+})
+
+test('mesh.fromImage exposes Meshy task metadata on its mesh result', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const source = await addSource(harness, harness.imagePath)
+  const runGraph = graph([
+    { id: 'image-input', toolId: 'input.image', toolVersion: 1, parameters: { file: source.sourceId } },
+    { id: 'from-image', toolId: 'mesh.fromImage', toolVersion: 1, parameters: {} },
+  ], [edge('image-to-mesh', 'image-input', 'image', 'from-image', 'image')])
+
+  const submission = await submit(harness, runGraph)
+  assert.equal(submission.status, 202)
+  const run = await waitForRun(harness.origin, submission.body.runId)
+  assert.equal(run.status, 'completed')
+  const result = await request(harness.origin, `/ateli/results/${run.nodes['from-image'].outputs.mesh}`)
+  assert.equal(result.status, 200)
+  assert.equal(result.body.meta.taskId, 'fake-meshy-task')
+  assert.equal(result.body.meta.consumedCredits, 30)
+  assert.equal(result.body.previewUrl, `/ateli/results/${result.body.resultId}/preview`)
+})
+
+test('output.export validation requires one file input and rejects unsafe names', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const catalog = await request(harness.origin, '/ateli/tools')
+  const exportTool = catalog.body.find(tool => tool.id === 'output.export')
+  assert.deepEqual(exportTool.inputs.find(input => input.id === 'folder').options, ['test'])
+
+  const cases = [
+    {
+      name: 'neither input',
+      graph: graph([
+        { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: 'asset' } },
+      ]),
+      error: /requires exactly one of mesh or image/,
+    },
+    {
+      name: 'both inputs',
+      graph: graph([
+        { id: 'mesh-input', toolId: 'input.mesh', toolVersion: 1, parameters: { file: 'unused-mesh' } },
+        { id: 'image-input', toolId: 'input.image', toolVersion: 1, parameters: { file: 'unused-image' } },
+        { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: 'asset' } },
+      ], [
+        edge('mesh-export', 'mesh-input', 'mesh', 'export', 'mesh'),
+        edge('image-export', 'image-input', 'image', 'export', 'image'),
+      ]),
+      error: /requires exactly one of mesh or image/,
+    },
+    {
+      name: 'path traversal',
+      graph: graph([
+        { id: 'mesh-input', toolId: 'input.mesh', toolVersion: 1, parameters: { file: 'unused-mesh' } },
+        { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: '../x' } },
+      ], [edge('mesh-export', 'mesh-input', 'mesh', 'export', 'mesh')]),
+      error: /invalid export name/,
+    },
+  ]
+
+  for (const fixture of cases) {
+    const response = await submit(harness, fixture.graph)
+    assert.equal(response.status, 400, fixture.name)
+    assert.match(response.body.error, fixture.error, fixture.name)
+  }
+})
+
+test('output.export writes the artifact and full ancestor provenance and enforces safe overwrite', async t => {
+  const harness = await createHarness()
+  t.after(() => harness.close())
+  const imageSource = await addSource(harness, harness.imagePath)
+  const runGraph = graph([
+    { id: 'image-input', toolId: 'input.image', toolVersion: 1, parameters: { file: imageSource.sourceId } },
+    { id: 'from-image', toolId: 'mesh.fromImage', toolVersion: 1, parameters: {} },
+    optimize(),
+    { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: 'hero' } },
+  ], [
+    edge('image-from-image', 'image-input', 'image', 'from-image', 'image'),
+    edge('from-image-optimize', 'from-image', 'mesh', 'optimize', 'mesh'),
+    edge('optimize-export', 'optimize', 'mesh', 'export', 'mesh'),
+  ])
+
+  const submission = await submit(harness, runGraph)
+  const run = await waitForRun(harness.origin, submission.body.runId)
+  assert.equal(run.status, 'completed')
+  const destination = path.join(harness.exportRoot, 'hero.glb')
+  assert.equal(await readFile(destination, 'utf8'), 'mesh:mesh.optimize:80000')
+  const pathResult = await request(harness.origin, `/ateli/results/${run.nodes.export.outputs.path}`)
+  assert.equal(pathResult.body.value, destination)
+
+  const provenance = JSON.parse(await readFile(path.join(harness.exportRoot, 'hero.provenance.json'), 'utf8'))
+  assert.equal(provenance.sha256, createHash('sha256').update('mesh:mesh.optimize:80000').digest('hex'))
+  assert.equal(provenance.size, Buffer.byteLength('mesh:mesh.optimize:80000'))
+  assert.equal(provenance.runId, submission.body.runId)
+  assert.equal(provenance.nodeId, 'export')
+  assert.deepEqual(provenance.upstream.map(item => [item.nodeId, item.toolId]), [
+    ['image-input', 'input.image'],
+    ['from-image', 'mesh.fromImage'],
+    ['optimize', 'mesh.optimize'],
+  ])
+  assert.match(provenance.upstream[0].inputHashes.file, /^[a-f0-9]{64}$/)
+  assert.match(provenance.upstream[1].inputHashes.image, /^[a-f0-9]{64}$/)
+  assert.match(provenance.upstream[2].inputHashes.mesh, /^[a-f0-9]{64}$/)
+  assert.equal(provenance.meta.taskId, 'fake-meshy-task')
+
+  const repeatedSubmission = await submit(harness, runGraph)
+  const repeated = await waitForRun(harness.origin, repeatedSubmission.body.runId)
+  assert.equal(repeated.status, 'completed')
+  assert.equal(repeated.nodes.export.status, 'succeeded')
+
+  const meshSource = await addSource(harness, harness.meshPath)
+  await writeFile(path.join(harness.exportRoot, 'conflict.glb'), 'different-mesh')
+  const conflictGraph = graph([
+    inputMesh(meshSource.sourceId),
+    { id: 'export', toolId: 'output.export', toolVersion: 1, parameters: { folder: 'test', name: 'conflict' } },
+  ], [edge('input-export', 'input', 'mesh', 'export', 'mesh')])
+  const conflictSubmission = await submit(harness, conflictGraph)
+  const conflict = await waitForRun(harness.origin, conflictSubmission.body.runId)
+  assert.equal(conflict.status, 'failed')
+  assert.match(conflict.nodes.export.error, /exists with different contents/)
+  assert.equal(await readFile(path.join(harness.exportRoot, 'conflict.glb'), 'utf8'), 'different-mesh')
 })
