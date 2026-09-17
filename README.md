@@ -51,4 +51,4 @@ docs/           architecture, ADRs, contracts, research, ideas
 
 ## Status
 
-Personal, unlicensed, changing under me. Documents are not in this repo.
+Personal, unlicensed, changing under me. `examples/atlas-nodes.tldraw` is a sample board with the node graph installed, refreshed by hand now and then; my working boards live outside the repo.
