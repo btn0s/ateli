@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const [command, argument] = process.argv.slice(2)
+
+switch (command) {
+	case 'install':
+		if (!argument) throw new Error('Usage: ateli install <doc.tldraw>')
+		execFileSync(process.execPath, [join(root, 'tools/build.mjs')], { cwd: root, stdio: 'inherit' })
+		execFileSync(process.execPath, [join(root, 'tools/apply.mjs'), resolve(argument)], { cwd: root, stdio: 'inherit' })
+		break
+	case 'serve':
+		await import('../server/backend.mjs')
+		break
+	case 'smoke':
+		await import('./ateli-smoke.mjs')
+		break
+	default:
+		throw new Error('Usage: ateli <install <doc.tldraw> | serve | smoke>')
+}

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import path from 'node:path'
-import { createAteliRouter } from '../src/server/router.mjs'
+import { createAteliRouter } from '../server/router.mjs'
 
 const sourcePath = '/Users/btnorris/dev/games/last-light/client/public/character-experiments/drifters-light-default/meshy-7-master-raw.glb'
 const stagingRoot = '/Users/btnorris/dev/games/last-light/.scratch/ateli'

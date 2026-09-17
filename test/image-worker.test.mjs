@@ -6,7 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import test from 'node:test'
 
 const PYTHON = '/opt/homebrew/bin/python3'
-const WORKER = path.resolve('src/executor/image-worker.py')
+const WORKER = path.resolve('executor/image-worker.py')
 const imgenAvailable = spawnSync('imgen', ['health'], { encoding: 'utf8', timeout: 20_000 }).status === 0
 
 async function createFixtures(root) {

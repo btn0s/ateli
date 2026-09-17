@@ -9,8 +9,8 @@ This is Ateli's first integration, not its product boundary. Meshes, Blender, an
 ## Existing environment
 
 - Last Light checkout: `../games/last-light`
-- Graph surface: native `ateli-node` and `ateli-edge` shapes in `../tldraw-offline/Ateli POC.tldraw`
-- Loopback bridge checkout: `../tldraw-offline`
+- Graph surface source: `mod/graph/`; installed proof document: `../tldraw-offline/Ateli POC.tldraw`
+- Loopback bridge: `server/backend.mjs`
 - Current local bridge: `127.0.0.1:7237`
 - Headless executor: Blender 5.1.2 at `/opt/homebrew/bin/blender`
 - Canonical input: `../games/last-light/client/public/character-experiments/drifters-light-default/meshy-7-master-raw.glb`

@@ -30,6 +30,21 @@ Ateli
 └── headless tool executors
 ```
 
+The repository is the single source for the installed document script and its local services:
+
+```text
+mod/
+├── skin/       tldraw chrome and shared UI
+├── canvas/     browser, landmark, terminal, image generation, and feedback shapes
+├── graph/      Ateli node and edge shapes, client, and tool types
+└── config.tsx  composed document-script entry
+server/         loopback backend, Ateli router, terminal, and feedback service
+executor/       image and Blender workers
+tools/          document-script build and installer
+bin/ateli       install, serve, and smoke commands
+test/           router and worker tests
+```
+
 Mesh processing is the first POC tool family. Ateli's catalog is designed for image generation and editing, map processing, material construction, animation, data transformation, local automation, remote service calls, and other typed tools.
 
 ## Principles

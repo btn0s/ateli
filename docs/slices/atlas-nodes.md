@@ -11,9 +11,9 @@ Amendment: `input.mesh` is resolved in-process but the bridge renders its previe
 
 ## Repos and hosts
 
-- Bridge + executors: `/Users/btnorris/dev/ateli` — `src/server/{router,tools}.mjs`, `src/executor/`, `test/`, `bin/`
-- tldraw extension: `/Users/btnorris/dev/tldraw-offline` — `src/ateli-node-shape.tsx`, `src/config.tsx`, `src/ui.ts`, `build.mjs`, `apply.mjs`
-- Bridge mounted by `/Users/btnorris/dev/tldraw-offline/backend.mjs` at `http://127.0.0.1:7237/ateli/*`
+- Mod, bridge, and executors: `/Users/btnorris/dev/ateli` — `mod/{skin,canvas,graph}/`, `mod/config.tsx`, `server/`, `executor/`, `tools/`, `test/`, `bin/`
+- The bridge is `/Users/btnorris/dev/ateli/server/backend.mjs` at `http://127.0.0.1:7237/ateli/*`
+- Installed proof document: `/Users/btnorris/dev/tldraw-offline/Ateli POC.tldraw`
 - Blender 5.1.2: `/opt/homebrew/bin/blender`. Python: `/opt/homebrew/bin/python3` with Pillow 12 + numpy 2.
 - Image generation/editing: `imgen` CLI on PATH (`imgen generate --help`, `imgen edit --help`). It returns a job; use `--timeout` and parse its JSON output for the output file path.
 - Canonical mesh: `/Users/btnorris/dev/games/last-light/client/public/character-experiments/drifters-light-default/meshy-7-master-raw.glb`
@@ -126,8 +126,8 @@ File-typed inputs are `{ path }`; scalars are bare values. Worker writes every o
 Output keys are the tool's output port ids; values are filenames relative to `outputDir`. `preview` is required for every `mesh` output (512×512 PNG, EEVEE, front 3/4 framed to bounds, neutral 3-point light, `#1a1a1a` background). Image outputs are their own preview. Non-zero exit or missing `outputs.json` = node failed; stderr tail becomes the error.
 
 Worker CLIs:
-- `python3 src/executor/image-worker.py <request.json>` — `runtime: 'image'` and `'imgen'` tools (imgen tools shell out to `imgen`).
-- `/opt/homebrew/bin/blender --background --factory-startup --python src/executor/mesh-worker.py -- <request.json>` — `runtime: 'blender'` tools.
+- `python3 executor/image-worker.py <request.json>` — `runtime: 'image'` and `'imgen'` tools (imgen tools shell out to `imgen`).
+- `/opt/homebrew/bin/blender --background --factory-startup --python executor/mesh-worker.py -- <request.json>` — `runtime: 'blender'` tools.
 
 Caching: the bridge keys each node result by `sha256(toolId + version + canonical(inputs with file inputs replaced by their sha256))`. A cache hit skips the subprocess and reuses the outputs. `POST /ateli/runs` accepts `"cache": false` to bypass; `DELETE /ateli/cache/:nodeId` clears one node's entries.
 

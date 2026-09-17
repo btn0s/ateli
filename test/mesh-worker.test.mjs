@@ -9,7 +9,7 @@ import { deflateSync, inflateSync } from 'node:zlib'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const BLENDER = '/opt/homebrew/bin/blender'
-const WORKER = path.join(ROOT, 'src/executor/mesh-worker.py')
+const WORKER = path.join(ROOT, 'executor/mesh-worker.py')
 const CANONICAL = '/Users/btnorris/dev/games/last-light/client/public/character-experiments/drifters-light-default/meshy-7-master-raw.glb'
 const HAS_BLENDER = existsSync(BLENDER)
 

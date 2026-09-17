@@ -1,0 +1,15 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@custom-variant dark (&:is(.tl-theme__dark *));
+@theme inline {
+  --font-sans: var(--ui-font); --font-mono: var(--ui-mono);
+  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground); --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground); --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
+  --background-image-panel: var(--ui-panel); --background-image-key: var(--ui-key); --background-image-key-hover: var(--ui-key-hover); --background-image-selected: var(--ui-selected); --background-image-well: var(--ui-well);
+  --shadow-panel: var(--ui-shadow-panel); --shadow-key: var(--ui-shadow-key); --shadow-selected: var(--ui-shadow-selected); --shadow-well: var(--ui-shadow-well);
+  --animate-shimmer: shimmer 1800ms ease-in-out infinite;
+  @keyframes shimmer { from { transform:translateX(-100%) } to { transform:translateX(100%) } }
+}
+.tl-container { --radius-sm:var(--ui-radius-kbd); --radius-md:var(--ui-radius-key); --radius-lg:var(--ui-radius); --background:var(--ui-bg); --foreground:var(--ui-ink); --card:var(--ui-panel-solid); --card-foreground:var(--ui-ink); --popover:var(--ui-panel-solid); --popover-foreground:var(--ui-ink); --primary:var(--ui-ink); --primary-foreground:var(--ui-bg); --muted:color-mix(in srgb,var(--ui-ink) 6%,var(--ui-bg)); --muted-foreground:var(--ui-ink-2); --destructive:oklch(.577 .245 27.325); --destructive-foreground:var(--ui-bg); --border:var(--ui-line); --input:var(--ui-line); --ring:var(--ui-ring); }
+.tl-theme__dark { --destructive:oklch(.704 .191 22.216); }

@@ -5,7 +5,7 @@ import { access, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/p
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { createAteliRouter } from '../src/server/router.mjs'
+import { createAteliRouter } from '../server/router.mjs'
 
 function graph(nodes, edges = []) {
   return { schemaVersion: 1, nodes, edges }

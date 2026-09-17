@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terminal</title>
+<link rel="stylesheet" href="/terminal/xterm.css">
+<style>
+html, body { height: 100%; margin: 0; overflow: hidden; background: #171817; }
+#terminal { height: 100%; box-sizing: border-box; padding: 12px; }
+#terminal .xterm { height: 100%; font-feature-settings: "liga" 0; }
+#terminal .xterm-viewport { scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
+</style>
+</head>
+<body>
+<div id="terminal"></div>
+<script type="module" src="/terminal/app.js"></script>
+</body>
+</html>
