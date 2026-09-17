@@ -319,6 +319,7 @@ export const tools = [
       param('aoSamples', 'AO Samples', 'number', { default: 32, advanced: true }),
       param('margin', 'Margin', 'number', { default: 16, advanced: true }),
       param('rayDistance', 'Ray Distance (m, 0 = auto)', 'number', { min: 0, max: 1, default: 0, step: 0.005, advanced: true }),
+      param('aoIntoBaseColor', 'AO into Base Color', 'boolean', { default: false, advanced: true }),
     ],
     outputs: [
       param('mesh', 'Mesh', 'mesh'), param('baseColor', 'Base Color', 'image'),

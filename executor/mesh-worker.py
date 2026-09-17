@@ -413,7 +413,13 @@ class Worker:
             baked[channel] = image
             self.log("baked %s at %d with margin %d" % (channel, resolution, margin))
         restore()
+        # The 2000s-era trick: occlusion painted into the diffuse, so the asset carries its shading in one texture.
+        if bool(self.scalar("aoIntoBaseColor", False)) and "baseColor" in baked and "ao" in baked:
+            multiply_ao_into_base_color(baked["baseColor"], baked["ao"], os.path.join(self.output_dir, "baseColor.png"))
+            self.log("multiplied ao into baseColor")
         material_channels = dict(baked)
+        if bool(self.scalar("aoIntoBaseColor", False)):
+            material_channels.pop("ao", None)
         apply_images_to_materials(low, material_channels, self.log)
         result = self.finish_mesh(low)
         for channel in enabled:
@@ -421,6 +427,30 @@ class Worker:
                 result[channel] = channel + ".png"
         return result
 
+
+def multiply_ao_into_base_color(base_image, ao_image, destination):
+    import numpy as np
+    width, height = base_image.size
+    if ao_image.size[0] != width or ao_image.size[1] != height:
+        raise RuntimeError("ao and baseColor bakes differ in size")
+    base = np.empty(width * height * 4, dtype=np.float32)
+    ao = np.empty(width * height * 4, dtype=np.float32)
+    base_image.pixels.foreach_get(base)
+    ao_image.pixels.foreach_get(ao)
+    base = base.reshape(-1, 4)
+    occlusion = ao.reshape(-1, 4)[:, :1]
+    base[:, :3] *= occlusion
+    base_image.pixels.foreach_set(base.reshape(-1))
+    base_image.update()
+    save_image_as_png(base_image, destination)
+    base_image.filepath = destination
+    base_image.source = "FILE"
+    base_image.reload()
+    set_colorspace(base_image, "sRGB")
+    try:
+        base_image.pack()
+    except RuntimeError:
+        pass
 
 def select_only(obj):
     if bpy.context.object is not None and bpy.context.object.mode != "OBJECT":
