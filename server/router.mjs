@@ -447,6 +447,9 @@ export function createAteliRouter(options = {}) {
     const outputIds = {}
     for (const output of tool.outputs) {
       const relativeOutput = outputDocument[output.id]
+      // A worker may legitimately skip an output (a bake channel switched off). Downstream nodes wired to it
+      // then fail at their own turn with a clear "missing input" rather than this node failing wholesale.
+      if (relativeOutput === undefined) continue
       const outputFile = await pathForRelative(nodeDirectory, relativeOutput)
       let previewRelativePath
       if (output.type === 'mesh' && (tool.runtime !== 'none' || preview[output.id])) {
