@@ -727,7 +727,17 @@ export function createAteliRouter(options = {}) {
       const hashableInputs = {}
       const inputHashes = {}
       const inputArtifacts = {}
+      // Provenance names follow file inputs; a node whose only upstream is scalar (a character id, a
+      // path) inherits the names those records carried so {dir}/{name} still resolve at Export.
       const sourceNames = []
+      const fallbackNames = []
+      const pushSourceNames = (input, records) => {
+        const target = isFileType(input.type) ? sourceNames : fallbackNames
+        for (const record of records) {
+          const name = record.sourceName ?? (isFileType(input.type) ? record.name : undefined)
+          if (name) target.push(name)
+        }
+      }
       for (const input of tool.inputs) {
         const entry = resolved[input.id]
         if (!entry) continue
@@ -744,12 +754,12 @@ export function createAteliRouter(options = {}) {
           inputs[input.id] = records.map(record => recordValue(record, input.type))
           hashableInputs[input.id] = records.map(record => recordHash(record, input.type))
           inputHashes[input.id] = records.map(record => recordHash(record, input.type))
-          if (isFileType(input.type)) sourceNames.push(...records.map(record => record.sourceName ?? record.name))
+          pushSourceNames(input, records)
         } else {
           inputs[input.id] = recordValue(records[0], input.type)
           hashableInputs[input.id] = recordHash(records[0], input.type)
           inputHashes[input.id] = recordHash(records[0], input.type)
-          if (isFileType(input.type)) sourceNames.push(records[0].sourceName ?? records[0].name)
+          pushSourceNames(input, records)
         }
       }
       const pickedSource = tool.id.startsWith('list.pick')
@@ -760,8 +770,8 @@ export function createAteliRouter(options = {}) {
         hashableInputs,
         inputHashes,
         inputArtifacts,
-        sourceName: pickedSource?.sourceName ?? pickedSource?.name ?? sourceNames[0],
-        sourceNames,
+        sourceName: pickedSource?.sourceName ?? pickedSource?.name ?? sourceNames[0] ?? fallbackNames[0],
+        sourceNames: sourceNames.length ? sourceNames : fallbackNames,
       })
     }
     return { cardinality, fanned, iterations }
@@ -875,7 +885,7 @@ export function createAteliRouter(options = {}) {
       .replaceAll('{dir}', sourceDir)
       .replaceAll('{index}', String(index))
       .replaceAll('{n}', String(index + 1))
-    if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) throw new Error('invalid export name')
+    if (!name || name === '.' || name.includes('..') || name.includes('/') || name.includes('\\')) throw new Error(`invalid export name "${name}" (template ${inputs.name}, source ${sourceLabel || 'unknown'})`)
     const extension = path.extname(source.absolutePath).toLowerCase()
     if (!extension) throw new Error('export input has no file extension')
     const destinationPath = path.join(root, `${name}${extension}`)
