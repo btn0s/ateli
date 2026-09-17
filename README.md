@@ -18,6 +18,7 @@ The node graph is one module among several. The browser, terminal, and landmarks
 
 ```sh
 npm install
+/Applications/Blender.app/Contents/Resources/5.1/python/bin/python3.13 -m pip install xatlas   # auto-UV for bakes (falls back to Smart UV Project without it)
 node bin/ateli serve                      # backend on 127.0.0.1:7237
 node bin/ateli install "My Board.tldraw"  # build the mod and install it into an open document
 node bin/ateli smoke                      # end-to-end mesh pipeline against real Blender
